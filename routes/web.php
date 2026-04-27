@@ -1,0 +1,282 @@
+<?php
+
+use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Auth\AuthController;
+use App\Http\Controllers\DocumentController;
+use App\Http\Controllers\WorkflowController;
+use App\Http\Controllers\SignatureController;
+use App\Http\Controllers\NotificationController;
+use App\Http\Controllers\ChatController;
+use App\Http\Controllers\ReceptionController;
+use App\Http\Controllers\SharedTemplateController;
+use App\Http\Controllers\ActRequestController;
+use App\Http\Controllers\PublicActRequestController;
+use App\Http\Controllers\QrVerificationController;
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\DebugController;
+use App\Http\Controllers\SessionDebugController;
+use App\Http\Controllers\Admin\AppSettingController;
+use App\Http\Controllers\Admin\AdminController;
+use App\Http\Controllers\Admin\IssuingAdministrationController;
+use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\CourrierController;
+
+// Auth
+Route::middleware('guest')->group(function () {
+    Route::get('/login',    [AuthController::class, 'showLogin'])->name('login');
+    Route::post('/login',   [AuthController::class, 'login']);
+    Route::get('/mot-de-passe-oublie',  [AuthController::class, 'showForgotPassword'])->name('password.request');
+    Route::post('/mot-de-passe-oublie', [AuthController::class, 'sendResetLink'])->name('password.email');
+});
+
+// Routes publiques (sans authentification) — fichiers vierges pour OnlyOffice
+Route::get('/oo-blank/{type}', function ($type) {
+    $allowed = ['docx' => 'empty_template.docx', 'xlsx' => 'blank_xlsx.xlsx', 'pptx' => 'blank_pptx.pptx'];
+    if (!isset($allowed[$type])) { abort(404); }
+    $path = public_path($allowed[$type]);
+    if (!file_exists($path)) { abort(404); }
+    $mimes = ['docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+              'pptx' => 'application/vnd.openxmlformats-officedocument.presentationml.presentation'];
+    return response()->file($path, [
+        'Content-Type'                => $mimes[$type],
+        'Access-Control-Allow-Origin' => '*',
+        'Cache-Control'               => 'no-store',
+    ]);
+})->name('oo.blank');
+
+Route::post('/logout', [AuthController::class, 'logout'])->name('logout')->middleware('auth');
+
+// URL signée temporaire pour permettre à OnlyOffice de récupérer le fichier sans session
+Route::get('/documents/{document}/onlyoffice-file', [DocumentController::class, 'onlyofficeFile'])
+    ->name('documents.onlyofficeFile');
+
+// Routes de débogage disponibles uniquement en local
+if (app()->environment(['local', 'development'])) {
+    Route::get('/debug/locale', [DebugController::class, 'testLocale'])->name('debug.locale');
+    Route::get('/test/session-debug', [SessionDebugController::class, 'index'])->name('test.session');
+    Route::post('/test/locale/{locale}', [SessionDebugController::class, 'setLocaleTest'])->name('test.setLocale');
+}
+
+// Téléchargement sécurisé d'un document partagé en externe
+Route::get('/shared-files/{share}', [DocumentController::class, 'sharedDownload'])
+    ->name('documents.shared-download');
+
+// Alias pour les environnements servis sous sous-dossier (ex: WAMP /e-administration_laravel)
+Route::get('/e-administration_laravel/documents/{document}/onlyoffice-file', [DocumentController::class, 'onlyofficeFile'])
+    ->name('documents.onlyofficeFile.subdir');
+Route::get('/e-administration_laravel/public/documents/{document}/onlyoffice-file', [DocumentController::class, 'onlyofficeFile'])
+    ->name('documents.onlyofficeFile.subdir.public');
+
+// Alias callbacks OnlyOffice (utile en sous-dossier/ngrok)
+Route::post('/api/oo-callback/document/{document}', [DocumentController::class, 'onlyofficeCallback'])
+    ->name('oo.document.callback.web');
+Route::post('/e-administration_laravel/api/oo-callback/document/{document}', [DocumentController::class, 'onlyofficeCallback'])
+    ->name('oo.document.callback.web.subdir');
+Route::post('/e-administration_laravel/public/api/oo-callback/document/{document}', [DocumentController::class, 'onlyofficeCallback'])
+    ->name('oo.document.callback.web.subdir.public');
+
+Route::post('/api/oo-callback/template/{templateId}', [AdminController::class, 'ooTemplateCallback'])
+    ->name('oo.template.callback.web');
+Route::post('/e-administration_laravel/api/oo-callback/template/{templateId}', [AdminController::class, 'ooTemplateCallback'])
+    ->name('oo.template.callback.web.subdir');
+Route::post('/e-administration_laravel/public/api/oo-callback/template/{templateId}', [AdminController::class, 'ooTemplateCallback'])
+    ->name('oo.template.callback.web.subdir.public');
+
+// URL signée de fichier template pour téléchargement par OnlyOffice (sans session)
+Route::get('/api/oo-file/template/{templateId}', [AdminController::class, 'ooTemplateFile'])
+    ->name('oo.template.file.web');
+Route::get('/e-administration_laravel/api/oo-file/template/{templateId}', [AdminController::class, 'ooTemplateFile'])
+    ->name('oo.template.file.web.subdir');
+Route::get('/e-administration_laravel/public/api/oo-file/template/{templateId}', [AdminController::class, 'ooTemplateFile'])
+    ->name('oo.template.file.web.subdir.public');
+
+// Demande d'acte publique (sans authentification)
+Route::get('/demande-acte', [PublicActRequestController::class, 'index'])->name('public.act-requests.index');
+Route::get('/demande-acte/{administration_id}', [PublicActRequestController::class, 'showActsByAdministration'])->name('public.act-requests.by-admin');
+Route::get('/demande-acte/{administration_id}/{requested_act_id}', [PublicActRequestController::class, 'create'])->name('public.act-requests.create');
+Route::post('/demande-acte/{administration_id}/{requested_act_id}', [PublicActRequestController::class, 'store'])->name('public.act-requests.store');
+
+// Téléchargement public d'un document via token QR
+Route::get('/qr-download/{token}', [QrVerificationController::class, 'downloadByToken'])->name('qr.download');
+
+// Application (auth requise)
+Route::middleware('auth')->group(function () {
+
+    // Dashboard
+    Route::get('/', fn() => redirect()->route('dashboard'));
+    Route::get('/dashboard', function () {
+        return view('dashboard');
+    })->name('dashboard');
+
+    // Gestion Courrier
+    Route::prefix('courrier')->name('courrier.')->group(function () {
+        Route::get('/enregistrement',   [CourrierController::class, 'enregistrement'])->name('enregistrement');
+        Route::get('/liste',            [CourrierController::class, 'liste'])->name('liste');
+        Route::get('/imputation',       [CourrierController::class, 'imputation'])->name('imputation');
+        Route::get('/en-traitement',    [CourrierController::class, 'enTraitement'])->name('en-traitement');
+        Route::get('/suivi-imputation', [CourrierController::class, 'suiviImputation'])->name('suivi-imputation');
+        Route::get('/traite',           [CourrierController::class, 'traite'])->name('traite');
+        Route::get('/archives',         [CourrierController::class, 'archives'])->name('archives');
+        Route::get('/visualiser',       [CourrierController::class, 'visualiser'])->name('visualiser');
+        Route::post('/store',           [CourrierController::class, 'store'])->name('store');
+        Route::post('/imputer',         [CourrierController::class, 'imputer'])->name('imputer');
+        Route::post('/traiter',         [CourrierController::class, 'traiter'])->name('traiter');
+        Route::post('/{courrier}/ok-traitement', [CourrierController::class, 'okTraitement'])->name('ok-traitement');
+        Route::post('/{courrier}/valider-traitement', [CourrierController::class, 'validerTraitement'])->name('valider-traitement');
+        Route::post('/{courrier}/rejeter-traitement', [CourrierController::class, 'rejeterTraitement'])->name('rejeter-traitement');
+    });
+
+    // Documents
+    Route::post('/documents/upload-ajax', [DocumentController::class, 'uploadAjax'])->name('documents.uploadAjax');
+    Route::post('/documents/new', [DocumentController::class, 'createNew'])->name('documents.new');
+    Route::post('/documents/onlyoffice-config', [DocumentController::class, 'onlyofficeConfig'])->name('documents.onlyofficeConfig');
+    Route::resource('documents', DocumentController::class);
+    Route::get('/documents/{document}/download', [DocumentController::class, 'download'])->name('documents.download');
+    Route::post('/documents/{document}/favorite', [DocumentController::class, 'toggleFavorite'])->name('documents.favorite');
+    Route::post('/documents/{document}/labels', [DocumentController::class, 'updateLabels'])->name('documents.labels');
+    Route::post('/documents/{document}/rename', [DocumentController::class, 'rename'])->name('documents.rename');
+    Route::post('/documents/{document}/move', [DocumentController::class, 'move'])->name('documents.move');
+    Route::post('/documents/{document}/share', [DocumentController::class, 'share'])->name('documents.share');
+    Route::get('/documents/{document}/versions', [DocumentController::class, 'versions'])->name('documents.versions');
+    Route::post('/documents/{document}/status', [DocumentController::class, 'changeStatus'])->name('documents.status');
+
+    // Workflows
+    Route::resource('workflows', WorkflowController::class);
+    Route::post('/workflows/{workflow}/execute', [WorkflowController::class, 'execute'])->name('workflows.execute');
+    Route::post('/workflows/{workflow}/advance', [WorkflowController::class, 'advance'])->name('workflows.advance');
+    Route::post('/workflows/{workflow}/reject',  [WorkflowController::class, 'reject'])->name('workflows.reject');
+    Route::post('/workflows/{workflow}/duplicate',[WorkflowController::class, 'duplicate'])->name('workflows.duplicate');
+    // Modèles de workflows
+    Route::get('/workflow-templates',  [WorkflowController::class, 'indexTemplates'])->name('workflow-templates.index');
+    Route::post('/workflow-templates', [WorkflowController::class, 'storeTemplate'])->name('workflow-templates.store');
+
+    // Signatures
+    Route::get('/signatures',                  [SignatureController::class, 'index'])->name('signatures.index');
+    Route::post('/signatures',                 [SignatureController::class, 'store'])->name('signatures.store');
+    Route::post('/signatures/request',         [SignatureController::class, 'request'])->name('signatures.request');
+    // Upload & signer depuis l'ordinateur
+    Route::get('/signatures/upload',           [SignatureController::class, 'showUpload'])->name('signatures.upload');
+    Route::post('/signatures/upload',          [SignatureController::class, 'handleUpload'])->name('signatures.upload.post');
+    Route::get('/signatures/{signature}',      [SignatureController::class, 'show'])->name('signatures.show');
+    Route::post('/signatures/{signatureRequest}/decline', [SignatureController::class, 'decline'])->name('signatures.decline');
+    // Positionnement de zone de signature (depuis mes documents)
+    Route::get('/signatures/{signatureRequest}/position',  [SignatureController::class, 'position'])->name('signatures.position');
+    Route::post('/signatures/{signatureRequest}/sign',     [SignatureController::class, 'sign'])->name('signatures.sign');
+    // Actions workflow depuis la boîte de réception
+    Route::post('/signatures/workflow-action',  [SignatureController::class, 'workflowAction'])->name('signatures.workflow-action');
+    Route::post('/signatures/get-invite-url',   [SignatureController::class, 'getSignatureInviteUrl'])->name('signatures.get-invite-url');
+    // Création d'un workflow de signature
+    Route::post('/signatures/workflow-create',  [SignatureController::class, 'workflowCreate'])->name('signatures.workflow-create');
+
+    // Notifications
+    Route::get('/notifications',              [NotificationController::class, 'index'])->name('notifications.index');
+    Route::get('/notifications/ajax-list',    [NotificationController::class, 'ajaxList'])->name('notifications.ajaxList');
+    Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount'])->name('notifications.unreadCount');
+    Route::post('/notifications/read-all',    [NotificationController::class, 'markAllRead'])->name('notifications.readAll');
+    Route::post('/notifications/{notification}/read', [NotificationController::class, 'markRead'])->name('notifications.read');
+
+    // Chat
+    Route::get('/chat', [ChatController::class, 'index'])->name('chat.index');
+    Route::get('/chat/users', [ChatController::class, 'users'])->name('chat.users');
+    Route::get('/chat/messages', [ChatController::class, 'messages'])->name('chat.messages');
+    Route::post('/chat/send', [ChatController::class, 'send'])->name('chat.send');
+
+    // Réception
+    Route::get('/reception', [ReceptionController::class, 'index'])->name('reception.index');
+
+    // Templates partagés
+    Route::get('/shared-templates', [SharedTemplateController::class, 'index'])->name('shared-templates.index');
+    Route::post('/shared-templates/{template}/generate', [SharedTemplateController::class, 'generate'])->name('shared-templates.generate');
+
+    // Demandes d'actes
+    Route::get('/act-requests', [ActRequestController::class, 'index'])->name('act-requests.index');
+
+    // Vérification QR
+    Route::get('/qr-verification',        [QrVerificationController::class, 'index'])->name('qr-verification.index');
+    Route::post('/qr-verification/verify', [QrVerificationController::class, 'verify'])->name('qr-verification.verify');
+    Route::post('/qr-verification/verify-number', [QrVerificationController::class, 'verifyNumber'])->name('qr-verification.verify-number');
+
+    // Profil
+    Route::get('/profile',               [ProfileController::class, 'edit'])->name('profile.edit');
+    Route::put('/profile',               [ProfileController::class, 'update'])->name('profile.update');
+    Route::post('/profile/avatar',       [ProfileController::class, 'updateAvatar'])->name('profile.avatar');
+    Route::post('/profile/display-name', [ProfileController::class, 'updateDisplayName'])->name('profile.display-name');
+    Route::post('/profile/password',     [ProfileController::class, 'updatePassword'])->name('profile.password');
+    Route::post('/profile/language',     [ProfileController::class, 'updateLanguage'])->name('profile.language');
+
+    // Admin (page unifiée) — réservé aux utilisateurs avec rôle admin
+    Route::prefix('admin')->name('admin.')->middleware('admin')->group(function () {
+        Route::get('/',          [AdminController::class, 'index'])->name('index');
+        Route::get('/settings',  [AppSettingController::class, 'index'])->name('settings');
+        Route::post('/settings', [AppSettingController::class, 'update'])->name('settings.update');
+        Route::put('/settings',  [AdminController::class, 'updateSettings'])->name('settings.save');
+        Route::post('/theming',  [AdminController::class, 'saveTheming'])->name('theming.save');
+        Route::post('/signature-provider', [AdminController::class, 'saveSignatureProvider'])->name('signature-provider.save');
+        Route::post('/signature-provider/test', [AdminController::class, 'testSignatureConnection'])->name('signature-provider.test');
+        Route::post('/onlyoffice-token', [AdminController::class, 'onlyofficeToken'])->name('onlyoffice.token');
+        Route::post('/templates/upload-file', [AdminController::class, 'uploadTemplateFile'])->name('admin.templates.uploadFile');
+        Route::post('/templates/{template}/detect-vars', [AdminController::class, 'detectTemplateVars'])->name('admin.templates.detectVars');
+        Route::post('/templates/{template}/recover-vars', [AdminController::class, 'recoverTemplateVars'])->name('admin.templates.recoverVars');
+        Route::get('/templates/{template}/save-state', [AdminController::class, 'templateSaveState'])->name('admin.templates.saveState');
+        Route::get('/templates/{template}/oo-config', [AdminController::class, 'getTemplateOoConfig'])->name('admin.templates.ooConfig');
+
+        // Émetteurs
+        Route::post('/emitters',                 [AdminController::class, 'storeEmitter'])->name('emitters.store');
+        Route::put('/emitters/{emitter}',        [AdminController::class, 'updateEmitter'])->name('emitters.update');
+        Route::delete('/emitters/{emitter}',     [AdminController::class, 'destroyEmitter'])->name('emitters.destroy');
+
+        // Destinataires
+        Route::post('/recipients',               [AdminController::class, 'storeRecipient'])->name('recipients.store');
+        Route::put('/recipients/{recipient}',    [AdminController::class, 'updateRecipient'])->name('recipients.update');
+        Route::delete('/recipients/{recipient}', [AdminController::class, 'destroyRecipient'])->name('recipients.destroy');
+
+        // Types de direction
+        Route::post('/direction-types',                    [AdminController::class, 'storeDirectionType'])->name('direction-types.store');
+        Route::put('/direction-types/{directionType}',     [AdminController::class, 'updateDirectionType'])->name('direction-types.update');
+        Route::delete('/direction-types/{directionType}',  [AdminController::class, 'destroyDirectionType'])->name('direction-types.destroy');
+
+        // Templates
+        Route::post('/templates',                                        [AdminController::class, 'storeTemplate'])->name('templates.store');
+        Route::put('/templates/{template}',                              [AdminController::class, 'updateTemplate'])->name('templates.update');
+        Route::delete('/templates/{template}',                           [AdminController::class, 'destroyTemplate'])->name('templates.destroy');
+        Route::post('/templates/{template}/variables',                   [AdminController::class, 'storeTemplateVariable'])->name('templates.variables.store');
+        Route::delete('/templates/{template}/variables/{variableId}',    [AdminController::class, 'destroyTemplateVariable'])->name('templates.variables.destroy');
+        Route::post('/templates/{template}/share',                       [AdminController::class, 'updateTemplateShare'])->name('templates.share');
+        Route::post('/templates/{template}/zones',                       [AdminController::class, 'saveTemplateZones'])->name('templates.zones.save');
+
+        // Règles de routage
+        Route::post('/routing-rules',               [AdminController::class, 'storeRoutingRule'])->name('routing-rules.store');
+        Route::delete('/routing-rules/{routingRule}',[AdminController::class, 'destroyRoutingRule'])->name('routing-rules.destroy');
+
+        // Entités sous tutelle
+        Route::post('/sub-entities',                [AdminController::class, 'storeSubEntity'])->name('sub-entities.store');
+        Route::put('/sub-entities/{subEntity}',     [AdminController::class, 'updateSubEntity'])->name('sub-entities.update');
+        Route::delete('/sub-entities/{subEntity}',  [AdminController::class, 'destroySubEntity'])->name('sub-entities.destroy');
+
+        // Actes demandés
+        Route::post('/requested-acts',               [AdminController::class, 'storeRequestedAct'])->name('requested-acts.store');
+        Route::put('/requested-acts/{requestedAct}', [AdminController::class, 'updateRequestedAct'])->name('requested-acts.update');
+        Route::delete('/requested-acts/{requestedAct}', [AdminController::class, 'destroyRequestedAct'])->name('requested-acts.destroy');
+
+        // Profils / Rôles
+        Route::post('/profiles',            [AdminController::class, 'storeProfile'])->name('profiles.store');
+        Route::put('/profiles/{profile}',   [AdminController::class, 'updateProfile'])->name('profiles.update');
+        Route::delete('/profiles/{profile}',[AdminController::class, 'destroyProfile'])->name('profiles.destroy');
+        Route::post('/profiles/assign',     [AdminController::class, 'assignProfile'])->name('profiles.assign');
+
+        // Instructions de traitement courrier
+        Route::post('/instructions',                    [AdminController::class, 'storeInstruction'])->name('instructions.store');
+        Route::put('/instructions/{instruction}',       [AdminController::class, 'updateInstruction'])->name('instructions.update');
+        Route::delete('/instructions/{instruction}',    [AdminController::class, 'destroyInstruction'])->name('instructions.destroy');
+
+        // Utilisateurs (onglet admin intégré)
+        Route::post('/users-tab',                          [AdminController::class, 'storeUserTab'])->name('users-tab.store');
+        Route::put('/users-tab/{user}',                    [AdminController::class, 'updateUserTab'])->name('users-tab.update');
+        Route::delete('/users-tab/{user}',                 [AdminController::class, 'destroyUserTab'])->name('users-tab.destroy');
+        Route::post('/users-tab/{user}/toggle-status',     [AdminController::class, 'toggleUserStatusTab'])->name('users-tab.toggle-status');
+
+        Route::resource('administrations', IssuingAdministrationController::class);
+        Route::resource('users', UserController::class);
+    });
+});

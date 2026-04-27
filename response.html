@@ -1,0 +1,63 @@
+﻿<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connexion — E-Parapheur</title>
+        <script src="http://127.0.0.1:8000/vendor/tailwind/tailwind.js"
+            onerror="this.onerror=null;this.src='https://cdn.tailwindcss.com';"></script>
+    
+    
+            <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23173b9f'/%3E%3Ctext x='16' y='23' text-anchor='middle' font-family='Arial' font-weight='900' font-size='20' fill='white'%3EE%3C/text%3E%3C/svg%3E">
+    
+    <style>
+        :root { --auth-color: #173b9f; }
+        body {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #173b9f 0%, #0d2566 100%);
+        }
+        .auth-wrapper { position: relative; z-index: 1; }
+    </style>
+</head>
+<body class="flex items-center justify-center p-4">
+    <div class="auth-wrapper w-full max-w-md">
+        <div class="text-center mb-8">
+            <div class="w-16 h-16 bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg overflow-hidden">
+                                    <svg class="w-8 h-8" fill="currentColor" style="color:#173b9f" viewBox="0 0 20 20">
+                        <path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"/><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm9.707 5.707a1 1 0 00-1.414-1.414L9 12.586l-1.293-1.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
+                    </svg>
+                            </div>
+            <h1 class="text-2xl font-bold text-white">E-Parapheur</h1>
+            <p class="text-white/70 text-sm">Connect &amp; Sign</p>
+        </div>
+        <div class="bg-white rounded-2xl shadow-2xl p-8">
+            <h2 class="text-xl font-bold text-gray-800 mb-6">Connexion</h2>
+
+
+<form method="POST" action="http://127.0.0.1:8000/login" class="space-y-4">
+    <input type="hidden" name="_token" value="6G16vT0bc4irAC49MnBmvoYIjIpCvcVgVAF3IHF7" autocomplete="off">    <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Adresse email</label>
+        <input type="email" name="email" value="" required
+               class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+    </div>
+    <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Mot de passe</label>
+        <input type="password" name="password" required
+               class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+    </div>
+    <div class="flex items-center justify-between">
+        <label class="flex items-center gap-2 text-sm text-gray-600">
+            <input type="checkbox" name="remember" class="rounded"> Se souvenir de moi
+        </label>
+        <a href="http://127.0.0.1:8000/mot-de-passe-oublie" class="text-sm text-indigo-600 hover:underline">Mot de passe oublié ?</a>
+    </div>
+    <button type="submit"
+            class="w-full bg-indigo-600 text-white py-2.5 rounded-lg font-medium hover:bg-indigo-700 transition">
+        Se connecter
+    </button>
+</form>
+        </div>
+    </div>
+</body>
+</html>
+

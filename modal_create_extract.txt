@@ -1,0 +1,111 @@
+﻿<div id="modal-user-create" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 flex flex-col max-h-[90vh]">
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <h3 class="text-base font-semibold text-gray-800">Créer un utilisateur</h3>
+      <button type="button" onclick="closeUserModal('create')" class="text-gray-400 hover:text-gray-600 transition">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <form method="POST" action="{{ route('admin.users-tab.store') }}" enctype="multipart/form-data"
+      class="flex flex-col flex-1 overflow-y-auto px-6 py-4 space-y-4">
+      @csrf
+
+      <div class="grid grid-cols-2 gap-3">
+        <input type="text" name="nom" placeholder="Nom" required
+          class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
+        <input type="text" name="prenoms" placeholder="Prénoms"
+          class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
+      </div>
+
+      <input type="text" name="name" placeholder="Nom Ã  afficher" required
+        class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
+
+      <select name="role" required
+        class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
+        <option value="">Rôle système</option>
+        <option value="admin">Administrateur</option>
+        <option value="manager">Manager</option>
+        <option value="signer">Signataire</option>
+        <option value="user">Utilisateur</option>
+      </select>
+      <select name="profile_id"
+        class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
+        <option value="">— Profil métier (optionnel) —</option>
+        @foreach($profiles as $p)
+        <option value="{{ $p->id }}">{{ $p->name }}</option>
+        @endforeach
+      </select>
+
+      <div class="grid grid-cols-2 gap-3">
+        <select id="c-admin-type" name="administration_type" onchange="userAdminTypeChange('c')"
+          class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
+          <option value="">Type d'administration</option>
+          <option value="emitter">Émettrice</option>
+          <option value="recipient">Destinataire</option>
+        </select>
+        <select id="c-admin-id" name="administration_id" onchange="userAdminIdChange('c')" disabled
+          class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none disabled:bg-gray-50 disabled:text-gray-400">
+          <option value="">Administration</option>
+        </select>
+      </div>
+
+      <select id="c-sub-entity" name="sub_entity_id" disabled
+        class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none disabled:bg-gray-50 disabled:text-gray-400">
+        <option value="">Direction sous tutelle</option>
+      </select>
+
+      <input type="email" name="email" placeholder="E-mail" required
+        class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
+
+      <select name="quota"
+        class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
+        <option value="">Quota par défaut</option>
+        <option value="1 Go">1 Go</option>
+        <option value="5 Go">5 Go</option>
+        <option value="10 Go">10 Go</option>
+        <option value="Illimité">Illimité</option>
+      </select>
+
+      <div class="relative">
+        <input id="c-pwd" type="password" name="password" placeholder="Mot de passe" required
+          class="border border-gray-200 rounded-lg px-3 py-2.5 pr-10 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
+        <button type="button" onclick="togglePwd('c-pwd','c-pwd-eye')" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+          <i id="c-pwd-eye" class="fas fa-eye text-sm"></i>
+        </button>
+      </div>
+      <div class="relative">
+        <input id="c-pwd2" type="password" name="password_confirmation" placeholder="Confirmer le mot de passe" required
+          class="border border-gray-200 rounded-lg px-3 py-2.5 pr-10 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
+        <button type="button" onclick="togglePwd('c-pwd2','c-pwd2-eye')" class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+          <i id="c-pwd2-eye" class="fas fa-eye text-sm"></i>
+        </button>
+      </div>
+
+      <div class="space-y-1">
+        <label class="block text-xs font-medium text-gray-600">Photo de profil</label>
+        <input type="file" name="avatar" accept="image/png,image/jpeg,image/jpg,image/webp"
+          onchange="previewAvatar(this,'c-avatar-preview')"
+          class="w-full text-xs text-gray-600 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+        <p class="text-[11px] text-gray-500">PNG, JPG, WEBP (max 5 Mo)</p>
+        <img id="c-avatar-preview" src="" alt="" class="hidden h-14 w-14 rounded-full object-cover border border-gray-200 mt-1">
+      </div>
+
+      <label class="flex items-center gap-2 text-sm text-gray-700">
+        <input type="checkbox" name="status" value="active" checked class="h-4 w-4 rounded border-gray-300"> Actif
+      </label>
+
+      <div class="grid grid-cols-2 gap-2 pt-1">
+        <button type="button" onclick="closeUserModal('create')"
+          class="py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg transition">
+          Annuler
+        </button>
+        <button type="submit"
+          class="py-2.5 bg-[#2453d6] hover:bg-[#1f47bb] text-white text-sm font-semibold rounded-lg transition">
+          Créer l'utilisateur
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+

@@ -1,0 +1,27 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Model;
+
+class RequestedAct extends Model
+{
+    use HasUuids;
+
+    protected $fillable = [
+        'administration_id', 'direction_code', 'document_name',
+        'required_documents', 'applicant_fields', 'is_active',
+    ];
+
+    protected $casts = [
+        'is_active'          => 'boolean',
+        'required_documents' => 'array',
+        'applicant_fields'   => 'array',
+    ];
+
+    public function administration()
+    {
+        return $this->belongsTo(IssuingAdministration::class, 'administration_id');
+    }
+}
