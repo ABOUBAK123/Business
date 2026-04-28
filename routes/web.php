@@ -82,6 +82,8 @@ Route::post('/e-administration_laravel/api/oo-callback/template/{templateId}', [
     ->name('oo.template.callback.web.subdir');
 Route::post('/e-administration_laravel/public/api/oo-callback/template/{templateId}', [AdminController::class, 'ooTemplateCallback'])
     ->name('oo.template.callback.web.subdir.public');
+Route::post('/public/api/oo-callback/template/{templateId}', [AdminController::class, 'ooTemplateCallback'])
+    ->name('oo.template.callback.web.public');
 
 // URL signée de fichier template pour téléchargement par OnlyOffice (sans session)
 Route::get('/api/oo-file/template/{templateId}', [AdminController::class, 'ooTemplateFile'])
@@ -90,6 +92,8 @@ Route::get('/e-administration_laravel/api/oo-file/template/{templateId}', [Admin
     ->name('oo.template.file.web.subdir');
 Route::get('/e-administration_laravel/public/api/oo-file/template/{templateId}', [AdminController::class, 'ooTemplateFile'])
     ->name('oo.template.file.web.subdir.public');
+Route::get('/public/api/oo-file/template/{templateId}', [AdminController::class, 'ooTemplateFile'])
+    ->name('oo.template.file.web.public');
 
 // Demande d'acte publique (sans authentification)
 Route::get('/demande-acte', [PublicActRequestController::class, 'index'])->name('public.act-requests.index');

@@ -1611,9 +1611,19 @@ class AdminController extends Controller
                 ]);
             }
 
+            // error=4 : aucune modification avant le forcesave → session déjà fermée ou doc non modifié
+            // Ce n'est pas une vraie erreur, le fichier est déjà dans son dernier état.
+            if ($errorCode === 4 || $errorCode === 1) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Document déjà sauvegardé (aucun changement en attente).',
+                    'oo_code' => $errorCode,
+                ]);
+            }
+
             return response()->json([
                 'success' => false,
-                'message' => 'OnlyOffice a refusé le forcesave.',
+                'message' => 'OnlyOffice a refusé le forcesave (code ' . $errorCode . ').',
                 'details' => $data,
             ], 422);
         } catch (\Throwable $e) {
