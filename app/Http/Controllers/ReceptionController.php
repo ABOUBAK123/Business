@@ -6,6 +6,7 @@ use App\Models\Document;
 use App\Models\DocumentShare;
 use App\Models\RecipientAdministration;
 use App\Models\UserDirectionAssignment;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -20,26 +21,43 @@ class ReceptionController extends Controller
         $userId = $user?->id;
         $userEmail = $user?->email;
 
-        $subEntityCodes = UserDirectionAssignment::query()
-            ->where('user_id', $userId)
-            ->whereNotNull('sub_entity_code')
-            ->pluck('sub_entity_code')
-            ->map(fn ($code) => strtoupper(trim((string) $code)))
-            ->filter()
-            ->values();
+        $subEntityCodes = collect();
+        if (Schema::hasTable('user_direction_assignments')) {
+            try {
+                $subEntityCodes = UserDirectionAssignment::query()
+                    ->where('user_id', $userId)
+                    ->whereNotNull('sub_entity_code')
+                    ->pluck('sub_entity_code')
+                    ->map(fn ($code) => strtoupper(trim((string) $code)))
+                    ->filter()
+                    ->values();
+            } catch (\Throwable $e) {
+                Log::warning('Reception fallback: cannot query user_direction_assignments', [
+                    'message' => $e->getMessage(),
+                ]);
+            }
+        }
 
         $recipientAdminIds = collect();
         $adminCode = strtoupper(trim((string) ($user?->profile?->administration?->code ?? '')));
-        if ($adminCode !== '') {
-            $recipientAdminIds = RecipientAdministration::query()
-                ->whereRaw('UPPER(code) = ?', [$adminCode])
-                ->pluck('id');
+        if ($adminCode !== '' && Schema::hasTable('recipient_administrations')) {
+            try {
+                $recipientAdminIds = RecipientAdministration::query()
+                    ->whereRaw('UPPER(code) = ?', [$adminCode])
+                    ->pluck('id');
+            } catch (\Throwable $e) {
+                Log::warning('Reception fallback: cannot query recipient_administrations', [
+                    'message' => $e->getMessage(),
+                ]);
+            }
         }
 
         $sharedDocIds = collect();
 
         if (!Schema::hasTable('document_shares')) {
             Log::warning('Reception fallback: missing document_shares table');
+        } elseif (!Schema::hasColumns('document_shares', ['document_id', 'recipient_name'])) {
+            Log::warning('Reception fallback: document_shares table exists but missing required columns');
         } else {
             try {
                 $sharedDocIds = DocumentShare::query()
@@ -72,9 +90,22 @@ class ReceptionController extends Controller
             }
         }
 
+        if (!Schema::hasTable('documents')) {
+            Log::warning('Reception fallback: missing documents table');
+            $documents = new LengthAwarePaginator([], 0, 20, 1, [
+                'path' => $request->url(),
+                'query' => $request->query(),
+            ]);
+
+            return view('reception.index', compact('documents', 'search'));
+        }
+
         $query = Document::with(['owner', 'issuingAdministration'])
-            ->whereIn('id', $sharedDocIds)
-            ->whereNull('deleted_at');
+            ->whereIn('id', $sharedDocIds);
+
+        if (Schema::hasColumn('documents', 'deleted_at')) {
+            $query->whereNull('deleted_at');
+        }
 
         if ($search) {
             $query->where('title', 'LIKE', "%{$search}%");

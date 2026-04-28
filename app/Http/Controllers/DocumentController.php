@@ -816,9 +816,18 @@ class DocumentController extends Controller
                 'lang'        => 'fr',
                 'callbackUrl' => $callbackUrl,
                 'user'        => ['id' => 'u-' . Auth::id(), 'name' => Auth::user()->name ?? 'Utilisateur'],
-                'customization' => ['autosave' => true, 'compactHeader' => true, 'toolbarNoTabs' => false],
+                'customization' => [
+                    'autosave' => true,
+                    'compactHeader' => true,
+                    'features' => [
+                        'tabStyle' => 'fill',
+                        'tabBackground' => 'header',
+                    ],
+                ],
             ],
         ];
+
+        $payload['document']['permissions']['chat'] = false;
 
         $token = '';
         if ($onlyofficeSecret) {

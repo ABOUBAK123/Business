@@ -32,15 +32,20 @@
             key:      'courrier_' + Math.abs(fileUrl.split('').reduce(function(a,c){return a+c.charCodeAt(0)},0)),
             title:    docTitle,
             url:      fileUrl,
-            permissions: { edit: false, download: true, print: true },
+            permissions: { edit: false, download: true, print: true, chat: false },
         },
         documentType: typeMap[ext] || 'word',
         editorConfig: {
             mode: 'view',
             lang: 'fr',
             customization: {
-                autosave: false, chat: false, comments: false,
-                compactHeader: true, toolbarNoTabs: true,
+                autosave: false,
+                comments: false,
+                compactHeader: true,
+                features: {
+                    tabStyle: 'fill',
+                    tabBackground: 'header',
+                },
             },
         },
         @if($ooJwt)
