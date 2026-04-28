@@ -115,10 +115,14 @@ class PublicActRequestController extends Controller
             'direction_code' => 'nullable|string|max:100',
             'note' => 'nullable|string|max:2000',
             'extra' => 'nullable|array',
-            'attachments' => 'nullable|array',
-            'attachments.*' => 'file|max:10240',
+            'attachments_files' => 'nullable|array',
+            'attachments_files.*' => 'nullable|file|max:10240',
+            'attachments_names' => 'nullable|array',
+            'attachments_names.*' => 'nullable|string|max:255',
             'required_files' => 'nullable|array',
             'required_files.*' => 'nullable|file|max:10240',
+            'required_file_names' => 'nullable|array',
+            'required_file_names.*' => 'nullable|string|max:255',
         ]);
 
         $extraPayload = [];
@@ -163,10 +167,18 @@ class PublicActRequestController extends Controller
                     ->withInput();
             }
 
+            $uploadedName = trim((string) $request->input('required_file_names.' . $docKey, ''));
+            if ($uploadedName === '') {
+                return back()
+                    ->withErrors(['required_file_names.' . $docKey => 'Le nom du fichier pour "' . $docLabel . '" est obligatoire.'])
+                    ->withInput();
+            }
+
             $path = $docFile->store('act-requests', 'public');
             $attachments[] = [
                 'type' => 'required_document',
                 'required_label' => $docLabel,
+                'uploaded_name' => $uploadedName,
                 'path' => $path,
                 'original_name' => $docFile->getClientOriginalName(),
                 'mime_type' => $docFile->getMimeType(),
@@ -174,13 +186,24 @@ class PublicActRequestController extends Controller
             ];
         }
 
-        foreach ((array) $request->file('attachments', []) as $file) {
+        $extraFiles = (array) $request->file('attachments_files', []);
+        $extraNames = (array) $request->input('attachments_names', []);
+        foreach ($extraFiles as $idx => $file) {
             if (!$file) {
                 continue;
             }
+
+            $uploadedName = trim((string) ($extraNames[$idx] ?? ''));
+            if ($uploadedName === '') {
+                return back()
+                    ->withErrors(['attachments_names.' . $idx => 'Le nom de la pièce jointe est obligatoire.'])
+                    ->withInput();
+            }
+
             $path = $file->store('act-requests', 'public');
             $attachments[] = [
                 'type' => 'additional',
+                'uploaded_name' => $uploadedName,
                 'path' => $path,
                 'original_name' => $file->getClientOriginalName(),
                 'mime_type' => $file->getMimeType(),

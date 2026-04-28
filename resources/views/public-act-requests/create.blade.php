@@ -146,8 +146,15 @@
                                         <label class="block text-xs font-medium text-gray-700 mb-1">{{ $docLabel }} *</label>
                                         <input type="file" name="required_files[{{ $docKey }}]" accept="application/pdf,.pdf" required
                                                class="block w-full text-xs border border-gray-300 rounded-lg px-3 py-2">
+                                        <input type="text" name="required_file_names[{{ $docKey }}]" required
+                                               value="{{ old('required_file_names.' . $docKey) }}"
+                                               placeholder="Nom du fichier téléversé"
+                                               class="mt-2 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
                                         <p class="text-[11px] text-red-600 mt-0.5">PDF uniquement</p>
                                         @error('required_files.' . $docKey)
+                                            <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
+                                        @enderror
+                                        @error('required_file_names.' . $docKey)
                                             <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
                                         @enderror
                                     </div>
@@ -158,10 +165,26 @@
                 @endif
 
                 <div>
-                    <label class="block text-xs font-medium text-gray-700 mb-1">Pièces jointes supplémentaires</label>
-                    <input type="file" name="attachments[]" multiple accept="application/pdf,.pdf"
-                           class="block w-full text-xs border border-gray-300 rounded-lg px-3 py-2">
-                    <p class="text-[11px] text-gray-500 mt-0.5">PDF uniquement · 10 Mo max par fichier.</p>
+                    <div class="flex items-center justify-between gap-2 mb-1">
+                        <label class="block text-xs font-medium text-gray-700">Pièces jointes supplémentaires</label>
+                        <button type="button" id="add-extra-attachment"
+                                class="text-xs px-2.5 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200">
+                            + Ajouter une pièce
+                        </button>
+                    </div>
+                    <div id="extra-attachments-list" class="space-y-2">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 extra-attachment-row">
+                            <input type="file" name="attachments_files[]" accept="application/pdf,.pdf"
+                                   class="block w-full text-xs border border-gray-300 rounded-lg px-3 py-2">
+                            <input type="text" name="attachments_names[]"
+                                   placeholder="Nom du fichier téléversé"
+                                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
+                        </div>
+                    </div>
+                    @error('attachments_names.*')
+                        <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
+                    @enderror
+                    <p class="text-[11px] text-gray-500 mt-1">PDF uniquement · 10 Mo max par fichier.</p>
                 </div>
 
                 <div class="pt-1">
@@ -173,5 +196,32 @@
             </form>
         </div>
     </main>
+    <script>
+        (function () {
+            var addBtn = document.getElementById('add-extra-attachment');
+            var list = document.getElementById('extra-attachments-list');
+            if (!addBtn || !list) return;
+
+            addBtn.addEventListener('click', function () {
+                var row = document.createElement('div');
+                row.className = 'grid grid-cols-1 md:grid-cols-2 gap-2 extra-attachment-row';
+                row.innerHTML =
+                    '<input type="file" name="attachments_files[]" accept="application/pdf,.pdf" class="block w-full text-xs border border-gray-300 rounded-lg px-3 py-2">' +
+                    '<div class="flex gap-2">' +
+                    '<input type="text" name="attachments_names[]" placeholder="Nom du fichier téléversé" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">' +
+                    '<button type="button" class="remove-extra-attachment text-xs px-2 py-1 rounded bg-red-50 text-red-700 border border-red-200 hover:bg-red-100">Supprimer</button>' +
+                    '</div>';
+                list.appendChild(row);
+            });
+
+            list.addEventListener('click', function (e) {
+                var target = e.target;
+                if (!(target instanceof HTMLElement)) return;
+                if (!target.classList.contains('remove-extra-attachment')) return;
+                var row = target.closest('.extra-attachment-row');
+                if (row) row.remove();
+            });
+        })();
+    </script>
 </body>
 </html>
