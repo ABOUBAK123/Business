@@ -208,6 +208,7 @@ Route::middleware('auth')->group(function () {
     // Admin (page unifiée) — réservé aux utilisateurs avec rôle admin
     Route::prefix('admin')->name('admin.')->middleware('admin')->group(function () {
         Route::get('/',          [AdminController::class, 'index'])->name('index');
+        Route::get('/emitters',  [AdminController::class, 'index'])->name('emitters.index');
         Route::get('/settings',  [AppSettingController::class, 'index'])->name('settings');
         Route::post('/settings', [AppSettingController::class, 'update'])->name('settings.update');
         Route::put('/settings',  [AdminController::class, 'updateSettings'])->name('settings.save');

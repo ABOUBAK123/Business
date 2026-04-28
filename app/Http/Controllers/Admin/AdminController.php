@@ -24,6 +24,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 
 class AdminController extends Controller
@@ -39,38 +41,80 @@ class AdminController extends Controller
             'workflows'  => Workflow::count(),
         ];
 
-        $settings       = AppSetting::all()->keyBy('key');
-        $users          = User::latest()->paginate(20, ['*'], 'users_page');
-        $templates      = DocumentTemplate::with(['variables', 'administration'])->latest()->paginate(200, ['*'], 'tpl_page');
-        $emitters       = IssuingAdministration::latest()->get();
-        $recipients     = RecipientAdministration::latest()->get();
-        $directionTypes = DirectionType::latest()->get();
-        $subEntities    = SubEntity::with('directionType')->latest()->get();
+        $settings       = collect();
+        $users          = collect();
+        $templates      = collect();
+        $emitters       = collect();
+        $recipients     = collect();
+        $directionTypes = collect();
+        $subEntities    = collect();
+        $requestedActs  = collect();
+        $routingRules   = collect();
+        $profiles       = collect();
+        $profilesList   = collect();
+        $instructions   = collect();
+        $allUsers       = collect();
+        $shareMap       = [];
+        $onlyofficeUrl  = '';
+        $onlyofficeSecret = '';
+        $dirAssignments = collect();
+        $sigProviders   = collect();
+        $courrierArchivalDays = 0;
 
-        $emitterCodes   = $emitters->pluck('code', 'id');
-        $recipientCodes = $recipients->pluck('code', 'id');
-        $subEntities    = $subEntities->map(function (SubEntity $subEntity) use ($emitterCodes, $recipientCodes) {
-            $adminCode = $subEntity->scope_type === 'recipient'
-                ? ($recipientCodes[$subEntity->scope_id] ?? null)
-                : ($emitterCodes[$subEntity->scope_id] ?? null);
+        try {
+            $settings       = AppSetting::all()->keyBy('key');
+            $users          = User::latest()->paginate(20, ['*'], 'users_page');
+            $templates      = DocumentTemplate::with(['variables', 'administration'])->latest()->paginate(200, ['*'], 'tpl_page');
+            $emitters       = IssuingAdministration::latest()->get();
+            $recipients     = RecipientAdministration::latest()->get();
+            $directionTypes = DirectionType::latest()->get();
+            $subEntities    = SubEntity::with('directionType')->latest()->get();
 
-            $subEntity->setAttribute('administration_code', $adminCode);
-            return $subEntity;
-        });
+            $emitterCodes   = $emitters->pluck('code', 'id');
+            $recipientCodes = $recipients->pluck('code', 'id');
+            $subEntities    = $subEntities->map(function (SubEntity $subEntity) use ($emitterCodes, $recipientCodes) {
+                $adminCode = $subEntity->scope_type === 'recipient'
+                    ? ($recipientCodes[$subEntity->scope_id] ?? null)
+                    : ($emitterCodes[$subEntity->scope_id] ?? null);
 
-        $requestedActs  = RequestedAct::with('administration')->latest()->get();
-        $routingRules   = RoutingRule::with(['template', 'recipient'])->latest()->paginate(15, ['*'], 'routing_page');
-        $profiles       = AdministrationProfile::with('administration')->latest()->paginate(15, ['*'], 'profiles_page');
-        $profilesList   = AdministrationProfile::select('id','name','administration_id')->orderBy('name')->get();
-        $instructions   = Instruction::latest()->get();
-        $allUsers       = User::select('id','name','email')->latest()->get();
-        $shareMapRaw    = AppSetting::where('key', 'template_share_map')->value('value');
-        $shareMap       = json_decode($shareMapRaw ?: '{}', true) ?: [];
-        $onlyofficeUrl  = AppSetting::where('key', 'onlyoffice_server_url')->value('value') ?: '';
-        $onlyofficeSecret = AppSetting::where('key', 'onlyoffice_secret')->value('value') ?: '';
-        $dirAssignments  = UserDirectionAssignment::all()->keyBy('user_id');
-        $sigProviders   = SignatureProviderConfig::all()->keyBy('administration_id');
-        $courrierArchivalDays = (int) AppSetting::where('key', 'courrier_archival_days')->value('value');
+                $subEntity->setAttribute('administration_code', $adminCode);
+                return $subEntity;
+            });
+
+            $requestedActs  = RequestedAct::with('administration')->latest()->get();
+            $routingRules   = RoutingRule::with(['template', 'recipient'])->latest()->paginate(15, ['*'], 'routing_page');
+            $profiles       = AdministrationProfile::with('administration')->latest()->paginate(15, ['*'], 'profiles_page');
+            $profilesList   = AdministrationProfile::select('id','name','administration_id')->orderBy('name')->get();
+            $instructions   = Instruction::latest()->get();
+            $allUsers       = User::select('id','name','email')->latest()->get();
+            $shareMapRaw    = AppSetting::where('key', 'template_share_map')->value('value');
+            $shareMap       = json_decode($shareMapRaw ?: '{}', true) ?: [];
+            $onlyofficeUrl  = AppSetting::where('key', 'onlyoffice_server_url')->value('value') ?: '';
+            $onlyofficeSecret = AppSetting::where('key', 'onlyoffice_secret')->value('value') ?: '';
+            $dirAssignments  = UserDirectionAssignment::all()->keyBy('user_id');
+            $sigProviders   = SignatureProviderConfig::all()->keyBy('administration_id');
+            $courrierArchivalDays = (int) AppSetting::where('key', 'courrier_archival_days')->value('value');
+        } catch (\Throwable $e) {
+            if ($tab !== 'emitters') {
+                throw $e;
+            }
+
+            Log::warning('Admin emitters tab fallback due to missing dependency', [
+                'message' => $e->getMessage(),
+            ]);
+
+            try {
+                $settings = AppSetting::all()->keyBy('key');
+            } catch (\Throwable $ignored) {
+                $settings = collect();
+            }
+
+            try {
+                $emitters = IssuingAdministration::latest()->get();
+            } catch (\Throwable $ignored) {
+                $emitters = collect();
+            }
+        }
 
         // Génération du JWT OnlyOffice (HS256) sans dépendance externe
         $onlyofficeJwt = '';
@@ -582,6 +626,15 @@ class AdminController extends Controller
         ];
     }
 
+    private function issuingAdministrationHasSubEntityCode(): bool
+    {
+        try {
+            return Schema::hasColumn('issuing_administrations', 'sub_entity_code');
+        } catch (\Throwable $e) {
+            return false;
+        }
+    }
+
     public function storeEmitter(Request $request)
     {
         $request->validate([
@@ -593,19 +646,28 @@ class AdminController extends Controller
         if ($request->hasFile('logo_file')) {
             $file = $request->file('logo_file');
             $filename = uniqid('logo_') . '.' . $file->getClientOriginalExtension();
+            $logoDir = public_path('images/logos');
+            if (!is_dir($logoDir)) {
+                mkdir($logoDir, 0755, true);
+            }
             $file->move(public_path('images/logos'), $filename);
             $logoPath = 'images/logos/' . $filename;
         }
 
-        IssuingAdministration::create([
+        $payload = [
             'id'              => Str::uuid(),
             'name'            => $request->input('name'),
             'code'            => strtoupper($request->input('code')),
-            'sub_entity_code' => strtoupper($request->input('sub_entity_code', '')),
             'is_active'       => $request->boolean('is_active', true),
             'logo'            => $logoPath,
             'metadata'        => $this->extractEmitterMetadata($request),
-        ]);
+        ];
+
+        if ($this->issuingAdministrationHasSubEntityCode()) {
+            $payload['sub_entity_code'] = strtoupper((string) $request->input('sub_entity_code', ''));
+        }
+
+        IssuingAdministration::create($payload);
         return redirect()->route('admin.index', ['tab' => 'emitters'])
             ->with('success', 'Administration émettrice créée.');
     }
@@ -621,18 +683,27 @@ class AdminController extends Controller
         if ($request->hasFile('logo_file')) {
             $file = $request->file('logo_file');
             $filename = uniqid('logo_') . '.' . $file->getClientOriginalExtension();
+            $logoDir = public_path('images/logos');
+            if (!is_dir($logoDir)) {
+                mkdir($logoDir, 0755, true);
+            }
             $file->move(public_path('images/logos'), $filename);
             $logoPath = 'images/logos/' . $filename;
         }
 
-        $emitter->update([
+        $payload = [
             'name'            => $request->input('name'),
             'code'            => strtoupper($request->input('code')),
-            'sub_entity_code' => strtoupper($request->input('sub_entity_code', '')),
             'is_active'       => $request->boolean('is_active', true),
             'logo'            => $logoPath,
             'metadata'        => $this->extractEmitterMetadata($request),
-        ]);
+        ];
+
+        if ($this->issuingAdministrationHasSubEntityCode()) {
+            $payload['sub_entity_code'] = strtoupper((string) $request->input('sub_entity_code', ''));
+        }
+
+        $emitter->update($payload);
         return redirect()->route('admin.index', ['tab' => 'emitters'])
             ->with('success', 'Administration émettrice mise à jour.');
     }

@@ -11,16 +11,15 @@ return new class extends Migration
         Schema::create('document_versions', function (Blueprint $table) {
             $table->uuid('id')->primary();
 
-            // ✅ CHAR(36) pour matcher documents.id + même collation que le parent
-            $table->string('document_id', 36)->collation('utf8mb3_unicode_ci');
+            // Keep UUID columns consistent with parent tables to avoid FK mismatches.
+            $table->uuid('document_id');
             $table->unsignedInteger('version')->default(1);
             $table->string('file_path', 1000);
 
-            $table->string('creator_id', 36)->nullable()->collation('utf8mb3_unicode_ci');
+            $table->uuid('creator_id')->nullable();
             $table->text('change_log')->nullable();
             $table->timestamp('created_at')->useCurrent();
 
-            // ✅ Contraintes ajoutées après la définition des colonnes
             $table->foreign('document_id')->references('id')->on('documents')->onDelete('cascade');
             $table->foreign('creator_id')->references('id')->on('users')->onDelete('set null');
         });

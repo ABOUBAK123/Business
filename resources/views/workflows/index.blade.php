@@ -436,8 +436,33 @@ $currentUserId = Auth::id();
 
 </div>
 
-<script src="{{ asset('vendor/pdfjs/pdf.min.js') }}"></script>
-<script>pdfjsLib.GlobalWorkerOptions.workerSrc = '{{ asset('vendor/pdfjs/pdf.worker.min.js') }}';</script>
+<script>
+window.__wfPdfJsWorker = '{{ asset('vendor/pdfjs/pdf.worker.min.js') }}';
+
+function wfInitPdfJsWorker() {
+    if (!window.pdfjsLib || !window.pdfjsLib.GlobalWorkerOptions) {
+        return false;
+    }
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = window.__wfPdfJsWorker;
+    return true;
+}
+
+function wfLoadPdfJsFallback() {
+    if (document.getElementById('wf-pdfjs-fallback')) {
+        return;
+    }
+
+    const cdnScript = document.createElement('script');
+    cdnScript.id = 'wf-pdfjs-fallback';
+    cdnScript.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
+    cdnScript.onload = function () {
+        window.__wfPdfJsWorker = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+        wfInitPdfJsWorker();
+    };
+    document.head.appendChild(cdnScript);
+}
+</script>
+<script src="{{ asset('vendor/pdfjs/pdf.min.js') }}" onload="wfInitPdfJsWorker()" onerror="wfLoadPdfJsFallback()"></script>
 
 <script>
 // ── Données initiales ──────────────────────────────────────
@@ -471,6 +496,22 @@ function getUserName(id) {
 function getDocTitle(id) {
     const d = DOCUMENTS.find(x => x.id === id);
     return d ? d.title : 'Document ' + (id||'').slice(0,8) + '…';
+}
+
+function setWorkflowName(value) {
+    form.name = value || '';
+}
+
+function setWorkflowDescription(value) {
+    form.description = value || '';
+}
+
+function setWorkflowNotifyEmails(value) {
+    form.notifyEmails = value || '';
+}
+
+function setWorkflowNotifyCc(value) {
+    form.notifyCc = value || '';
 }
 
 // ── Calcul statut ──────────────────────────────────────────
@@ -850,7 +891,7 @@ function renderStepGeneral() {
             <input type="text" id="f-name"
                 value="${esc(form.name)}"
                 ${ro ? 'readonly' : ''}
-                oninput="form.name=this.value"
+                oninput="setWorkflowName(this.value)"
                 placeholder="${creationMode === 'template' ? 'Ex: Circuit de validation standard' : 'Ex: Approbation contrat fournisseur'}"
                 class="w-full border ${ro ? 'bg-gray-50 border-gray-200' : 'border-gray-300 focus:ring-2 focus:ring-[#2453d6]'} rounded-lg px-3 py-2.5 text-sm focus:outline-none transition">
         </div>
@@ -859,7 +900,7 @@ function renderStepGeneral() {
             <label class="block text-sm font-semibold text-gray-700">Description</label>
             <textarea id="f-desc" rows="3"
                 ${ro ? 'readonly' : ''}
-                oninput="form.description=this.value"
+                oninput="setWorkflowDescription(this.value)"
                 placeholder="Décrivez l'objectif de ce ${creationMode === 'template' ? 'modèle' : 'workflow'}..."
                 class="w-full border ${ro ? 'bg-gray-50 border-gray-200' : 'border-gray-300 focus:ring-2 focus:ring-[#2453d6]'} rounded-lg px-3 py-2.5 text-sm focus:outline-none transition resize-none">${esc(form.description)}</textarea>
         </div>
@@ -1419,6 +1460,14 @@ function openZoneModal(docId) {
     const pagesRoot = document.getElementById('zm-pages');
     const inlineUrl = zmGetInlineUrl(docId);
 
+    if (!wfInitPdfJsWorker()) {
+        wfLoadPdfJsFallback();
+        loading.classList.add('hidden');
+        errorBox.classList.remove('hidden');
+        openNewTab.href = inlineUrl;
+        return;
+    }
+
     zmUpdateHeader(doc.title || 'Document');
     zmShowDebug();
     zmUpdateDebug();
@@ -1918,13 +1967,13 @@ function renderStepNotifications() {
         <div class="border border-amber-200 bg-amber-50/60 rounded-xl p-4 space-y-4">
             <div class="space-y-1.5">
                 <label class="block text-sm font-semibold text-gray-700">Destinataires (To)</label>
-                <input type="text" value="${esc(form.notifyEmails)}" oninput="form.notifyEmails=this.value"
+                <input type="text" value="${esc(form.notifyEmails)}" oninput="setWorkflowNotifyEmails(this.value)"
                     placeholder="ex: chef@org.fr, secretaire@org.fr"
                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white">
             </div>
             <div class="space-y-1.5">
                 <label class="block text-sm font-semibold text-gray-700">Copie (Cc) — optionnel</label>
-                <input type="text" value="${esc(form.notifyCc)}" oninput="form.notifyCc=this.value"
+                <input type="text" value="${esc(form.notifyCc)}" oninput="setWorkflowNotifyCc(this.value)"
                     placeholder="ex: direction@org.fr"
                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white">
             </div>
