@@ -926,12 +926,13 @@ class AdminController extends Controller
             $blankMap = ['docx' => 'docx', 'xlsx' => 'xlsx', 'pptx' => 'pptx'];
             $blankType = $blankMap[$ext] ?? 'docx';
             $docUrl = $base . '/oo-blank/' . $blankType;
-        } elseif ($storagePubPath && str_starts_with($template->storage_path, 'images/')) {
-            // Fichier dans public/ → URL directe sans authentification (plus fiable pour OO)
+        } elseif ($storagePubPath) {
+            // Fichier accessible publiquement → URL directe sans authentification (plus fiable pour OO)
+            // images/templates/ = dans public_path() ; storage/ = symlink public/storage/
             $docUrl = $base . $storagePubPath;
         } else {
-            // URL signée (sans session) pour les fichiers en storage privé
-            $expires = time() + 900; // 15 minutes
+            // Fallback : URL signée (ne devrait pas arriver si $exists est vrai)
+            $expires = time() + 900;
             $access  = hash_hmac('sha256', 'tplfile|' . $template->id . '|' . $expires, (string) config('app.key'));
             $docUrl  = $base . '/api/oo-file/template/' . $template->id . '?expires=' . $expires . '&access=' . $access;
         }
