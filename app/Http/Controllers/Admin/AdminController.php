@@ -928,20 +928,23 @@ class AdminController extends Controller
 
         $base = $this->resolveAppPublicBaseUrl($appPublicUrl, $onlyofficeUrl);
 
-        if (!$exists) {
-            // Pas de fichier → utiliser le template vierge
-            $blankMap = ['docx' => 'docx', 'xlsx' => 'xlsx', 'pptx' => 'pptx'];
-            $blankType = $blankMap[$ext] ?? 'docx';
-            $docUrl = $base . '/oo-blank/' . $blankType;
-        } elseif ($storagePubPath && str_starts_with((string) $template->storage_path, 'images/')) {
-            // Fichier dans public/images/* → URL directe publique
-            $docUrl = $base . $storagePubPath;
-        } else {
-            // Fichier storage/* → URL signée (ne dépend pas de public/storage)
+        $buildDocUrl = function (string $baseUrl) use ($exists, $ext, $storagePubPath, $template): string {
+            if (!$exists) {
+                $blankMap = ['docx' => 'docx', 'xlsx' => 'xlsx', 'pptx' => 'pptx'];
+                $blankType = $blankMap[$ext] ?? 'docx';
+                return $baseUrl . '/oo-blank/' . $blankType;
+            }
+
+            if ($storagePubPath && str_starts_with((string) $template->storage_path, 'images/')) {
+                return $baseUrl . $storagePubPath;
+            }
+
             $expires = time() + 900;
             $access  = hash_hmac('sha256', 'tplfile|' . $template->id . '|' . $expires, (string) config('app.key'));
-            $docUrl  = $base . '/api/oo-file/template/' . $template->id . '?expires=' . $expires . '&access=' . $access;
-        }
+            return $baseUrl . '/api/oo-file/template/' . $template->id . '?expires=' . $expires . '&access=' . $access;
+        };
+
+        $docUrl = $buildDocUrl($base);
 
         $docUrl = preg_replace('/\s+/', '', (string) $docUrl);
 
@@ -949,6 +952,33 @@ class AdminController extends Controller
 
         $docUrlAccessError = $this->validateOnlyofficeAccessibleUrl($docUrl);
         $docUrlAccessWarning = null;
+
+        // Fallback automatique: si l'URL configurée contient /public et répond 404,
+        // réessayer avec la même URL sans /public.
+        if (
+            $docUrlAccessError
+            && str_contains($docUrlAccessError, ' répond 404 ')
+            && str_ends_with($base, '/public')
+        ) {
+            $fallbackBase = substr($base, 0, -7);
+            if ($fallbackBase !== '') {
+                $fallbackDocUrl = preg_replace('/\s+/', '', (string) $buildDocUrl($fallbackBase));
+                $fallbackError = $this->validateOnlyofficeAccessibleUrl($fallbackDocUrl);
+                if (!$fallbackError) {
+                    $oldBase = $base;
+                    $base = $fallbackBase;
+                    $docUrl = $fallbackDocUrl;
+                    $docUrlAccessError = null;
+                    \Log::warning('OO getTemplateOoConfig fallback base sans /public utilisé', [
+                        'template' => $template->id,
+                        'old_base' => $oldBase,
+                        'new_base' => $fallbackBase,
+                    ]);
+                    \Log::info('OO getTemplateOoConfig docUrl fallback=' . $docUrl . ' template=' . $template->id);
+                }
+            }
+        }
+
         if ($docUrlAccessError) {
             // Ne bloque pas l'éditeur sur timeout réseau (ngrok / tunnel instable).
             // On laisse OnlyOffice tenter le chargement réel du document.
