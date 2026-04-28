@@ -926,14 +926,19 @@ class AdminController extends Controller
             $blankMap = ['docx' => 'docx', 'xlsx' => 'xlsx', 'pptx' => 'pptx'];
             $blankType = $blankMap[$ext] ?? 'docx';
             $docUrl = $base . '/oo-blank/' . $blankType;
+        } elseif ($storagePubPath && str_starts_with($template->storage_path, 'images/')) {
+            // Fichier dans public/ → URL directe sans authentification (plus fiable pour OO)
+            $docUrl = $base . $storagePubPath;
         } else {
-            // URL signée (sans session) pour que le serveur OnlyOffice télécharge le template
+            // URL signée (sans session) pour les fichiers en storage privé
             $expires = time() + 900; // 15 minutes
             $access  = hash_hmac('sha256', 'tplfile|' . $template->id . '|' . $expires, (string) config('app.key'));
             $docUrl  = $base . '/api/oo-file/template/' . $template->id . '?expires=' . $expires . '&access=' . $access;
         }
 
         $docUrl = preg_replace('/\s+/', '', (string) $docUrl);
+
+        \Log::info('OO getTemplateOoConfig docUrl=' . $docUrl . ' template=' . $template->id);
 
         $docUrlAccessError = $this->validateOnlyofficeAccessibleUrl($docUrl);
         $docUrlAccessWarning = null;
