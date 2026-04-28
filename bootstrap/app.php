@@ -19,6 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->validateCsrfTokens(except: [
             'api/oo-callback/*',
+            'public/api/oo-callback/*',
             'e-administration_laravel/api/oo-callback/*',
             'e-administration_laravel/public/api/oo-callback/*',
         ]);
