@@ -440,7 +440,7 @@ if (!array_key_exists($tab, $tabs)) {
         {{-- Banner d'avertissement close-guard --}}
         <div id="tpl-oo-close-guard-banner" style="display:none;" class="flex items-center gap-3 px-4 py-3 bg-red-500 text-white text-sm font-semibold shadow-md flex-shrink-0">
             <i class="fas fa-lock text-lg"></i>
-            <span>⚠️ <strong>Modèle non enregistré!</strong> Appuyez sur <strong>Ctrl+S</strong> pour enregistrer avant de fermer, puis attendez la confirmation ci-dessous.</span>
+          <span>⚠️ <strong>Modèle non encore confirmé côté serveur.</strong> L’auto-sauvegarde est active. Vous pouvez aussi cliquer sur <strong>Enregistrer le modèle</strong>, puis attendre la confirmation ci-dessous.</span>
             <div class="ml-auto flex items-center gap-2">
                 <div class="inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
                 <span>Vérification...</span>
@@ -741,22 +741,27 @@ if (!array_key_exists($tab, $tabs)) {
           if (idx >= saveStateCandidates.length) {
             throw new Error('All save-state URLs failed: ' + saveStateCandidates.join(' | '));
           }
-          return fetch(saveStateCandidates[idx], {
+          var candidateUrl = saveStateCandidates[idx];
+          return fetch(candidateUrl, {
             method: 'GET',
             headers: {
               'Accept': 'application/json',
               'X-CSRF-TOKEN': csrf ? csrf.content : ''
             },
             credentials: 'same-origin'
+          }).then(function(r) {
+            // If a candidate returns 404/500, try the next one.
+            if (!r.ok) {
+              console.log('[CloseGuard] save-state non OK', r.status, candidateUrl);
+              return tryFetchSavedState(idx + 1);
+            }
+            return r;
           }).catch(function() {
             return tryFetchSavedState(idx + 1);
           });
         }
 
         tryFetchSavedState(0).then(function(r) {
-          if (!r.ok) {
-            throw new Error('HTTP ' + r.status);
-          }
           return r.json();
         })
         .then(function(data) {
@@ -805,7 +810,7 @@ if (!array_key_exists($tab, $tabs)) {
             return true;
         }
         console.log('[CloseGuard] Blocage de fermeture, fichier non sauvegardé');
-        tplOoShowStatus('🔒 Enregistrez d\'abord le modèle (Ctrl+S), puis attendez la confirmation bleue ci-dessous.', 7000);
+        tplOoShowStatus('🔒 Le modèle n\'est pas encore confirmé côté serveur. Attendez l\'auto-sauvegarde ou cliquez sur "Enregistrer le modèle".', 7000);
         tplOoShowCloseGuardBanner();
         return false;
     }
@@ -1240,7 +1245,7 @@ if (!array_key_exists($tab, $tabs)) {
                 ooConfig.type   = 'desktop';
                 window._ooEditorInstance = new DocsAPI.DocEditor('oo-editor-placeholder', ooConfig);
                 window._ooCurrentTemplateId = cfg.template_id || null;
-                tplOoShowStatus('Fichier ouvert dans OnlyOffice. Modifiez votre template puis enregistrez (Ctrl+S).', 6000);
+                tplOoShowStatus('Fichier ouvert dans OnlyOffice. L\'auto-sauvegarde est active; vous pouvez aussi cliquer sur "Enregistrer le modèle".', 6000);
             } catch(err) {
                 tplOoShowStatus('Erreur initialisation OnlyOffice : ' + err.message, 6000);
             }

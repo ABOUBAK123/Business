@@ -2041,7 +2041,7 @@ class AdminController extends Controller
             if ($xml === false) continue;
             // Défragmenter les runs Word pour mieux détecter {{ }} saisis dans OO
             $isWordContent = preg_match('#word/(document|header|footer|endnote|footnote)#i', $name);
-            $normalizedXml = $isWordContent ? preg_replace('/<\/w:t>\s*<\/w:r>\s*<w:r[^>]*>\s*<w:t[^>]*>/i', '', $xml) : $xml;
+            $normalizedXml = $isWordContent ? $this->defragmentRuns((string) $xml) : $xml;
             $text = html_entity_decode(strip_tags((string) $normalizedXml), ENT_QUOTES | ENT_HTML5, 'UTF-8');
             // Support des deux syntaxes : {{variable}} (ancien) et [variable] (nouveau)
             preg_match_all('/(?:\{\s*\{)\s*([^{}]+?)\s*(?:\}\s*\})/u', $text, $m1);
@@ -2066,6 +2066,41 @@ class AdminController extends Controller
             $result[] = ['key' => $slug, 'label' => $orig];
         }
         return $result;
+    }
+
+    /**
+     * Regroupe les runs Word d'un paragraphe quand il contient des placeholders.
+     * Cela évite de perdre la détection des {{ variables }} fragmentées par OnlyOffice.
+     */
+    private function defragmentRuns(string $xml): string
+    {
+        return preg_replace_callback(
+            '/<w:p[ >].*?<\/w:p>/s',
+            function (array $match) {
+                $para = $match[0];
+
+                preg_match_all('/<w:t[^>]*>(.*?)<\/w:t>/s', $para, $texts);
+                $fullText = implode('', $texts[1]);
+
+                if (!preg_match('/\[[^\[\]]+\]/', $fullText) && strpos($fullText, '{{') === false) {
+                    return $para;
+                }
+
+                $firstRpr = '';
+                if (preg_match('/<w:r[ >].*?(<w:rPr>.*?<\/w:rPr>)/s', $para, $rprMatch)) {
+                    $firstRpr = $rprMatch[1];
+                }
+
+                $pPr = '';
+                if (preg_match('/<w:pPr>.*?<\/w:pPr>/s', $para, $pPrMatch)) {
+                    $pPr = $pPrMatch[0];
+                }
+
+                $newRun = '<w:r>' . $firstRpr . '<w:t xml:space="preserve">' . $fullText . '</w:t></w:r>';
+                return '<w:p>' . $pPr . $newRun . '</w:p>';
+            },
+            $xml
+        ) ?? $xml;
     }
 
     private function extractVarsFromTemplateText(?string $content): array
