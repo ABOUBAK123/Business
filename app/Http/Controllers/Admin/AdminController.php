@@ -126,7 +126,7 @@ class AdminController extends Controller
                 return $subEntity;
             });
 
-            $requestedActs  = RequestedAct::with('administration')->latest()->get();
+            $requestedActs  = RequestedAct::with(['administration', 'recipientAdministration'])->latest()->get();
             $routingRules   = RoutingRule::with(['template', 'recipient'])->latest()->paginate(15, ['*'], 'routing_page');
             $profiles       = AdministrationProfile::with('administration')->latest()->paginate(15, ['*'], 'profiles_page');
             $profilesList   = AdministrationProfile::select('id','name','administration_id')->orderBy('name')->get();
@@ -1755,11 +1755,13 @@ class AdminController extends Controller
     public function storeRequestedAct(Request $request)
     {
         $data = $request->validate([
-            'administration_id' => 'required|string',
-            'direction_code'    => 'nullable|string|max:50',
-            'document_name'     => 'required|string|max:255',
-            'required_documents'=> 'nullable|string', // JSON string from hidden input
-            'applicant_fields'  => 'nullable|string', // JSON string from hidden input
+            'administration_id'          => 'required|string',
+            'direction_code'             => 'nullable|string|max:50',
+            'recipient_administration_id'=> 'nullable|exists:recipient_administrations,id',
+            'motif'                      => 'nullable|string|max:1000',
+            'document_name'              => 'required|string|max:255',
+            'required_documents'         => 'nullable|string',
+            'applicant_fields'           => 'nullable|string',
         ]);
         $data['required_documents'] = json_decode($data['required_documents'] ?? '[]', true) ?: [];
         $data['applicant_fields']   = json_decode($data['applicant_fields']   ?? '[]', true) ?: [];
@@ -1770,11 +1772,13 @@ class AdminController extends Controller
     public function updateRequestedAct(Request $request, RequestedAct $requestedAct)
     {
         $data = $request->validate([
-            'administration_id' => 'required|string',
-            'direction_code'    => 'nullable|string|max:50',
-            'document_name'     => 'required|string|max:255',
-            'required_documents'=> 'nullable|string',
-            'applicant_fields'  => 'nullable|string',
+            'administration_id'          => 'required|string',
+            'direction_code'             => 'nullable|string|max:50',
+            'recipient_administration_id'=> 'nullable|exists:recipient_administrations,id',
+            'motif'                      => 'nullable|string|max:1000',
+            'document_name'              => 'required|string|max:255',
+            'required_documents'         => 'nullable|string',
+            'applicant_fields'           => 'nullable|string',
         ]);
         $data['required_documents'] = json_decode($data['required_documents'] ?? '[]', true) ?: [];
         $data['applicant_fields']   = json_decode($data['applicant_fields']   ?? '[]', true) ?: [];
