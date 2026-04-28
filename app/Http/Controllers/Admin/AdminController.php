@@ -30,6 +30,44 @@ use Illuminate\Support\Facades\Storage;
 
 class AdminController extends Controller
 {
+    private function extractOrigin(?string $url): ?string
+    {
+        $url = trim((string) $url);
+        if ($url === '') {
+            return null;
+        }
+
+        $parts = parse_url(rtrim($url, '/'));
+        if (!is_array($parts) || empty($parts['host'])) {
+            return null;
+        }
+
+        $scheme = $parts['scheme'] ?? 'https';
+        $origin = $scheme . '://' . $parts['host'];
+        if (!empty($parts['port'])) {
+            $origin .= ':' . $parts['port'];
+        }
+
+        return $origin;
+    }
+
+    private function resolveAppPublicBaseUrl(?string $appPublicUrl, ?string $onlyofficeUrl = null): string
+    {
+        $basePath = rtrim(request()->getBaseUrl(), '/');
+        $requestOrigin = rtrim(request()->getSchemeAndHttpHost(), '/');
+
+        $appOrigin = $this->extractOrigin($appPublicUrl);
+        $ooOrigin = $this->extractOrigin($onlyofficeUrl);
+
+        // If app_public_url is empty or mistakenly set to the OnlyOffice server host,
+        // fallback to the current application host.
+        if (!$appOrigin || ($ooOrigin && strcasecmp($appOrigin, $ooOrigin) === 0)) {
+            return $requestOrigin . $basePath;
+        }
+
+        return $appOrigin . $basePath;
+    }
+
     public function index(Request $request)
     {
         $tab = $request->get('tab', 'overview');
@@ -120,7 +158,7 @@ class AdminController extends Controller
         $onlyofficeJwt = '';
         $appPublicUrl  = AppSetting::where('key', 'app_public_url')->value('value') ?: '';
         if ($onlyofficeSecret) {
-            $base   = rtrim($appPublicUrl ?: config('app.url'), '/');
+            $base   = $this->resolveAppPublicBaseUrl($appPublicUrl, $onlyofficeUrl ?? '');
             $docUrl = $base . '/oo-blank/docx';
             $payload = [
                 'document' => [
@@ -169,6 +207,7 @@ class AdminController extends Controller
         }
 
         $appPublicUrl = AppSetting::where('key', 'app_public_url')->value('value') ?: '';
+        $onlyofficeUrl = AppSetting::where('key', 'onlyoffice_server_url')->value('value') ?: '';
         $docKey       = $request->input('key', 'doc-' . time());
         $docUrl       = $request->input('url', '');
         $docType      = $request->input('fileType', 'docx');
@@ -176,7 +215,7 @@ class AdminController extends Controller
 
         // Si aucune URL fournie, utiliser la route publique /oo-blank/docx
         if (!$docUrl) {
-            $base   = rtrim($appPublicUrl ?: config('app.url'), '/');
+            $base   = $this->resolveAppPublicBaseUrl($appPublicUrl, $onlyofficeUrl);
             $docUrl = $base . '/oo-blank/' . $docType;
         }
 
@@ -280,18 +319,8 @@ class AdminController extends Controller
         $basePath       = rtrim($request->getBaseUrl(), '/');                     // ex: /e-administration_laravel/public
         $localDocUrl    = rtrim($request->getSchemeAndHttpHost(), '/') . $basePath . $storagePubPath;
 
-        // For OnlyOffice: use only scheme+host from app_public_url, then append basePath+storagePubPath
-        // This ensures the subdirectory prefix is always present even when app_public_url is just the hostname
-        if ($appPublicUrl) {
-            $parsedPub = parse_url(rtrim($appPublicUrl, '/'));
-            $pubOrigin = ($parsedPub['scheme'] ?? 'https') . '://' . ($parsedPub['host'] ?? '');
-            if (!empty($parsedPub['port'])) {
-                $pubOrigin .= ':' . $parsedPub['port'];
-            }
-            $docUrl = $pubOrigin . $basePath . $storagePubPath;
-        } else {
-            $docUrl = $localDocUrl;
-        }
+        $baseForDocUrl = $this->resolveAppPublicBaseUrl($appPublicUrl, $onlyofficeUrl);
+        $docUrl = $baseForDocUrl . $storagePubPath;
 
         $token = '';
         if ($onlyofficeSecret) {
@@ -859,13 +888,6 @@ class AdminController extends Controller
             ], 422);
         }
 
-        if (!$appPublicUrl) {
-            return response()->json([
-                'success' => false,
-                'error' => 'L\'URL publique de cette application est vide. OnlyOffice doit pouvoir télécharger le document via une URL Internet accessible.',
-            ], 422);
-        }
-
         // Construire l'URL du document
         if ($template->storage_path) {
             // Résoudre selon l'emplacement réel du fichier
@@ -897,19 +919,7 @@ class AdminController extends Controller
         $reqBasePath = rtrim(request()->getBaseUrl(), '/');
         $localDocUrl = $storagePubPath ? rtrim(request()->getSchemeAndHttpHost(), '/') . $reqBasePath . $storagePubPath : null;
 
-        // Build $base: use only scheme+host from app_public_url, then append $reqBasePath
-        // This guarantees the subdirectory prefix is always present even when app_public_url
-        // is set to just the hostname (e.g. https://abc.ngrok-free.dev).
-        if ($appPublicUrl) {
-            $parsedPub = parse_url(rtrim($appPublicUrl, '/'));
-            $pubOrigin = ($parsedPub['scheme'] ?? 'https') . '://' . ($parsedPub['host'] ?? '');
-            if (!empty($parsedPub['port'])) {
-                $pubOrigin .= ':' . $parsedPub['port'];
-            }
-            $base = $pubOrigin . $reqBasePath;
-        } else {
-            $base = rtrim(config('app.url'), '/');
-        }
+        $base = $this->resolveAppPublicBaseUrl($appPublicUrl, $onlyofficeUrl);
 
         if (!$exists) {
             // Pas de fichier → utiliser le template vierge
