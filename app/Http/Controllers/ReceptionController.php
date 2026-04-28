@@ -8,6 +8,8 @@ use App\Models\RecipientAdministration;
 use App\Models\UserDirectionAssignment;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class ReceptionController extends Controller
 {
@@ -34,29 +36,41 @@ class ReceptionController extends Controller
                 ->pluck('id');
         }
 
-        $sharedDocIds = DocumentShare::query()
-            ->where(function ($q) {
-                $q->whereNull('expires_at')
-                  ->orWhere('expires_at', '>', now());
-            })
-            ->where(function ($q) use ($userId, $userEmail, $subEntityCodes, $recipientAdminIds) {
-                $q->where('recipient_name', 'user:' . $userId);
+        $sharedDocIds = collect();
 
-                if (!empty($userEmail)) {
-                    $q->orWhere('recipient_email', $userEmail);
-                }
+        if (!Schema::hasTable('document_shares')) {
+            Log::warning('Reception fallback: missing document_shares table');
+        } else {
+            try {
+                $sharedDocIds = DocumentShare::query()
+                    ->where(function ($q) {
+                        $q->whereNull('expires_at')
+                          ->orWhere('expires_at', '>', now());
+                    })
+                    ->where(function ($q) use ($userId, $userEmail, $subEntityCodes, $recipientAdminIds) {
+                        $q->where('recipient_name', 'user:' . $userId);
 
-                foreach ($subEntityCodes as $code) {
-                    $q->orWhere('recipient_name', 'sub_entity:' . $code);
-                }
+                        if (!empty($userEmail)) {
+                            $q->orWhere('recipient_email', $userEmail);
+                        }
 
-                if ($recipientAdminIds->isNotEmpty()) {
-                    $q->orWhereIn('recipient_administration_id', $recipientAdminIds);
-                }
-            })
-            ->pluck('document_id')
-            ->unique()
-            ->values();
+                        foreach ($subEntityCodes as $code) {
+                            $q->orWhere('recipient_name', 'sub_entity:' . $code);
+                        }
+
+                        if ($recipientAdminIds->isNotEmpty()) {
+                            $q->orWhereIn('recipient_administration_id', $recipientAdminIds);
+                        }
+                    })
+                    ->pluck('document_id')
+                    ->unique()
+                    ->values();
+            } catch (\Throwable $e) {
+                Log::warning('Reception fallback: cannot query document shares', [
+                    'message' => $e->getMessage(),
+                ]);
+            }
+        }
 
         $query = Document::with(['owner', 'issuingAdministration'])
             ->whereIn('id', $sharedDocIds)
