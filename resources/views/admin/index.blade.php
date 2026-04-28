@@ -715,12 +715,6 @@ if (!array_key_exists($tab, $tabs)) {
             banner.style.display = 'flex';
             console.log('[CloseGuard] Banner visible');
         }
-        // Désactiver le bouton Fermer
-        var closeBtn = document.querySelector('#modal-tpl-oo button[onclick="tplOoClose()"]');
-        if (closeBtn) {
-            closeBtn.disabled = true;
-            console.log('[CloseGuard] Bouton Fermer désactivé');
-        }
     }
 
     function tplOoCheckSavedState() {
@@ -809,10 +803,12 @@ if (!array_key_exists($tab, $tabs)) {
             console.log('[CloseGuard] Fichier sauvegardé, autoriser fermeture');
             return true;
         }
-        console.log('[CloseGuard] Blocage de fermeture, fichier non sauvegardé');
-        tplOoShowStatus('🔒 Le modèle n\'est pas encore confirmé côté serveur. Attendez l\'auto-sauvegarde ou cliquez sur "Enregistrer le modèle".', 7000);
+      // Important: ne pas bloquer la fermeture. Le callback OO status=2 part souvent à la fermeture.
+      // Si on bloque ici, on peut empêcher la sauvegarde serveur et donc la détection de variables.
+      console.log('[CloseGuard] Fermeture autorisée même sans confirmation immédiate serveur');
+      tplOoShowStatus('Fermeture autorisée. Synchronisation en cours côté serveur…', 4000);
         tplOoShowCloseGuardBanner();
-        return false;
+      return true;
     }
     window.tplOoCanCloseModal = tplOoCanCloseModal;
 
@@ -1842,6 +1838,50 @@ if (!array_key_exists($tab, $tabs)) {
     }
     window.tplOoForceSave = tplOoForceSave;
 
+    function tplOoPostCloseSync(tplId) {
+      if (!tplId) return;
+
+      var csrf = document.querySelector('meta[name="csrf-token"]');
+      var attempts = 0;
+      var maxAttempts = 12;
+
+      function runSyncAttempt() {
+        attempts += 1;
+        fetch(_adminTplBase + '/' + tplId + '/detect-vars', {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': csrf ? csrf.content : ''
+          }
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data && data.success && data.count > 0) {
+            var label = document.getElementById('detect-label-' + tplId);
+            if (label) {
+              label.textContent = data.count + ' var(s)';
+            }
+            console.log('[OO sync] Variables détectées après fermeture:', data.count);
+            return;
+          }
+
+          if (attempts < maxAttempts) {
+            setTimeout(runSyncAttempt, 1500);
+          } else {
+            console.log('[OO sync] Fin des tentatives sans variable détectée pour le template', tplId);
+          }
+        })
+        .catch(function() {
+          if (attempts < maxAttempts) {
+            setTimeout(runSyncAttempt, 1500);
+          }
+        });
+      }
+
+      // Petit délai pour laisser le callback OO (status 2/6) persister le fichier.
+      setTimeout(runSyncAttempt, 1200);
+    }
+
 
     // ─── Bouton : Fermer ──────────────────────────────────────────────────────
     function tplOoClose(forceClose) {
@@ -1866,21 +1906,7 @@ if (!array_key_exists($tab, $tabs)) {
       console.log('[tplOoClose] Modal fermé, close-guard désarmé');
       closeModal('modal-tpl-oo', true);
 
-      if (tplId) {
-        var csrf = document.querySelector('meta[name="csrf-token"]');
-        fetch(_adminTplBase + '/' + tplId + '/detect-vars', {
-          method: 'POST',
-          headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf ? csrf.content : '' }
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-          if (data.success && data.count > 0) {
-            var label = document.getElementById('detect-label-' + tplId);
-            if (label) label.textContent = data.count + ' var(s)';
-          }
-        })
-        .catch(function() {});
-      }
+      tplOoPostCloseSync(tplId);
     }
 
     window.tplOoClose = tplOoClose;
