@@ -1206,9 +1206,16 @@ if (!array_key_exists($tab, $tabs)) {
                 var ooConfig = cfg.ooConfig || {};
                 if (cfg.token) { ooConfig.token = cfg.token; }
             var currentTplId = cfg.template_id || window._ooCurrentTemplateId || null;
+            var currentDocKey = '';
+            if (ooConfig && ooConfig.document && ooConfig.document.key) {
+              currentDocKey = String(ooConfig.document.key);
+            } else if (cfg.docKey) {
+              currentDocKey = String(cfg.docKey);
+            }
 
             // Synchroniser strictement l'éditeur avec le template courant du guard.
             window._ooCurrentTemplateId = currentTplId;
+            window._ooCurrentDocKey = currentDocKey;
             if (_tplOoCloseGuard.active && _tplOoCloseGuard.templateId !== currentTplId) {
               _tplOoCloseGuard.templateId = currentTplId;
               _tplOoCloseGuard.fileSaved = false;
@@ -1835,8 +1842,13 @@ if (!array_key_exists($tab, $tabs)) {
     // --- Bouton : Sauvegarder le modele (PDF) --------------------------------
     function tplOoForceSave() {
       var tplId = window._ooCurrentTemplateId || new URLSearchParams(window.location.search).get('selected_template');
+      var docKey = window._ooCurrentDocKey || '';
       if (!tplId) {
         tplOoShowStatus('Aucun modèle actif à enregistrer.', 4000);
+        return;
+      }
+      if (!docKey) {
+        tplOoShowStatus('Clé de document OnlyOffice introuvable. Rechargez le modèle puis réessayez.', 5000);
         return;
       }
 
@@ -1848,24 +1860,32 @@ if (!array_key_exists($tab, $tabs)) {
 
       tplOoShowStatus('Synchronisation du document avec le serveur en cours...', 0);
 
-      // Important: la persistance OO (status=2) est émise à la fermeture de session.
-      // On redémarre donc l'éditeur dans le modal pour forcer un cycle de sauvegarde.
-      if (window._ooEditorInstance) {
-        try { window._ooEditorInstance.destroyEditor(); } catch(e) {}
-        window._ooEditorInstance = null;
-      }
-      var placeholder = document.getElementById('oo-editor-placeholder');
-      if (placeholder) placeholder.innerHTML = '';
-
-      tplOoPostCloseSync(tplId);
-
       var csrf = document.querySelector('meta[name="csrf-token"]');
-      setTimeout(function() {
-        fetch(_adminTplBase + '/' + tplId + '/oo-config', {
-          headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf ? csrf.content : '' }
+      fetch(_adminTplBase + '/' + tplId + '/force-save', {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': csrf ? csrf.content : ''
+          },
+          body: JSON.stringify({ doc_key: docKey })
         })
         .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (!data || !data.success) {
+            throw new Error((data && data.message) ? data.message : 'Forcesave refusé par OnlyOffice');
+          }
+
+          tplOoShowStatus('Forcesave envoyé à OnlyOffice. Attente de la confirmation serveur…', 4500);
+          tplOoPostCloseSync(tplId);
+
+          return fetch(_adminTplBase + '/' + tplId + '/oo-config', {
+            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf ? csrf.content : '' }
+          });
+        })
+        .then(function(r) { return r ? r.json() : null; })
         .then(function(cfg) {
+          if (!cfg) return;
           if (cfg.error) {
             tplOoShowStatus('Erreur : ' + cfg.error, 7000);
             return;
@@ -1882,7 +1902,6 @@ if (!array_key_exists($tab, $tabs)) {
             saveBtn.innerHTML = '<i class="fas fa-save text-xs"></i> Enregistrer le modèle';
           }
         });
-      }, 1300);
     }
     window.tplOoForceSave = tplOoForceSave;
 

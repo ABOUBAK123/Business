@@ -245,6 +245,7 @@ Route::middleware('auth')->group(function () {
         Route::delete('/templates/{template}/variables/{variableId}',    [AdminController::class, 'destroyTemplateVariable'])->name('templates.variables.destroy');
         Route::post('/templates/{template}/share',                       [AdminController::class, 'updateTemplateShare'])->name('templates.share');
         Route::post('/templates/{template}/zones',                       [AdminController::class, 'saveTemplateZones'])->name('templates.zones.save');
+        Route::post('/templates/{template}/force-save',                  [AdminController::class, 'forceSaveTemplate'])->name('templates.forceSave');
 
         // Règles de routage
         Route::post('/routing-rules',               [AdminController::class, 'storeRoutingRule'])->name('routing-rules.store');

@@ -1508,6 +1508,86 @@ class AdminController extends Controller
         return response()->json(['success' => true, 'message' => count($sanitized) . ' zone(s) de signature enregistrée(s).' ]);
     }
 
+    public function forceSaveTemplate(Request $request, DocumentTemplate $template)
+    {
+        $request->validate([
+            'doc_key' => 'required|string|max:255',
+        ]);
+
+        $onlyofficeUrl = rtrim((string) (AppSetting::where('key', 'onlyoffice_server_url')->value('value') ?: ''), '/');
+        $onlyofficeSecret = (string) (AppSetting::where('key', 'onlyoffice_secret')->value('value') ?: '');
+
+        if ($onlyofficeUrl === '') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Serveur OnlyOffice non configuré.',
+            ], 422);
+        }
+
+        $disableCert = filter_var(
+            AppSetting::where('key', 'onlyoffice_disable_cert')->value('value') ?? false,
+            FILTER_VALIDATE_BOOLEAN
+        );
+
+        $docKey = (string) $request->input('doc_key');
+        $commandPayload = [
+            'c' => 'forcesave',
+            'key' => $docKey,
+            'userdata' => 'tpl-force-' . $template->id . '-' . time(),
+        ];
+
+        if ($onlyofficeSecret !== '') {
+            $header = rtrim(strtr(base64_encode(json_encode(['alg' => 'HS256', 'typ' => 'JWT'])), '+/', '-_'), '=');
+            $body = rtrim(strtr(base64_encode(json_encode($commandPayload)), '+/', '-_'), '=');
+            $signature = rtrim(strtr(base64_encode(hash_hmac('sha256', "$header.$body", $onlyofficeSecret, true)), '+/', '-_'), '=');
+            $jwt = "$header.$body.$signature";
+            $commandPayload['token'] = $jwt;
+        }
+
+        try {
+            $client = Http::timeout(20)->acceptJson();
+            if ($disableCert) {
+                $client = $client->withoutVerifying();
+            }
+
+            $response = $client->post($onlyofficeUrl . '/coauthoring/CommandService.ashx', $commandPayload);
+            $data = $response->json();
+            $errorCode = is_array($data) ? (int) ($data['error'] ?? -1) : -1;
+
+            Log::info('OnlyOffice CommandService forcesave', [
+                'template_id' => (string) $template->id,
+                'doc_key' => $docKey,
+                'http_status' => $response->status(),
+                'oo_error' => $errorCode,
+                'oo_response' => $data,
+            ]);
+
+            if ($response->successful() && $errorCode === 0) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Forcesave déclenché.',
+                ]);
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => 'OnlyOffice a refusé le forcesave.',
+                'details' => $data,
+            ], 422);
+        } catch (\Throwable $e) {
+            Log::warning('OnlyOffice CommandService forcesave failed', [
+                'template_id' => (string) $template->id,
+                'doc_key' => $docKey,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur réseau lors du forcesave OnlyOffice: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
     // ── Règles de routage ─────────────────────────────────────────────────────
     public function storeRoutingRule(Request $request)
     {
