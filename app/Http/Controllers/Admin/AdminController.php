@@ -65,7 +65,14 @@ class AdminController extends Controller
             return $requestOrigin . $basePath;
         }
 
-        return $appOrigin . $basePath;
+        $configuredPath = '';
+        $appParts = parse_url(rtrim((string) $appPublicUrl, '/'));
+        if (is_array($appParts) && !empty($appParts['path'])) {
+            $configuredPath = rtrim((string) $appParts['path'], '/');
+        }
+
+        // Respecte le path configuré (ex: /public) si présent, sinon fallback sur le basePath de la requête.
+        return $appOrigin . ($configuredPath !== '' ? $configuredPath : $basePath);
     }
 
     public function index(Request $request)
