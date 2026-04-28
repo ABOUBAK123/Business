@@ -131,60 +131,53 @@
 
                 @php
                     $requiredDocs = is_array($requestedAct->required_documents) ? $requestedAct->required_documents : [];
+                    $attachmentLabelsOld = old('attachment_labels', []);
+                    $attachmentRowCount = max(1, count($attachmentLabelsOld), count($requiredDocs));
                 @endphp
-                @if(!empty($requiredDocs))
-                    <div>
-                        <label class="block text-xs font-semibold text-gray-700 mb-2">Documents à fournir (obligatoires)</label>
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                            @foreach($requiredDocs as $doc)
-                                @php
-                                    $docLabel = trim((string) $doc);
-                                    $docKey = \Illuminate\Support\Str::of($docLabel)->ascii()->lower()->replace("'", '_')->replaceMatches('/[^a-z0-9]+/', '_')->trim('_')->toString();
-                                @endphp
-                                @if($docLabel !== '' && $docKey !== '')
-                                    <div>
-                                        <label class="block text-xs font-medium text-gray-700 mb-1">{{ $docLabel }} *</label>
-                                        <input type="file" name="required_files[{{ $docKey }}]" accept="application/pdf,.pdf" required
-                                               class="block w-full text-xs border border-gray-300 rounded-lg px-3 py-2">
-                                        <input type="text" name="required_file_names[{{ $docKey }}]" required
-                                               value="{{ old('required_file_names.' . $docKey) }}"
-                                               placeholder="Nom du fichier téléversé"
-                                               class="mt-2 w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
-                                        <p class="text-[11px] text-red-600 mt-0.5">PDF uniquement</p>
-                                        @error('required_files.' . $docKey)
-                                            <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
-                                        @enderror
-                                        @error('required_file_names.' . $docKey)
-                                            <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
-                                        @enderror
-                                    </div>
-                                @endif
-                            @endforeach
-                        </div>
-                    </div>
-                @endif
-
                 <div>
                     <div class="flex items-center justify-between gap-2 mb-1">
-                        <label class="block text-xs font-medium text-gray-700">Pièces jointes supplémentaires</label>
+                        <label class="block text-xs font-medium text-gray-700">Fichiers à joindre</label>
                         <button type="button" id="add-extra-attachment"
                                 class="text-xs px-2.5 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200">
                             + Ajouter une pièce
                         </button>
                     </div>
                     <div id="extra-attachments-list" class="space-y-2">
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-2 extra-attachment-row">
-                            <input type="file" name="attachments_files[]" accept="application/pdf,.pdf"
-                                   class="block w-full text-xs border border-gray-300 rounded-lg px-3 py-2">
-                            <input type="text" name="attachments_names[]"
-                                   placeholder="Nom du fichier téléversé"
-                                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
-                        </div>
+                        @for($i = 0; $i < $attachmentRowCount; $i++)
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 extra-attachment-row">
+                                <input type="file" name="attachments_files[]" accept="application/pdf,.pdf"
+                                       class="block w-full text-xs border border-gray-300 rounded-lg px-3 py-2">
+                                <div class="flex gap-2">
+                                    <select name="attachment_labels[]"
+                                            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
+                                        <option value="">Choisir le nom du fichier</option>
+                                        @foreach($requiredDocs as $doc)
+                                            @php $docLabel = trim((string) $doc); @endphp
+                                            @if($docLabel !== '')
+                                                <option value="{{ $docLabel }}" {{ (string) old('attachment_labels.' . $i) === $docLabel ? 'selected' : '' }}>
+                                                    {{ $docLabel }}
+                                                </option>
+                                            @endif
+                                        @endforeach
+                                        <option value="Pièce complémentaire" {{ (string) old('attachment_labels.' . $i) === 'Pièce complémentaire' ? 'selected' : '' }}>
+                                            Pièce complémentaire
+                                        </option>
+                                    </select>
+                                    @if($i > 0)
+                                        <button type="button" class="remove-extra-attachment text-xs px-2 py-1 rounded bg-red-50 text-red-700 border border-red-200 hover:bg-red-100">Supprimer</button>
+                                    @endif
+                                </div>
+                            </div>
+                        @endfor
                     </div>
-                    @error('attachments_names.*')
+                    @error('attachment_labels.*')
                         <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
                     @enderror
-                    <p class="text-[11px] text-gray-500 mt-1">PDF uniquement · 10 Mo max par fichier.</p>
+                    @error('attachments_files')
+                        <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
+                    @enderror
+                    <p class="text-[11px] text-gray-500 mt-1">Chaque ligne contient 2 champs : un fichier PDF et le nom correspondant à choisir dans la liste.</p>
+                    <p class="text-[11px] text-gray-500 mt-0.5">PDF uniquement · 10 Mo max par fichier.</p>
                 </div>
 
                 <div class="pt-1">
@@ -208,7 +201,16 @@
                 row.innerHTML =
                     '<input type="file" name="attachments_files[]" accept="application/pdf,.pdf" class="block w-full text-xs border border-gray-300 rounded-lg px-3 py-2">' +
                     '<div class="flex gap-2">' +
-                    '<input type="text" name="attachments_names[]" placeholder="Nom du fichier téléversé" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">' +
+                    '<select name="attachment_labels[]" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">' +
+                    '<option value="">Choisir le nom du fichier</option>' +
+                    @foreach($requiredDocs as $doc)
+                        @php $docLabel = trim((string) $doc); @endphp
+                        @if($docLabel !== '')
+                            '<option value="{{ addslashes($docLabel) }}">{{ addslashes($docLabel) }}</option>' +
+                        @endif
+                    @endforeach
+                    '<option value="Pièce complémentaire">Pièce complémentaire</option>' +
+                    '</select>' +
                     '<button type="button" class="remove-extra-attachment text-xs px-2 py-1 rounded bg-red-50 text-red-700 border border-red-200 hover:bg-red-100">Supprimer</button>' +
                     '</div>';
                 list.appendChild(row);

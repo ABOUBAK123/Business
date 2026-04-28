@@ -117,12 +117,8 @@ class PublicActRequestController extends Controller
             'extra' => 'nullable|array',
             'attachments_files' => 'nullable|array',
             'attachments_files.*' => 'nullable|file|max:10240',
-            'attachments_names' => 'nullable|array',
-            'attachments_names.*' => 'nullable|string|max:255',
-            'required_files' => 'nullable|array',
-            'required_files.*' => 'nullable|file|max:10240',
-            'required_file_names' => 'nullable|array',
-            'required_file_names.*' => 'nullable|string|max:255',
+            'attachment_labels' => 'nullable|array',
+            'attachment_labels.*' => 'nullable|string|max:255',
         ]);
 
         $extraPayload = [];
@@ -150,65 +146,53 @@ class PublicActRequestController extends Controller
         $attachments = [];
 
         $requiredDocs = is_array($requestedAct->required_documents) ? $requestedAct->required_documents : [];
+        $extraFiles = (array) $request->file('attachments_files', []);
+        $attachmentLabels = (array) $request->input('attachment_labels', []);
+        $requiredLookup = [];
         foreach ($requiredDocs as $docLabel) {
             $docLabel = trim((string) $docLabel);
-            if ($docLabel === '') {
-                continue;
+            if ($docLabel !== '') {
+                $requiredLookup[$docLabel] = false;
             }
-            $docKey = $this->buildDocKey($docLabel);
-            if ($docKey === '') {
-                continue;
-            }
-
-            $docFile = $request->file('required_files.' . $docKey);
-            if (!$docFile) {
-                return back()
-                    ->withErrors(['required_files.' . $docKey => 'Le fichier "' . $docLabel . '" est obligatoire.'])
-                    ->withInput();
-            }
-
-            $uploadedName = trim((string) $request->input('required_file_names.' . $docKey, ''));
-            if ($uploadedName === '') {
-                return back()
-                    ->withErrors(['required_file_names.' . $docKey => 'Le nom du fichier pour "' . $docLabel . '" est obligatoire.'])
-                    ->withInput();
-            }
-
-            $path = $docFile->store('act-requests', 'public');
-            $attachments[] = [
-                'type' => 'required_document',
-                'required_label' => $docLabel,
-                'uploaded_name' => $uploadedName,
-                'path' => $path,
-                'original_name' => $docFile->getClientOriginalName(),
-                'mime_type' => $docFile->getMimeType(),
-                'size' => $docFile->getSize(),
-            ];
         }
 
-        $extraFiles = (array) $request->file('attachments_files', []);
-        $extraNames = (array) $request->input('attachments_names', []);
         foreach ($extraFiles as $idx => $file) {
             if (!$file) {
                 continue;
             }
 
-            $uploadedName = trim((string) ($extraNames[$idx] ?? ''));
-            if ($uploadedName === '') {
+            $selectedLabel = trim((string) ($attachmentLabels[$idx] ?? ''));
+            if ($selectedLabel === '') {
                 return back()
-                    ->withErrors(['attachments_names.' . $idx => 'Le nom de la pièce jointe est obligatoire.'])
+                    ->withErrors(['attachment_labels.' . $idx => 'Veuillez choisir le nom du fichier dans la liste.'])
                     ->withInput();
             }
 
             $path = $file->store('act-requests', 'public');
+            $isRequiredDocument = array_key_exists($selectedLabel, $requiredLookup);
+            if ($isRequiredDocument) {
+                $requiredLookup[$selectedLabel] = true;
+            }
+
             $attachments[] = [
-                'type' => 'additional',
-                'uploaded_name' => $uploadedName,
+                'type' => $isRequiredDocument ? 'required_document' : 'additional',
+                'required_label' => $isRequiredDocument ? $selectedLabel : null,
+                'uploaded_name' => $selectedLabel,
                 'path' => $path,
                 'original_name' => $file->getClientOriginalName(),
                 'mime_type' => $file->getMimeType(),
                 'size' => $file->getSize(),
             ];
+        }
+
+        foreach ($requiredLookup as $docLabel => $isPresent) {
+            if ($isPresent) {
+                continue;
+            }
+
+            return back()
+                ->withErrors(['attachments_files' => 'Le fichier "' . $docLabel . '" est obligatoire.'])
+                ->withInput();
         }
 
         $directionCode = trim((string) ($requestedAct->direction_code ?: $request->input('direction_code', '')));
