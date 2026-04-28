@@ -131,44 +131,34 @@
 
                 @php
                     $requiredDocs = is_array($requestedAct->required_documents) ? $requestedAct->required_documents : [];
-                    $attachmentLabelsOld = old('attachment_labels', []);
-                    $attachmentRowCount = max(1, count($attachmentLabelsOld), count($requiredDocs));
                 @endphp
                 <div>
-                    <div class="flex items-center justify-between gap-2 mb-1">
-                        <label class="block text-xs font-medium text-gray-700">Fichiers à joindre</label>
-                        <button type="button" id="add-extra-attachment"
-                                class="text-xs px-2.5 py-1 rounded bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200">
-                            + Ajouter une pièce
-                        </button>
-                    </div>
-                    <div id="extra-attachments-list" class="space-y-2">
-                        @for($i = 0; $i < $attachmentRowCount; $i++)
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 extra-attachment-row">
-                                <input type="file" name="attachments_files[]" accept="application/pdf,.pdf"
-                                       class="block w-full text-xs border border-gray-300 rounded-lg px-3 py-2">
-                                <div class="flex gap-2">
-                                    <select name="attachment_labels[]"
-                                            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
-                                        <option value="">Choisir le nom du fichier</option>
-                                        @foreach($requiredDocs as $doc)
-                                            @php $docLabel = trim((string) $doc); @endphp
-                                            @if($docLabel !== '')
-                                                <option value="{{ $docLabel }}" {{ (string) old('attachment_labels.' . $i) === $docLabel ? 'selected' : '' }}>
-                                                    {{ $docLabel }}
-                                                </option>
-                                            @endif
-                                        @endforeach
-                                        <option value="Pièce complémentaire" {{ (string) old('attachment_labels.' . $i) === 'Pièce complémentaire' ? 'selected' : '' }}>
-                                            Pièce complémentaire
-                                        </option>
-                                    </select>
-                                    @if($i > 0)
-                                        <button type="button" class="remove-extra-attachment text-xs px-2 py-1 rounded bg-red-50 text-red-700 border border-red-200 hover:bg-red-100">Supprimer</button>
-                                    @endif
-                                </div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Fichiers à joindre</label>
+                    <div class="rounded-xl border border-gray-200 bg-gray-50 p-3 space-y-3">
+                        <div class="grid grid-cols-1 md:grid-cols-[1.1fr_1fr_auto] gap-2 items-start">
+                            <div id="attachment-picker-slot">
+                                <input id="attachment-file-picker" type="file" accept="application/pdf,.pdf"
+                                       class="block w-full text-xs border border-gray-300 rounded-lg px-3 py-2 bg-white">
                             </div>
-                        @endfor
+                            <select id="attachment-label-picker"
+                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-200">
+                                <option value="">Choisir le nom du fichier</option>
+                                @foreach($requiredDocs as $doc)
+                                    @php $docLabel = trim((string) $doc); @endphp
+                                    @if($docLabel !== '')
+                                        <option value="{{ $docLabel }}">{{ $docLabel }}</option>
+                                    @endif
+                                @endforeach
+                                <option value="Pièce complémentaire">Pièce complémentaire</option>
+                            </select>
+                            <button type="button" id="join-attachment-btn"
+                                    class="rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm font-semibold transition">
+                                Joindre
+                            </button>
+                        </div>
+                        <div id="attachment-inline-error" class="hidden rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700"></div>
+                        <div id="extra-attachments-list" class="space-y-2"></div>
+                        <p class="text-[11px] text-gray-500">Choisissez un fichier PDF, sélectionnez son nom dans la liste, puis cliquez sur <strong>Joindre</strong>. Le fichier ajouté s'affiche juste en dessous.</p>
                     </div>
                     @error('attachment_labels.*')
                         <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
@@ -176,8 +166,7 @@
                     @error('attachments_files')
                         <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
                     @enderror
-                    <p class="text-[11px] text-gray-500 mt-1">Chaque ligne contient 2 champs : un fichier PDF et le nom correspondant à choisir dans la liste.</p>
-                    <p class="text-[11px] text-gray-500 mt-0.5">PDF uniquement · 10 Mo max par fichier.</p>
+                    <p class="text-[11px] text-gray-500 mt-1">PDF uniquement · 10 Mo max par fichier.</p>
                 </div>
 
                 <div class="pt-1">
@@ -191,29 +180,73 @@
     </main>
     <script>
         (function () {
-            var addBtn = document.getElementById('add-extra-attachment');
+            var addBtn = document.getElementById('join-attachment-btn');
             var list = document.getElementById('extra-attachments-list');
-            if (!addBtn || !list) return;
+            var fileSlot = document.getElementById('attachment-picker-slot');
+            var labelPicker = document.getElementById('attachment-label-picker');
+            var errorBox = document.getElementById('attachment-inline-error');
+            if (!addBtn || !list || !fileSlot || !labelPicker || !errorBox) return;
+
+            function buildFilePicker() {
+                var input = document.createElement('input');
+                input.type = 'file';
+                input.accept = 'application/pdf,.pdf';
+                input.className = 'block w-full text-xs border border-gray-300 rounded-lg px-3 py-2 bg-white';
+                return input;
+            }
+
+            function showError(message) {
+                errorBox.textContent = message;
+                errorBox.classList.remove('hidden');
+            }
+
+            function clearError() {
+                errorBox.textContent = '';
+                errorBox.classList.add('hidden');
+            }
 
             addBtn.addEventListener('click', function () {
+                var currentPicker = fileSlot.querySelector('input[type="file"]');
+                if (!currentPicker || !currentPicker.files || currentPicker.files.length === 0) {
+                    showError('Choisissez d\'abord un fichier à téléverser.');
+                    return;
+                }
+
+                if (!labelPicker.value) {
+                    showError('Choisissez le nom du fichier dans la liste.');
+                    return;
+                }
+
+                clearError();
+
+                currentPicker.name = 'attachments_files[]';
+                currentPicker.className = 'hidden';
+
+                var hiddenLabel = document.createElement('input');
+                hiddenLabel.type = 'hidden';
+                hiddenLabel.name = 'attachment_labels[]';
+                hiddenLabel.value = labelPicker.value;
+
                 var row = document.createElement('div');
-                row.className = 'grid grid-cols-1 md:grid-cols-2 gap-2 extra-attachment-row';
+                row.className = 'rounded-lg border border-gray-200 bg-white px-3 py-3 extra-attachment-row';
                 row.innerHTML =
-                    '<input type="file" name="attachments_files[]" accept="application/pdf,.pdf" class="block w-full text-xs border border-gray-300 rounded-lg px-3 py-2">' +
-                    '<div class="flex gap-2">' +
-                    '<select name="attachment_labels[]" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">' +
-                    '<option value="">Choisir le nom du fichier</option>' +
-                    @foreach($requiredDocs as $doc)
-                        @php $docLabel = trim((string) $doc); @endphp
-                        @if($docLabel !== '')
-                            '<option value="{{ addslashes($docLabel) }}">{{ addslashes($docLabel) }}</option>' +
-                        @endif
-                    @endforeach
-                    '<option value="Pièce complémentaire">Pièce complémentaire</option>' +
-                    '</select>' +
+                    '<div class="flex items-start justify-between gap-3">' +
+                    '<div class="min-w-0">' +
+                    '<p class="text-sm font-semibold text-gray-800 break-words"></p>' +
+                    '<p class="text-xs text-gray-500 mt-1 break-all"></p>' +
+                    '</div>' +
                     '<button type="button" class="remove-extra-attachment text-xs px-2 py-1 rounded bg-red-50 text-red-700 border border-red-200 hover:bg-red-100">Supprimer</button>' +
                     '</div>';
+
+                row.querySelector('p.text-sm').textContent = labelPicker.value;
+                row.querySelector('p.text-xs').textContent = currentPicker.files[0].name;
+                row.appendChild(currentPicker);
+                row.appendChild(hiddenLabel);
                 list.appendChild(row);
+
+                fileSlot.innerHTML = '';
+                fileSlot.appendChild(buildFilePicker());
+                labelPicker.value = '';
             });
 
             list.addEventListener('click', function (e) {
