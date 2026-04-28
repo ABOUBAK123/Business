@@ -185,6 +185,7 @@
             var fileSlot = document.getElementById('attachment-picker-slot');
             var labelPicker = document.getElementById('attachment-label-picker');
             var errorBox = document.getElementById('attachment-inline-error');
+            var requiredLabels = @json(array_values(array_filter(array_map(static fn ($doc) => trim((string) $doc), $requiredDocs))));
             if (!addBtn || !list || !fileSlot || !labelPicker || !errorBox) return;
 
             function buildFilePicker() {
@@ -203,6 +204,28 @@
             function clearError() {
                 errorBox.textContent = '';
                 errorBox.classList.add('hidden');
+            }
+
+            function updateLabelPickerState() {
+                var usedLabels = new Set();
+                list.querySelectorAll('input[name="attachment_labels[]"]').forEach(function (input) {
+                    if (input.value) {
+                        usedLabels.add(input.value);
+                    }
+                });
+
+                Array.prototype.forEach.call(labelPicker.options, function (option) {
+                    if (!option.value || requiredLabels.indexOf(option.value) === -1) {
+                        option.disabled = false;
+                        return;
+                    }
+
+                    option.disabled = usedLabels.has(option.value);
+                });
+
+                if (labelPicker.selectedOptions.length && labelPicker.selectedOptions[0].disabled) {
+                    labelPicker.value = '';
+                }
             }
 
             addBtn.addEventListener('click', function () {
@@ -247,6 +270,7 @@
                 fileSlot.innerHTML = '';
                 fileSlot.appendChild(buildFilePicker());
                 labelPicker.value = '';
+                updateLabelPickerState();
             });
 
             list.addEventListener('click', function (e) {
@@ -254,8 +278,13 @@
                 if (!(target instanceof HTMLElement)) return;
                 if (!target.classList.contains('remove-extra-attachment')) return;
                 var row = target.closest('.extra-attachment-row');
-                if (row) row.remove();
+                if (row) {
+                    row.remove();
+                    updateLabelPickerState();
+                }
             });
+
+            updateLabelPickerState();
         })();
     </script>
 </body>
