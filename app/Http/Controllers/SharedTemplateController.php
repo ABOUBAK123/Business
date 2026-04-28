@@ -6,14 +6,13 @@ use App\Models\AppSetting;
 use App\Models\Document;
 use App\Models\DocumentTemplate;
 use App\Models\DocumentVersion;
-use App\Models\IssuingAdministration;
+use App\Services\Templates\TemplateGenerationCoreService;
 use Dompdf\Dompdf;
 use Dompdf\Options;
 use Endroid\QrCode\Builder\Builder;
 use Endroid\QrCode\Writer\PngWriter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -90,39 +89,36 @@ class SharedTemplateController extends Controller
             'output_format' => 'nullable|in:source,pdf',
         ]);
 
+        $coreService = app(TemplateGenerationCoreService::class);
+        $template->loadMissing('variables');
+
         $values = $request->input('values', []);
         $outputFormat = $request->input('output_format', 'source');
         $generationWarning = null;
+
+        // Livrable A: validation stricte des champs dynamiques requis.
+        $coreService->assertRequiredValues($template, $values);
 
         /* -- Extraction des variables depuis le contenu --------- */
         \Log::info('GENERATE START template=' . $template->id . ' name=' . $template->name);
         \Log::info('GENERATE values_received=' . json_encode($values));
         \Log::info('GENERATE storage_path=' . ($template->storage_path ?: 'NULL'));
 
-        $contentVarMap = $this->extractContentVars($template->content ?? '');
-
-        /* -- Carte de remplacement : slug => label_original_dans_docx -- */
-        $replacements = $contentVarMap;
-        foreach ($template->variables as $v) {
-            $replacements[$v->key] = $v->label ?: $v->key;
-        }
-
-        \Log::info('GENERATE replacements=' . json_encode($replacements));
+        $contentVarMap = $coreService->extractContentVariables($template->content ?? '');
 
         // Extraire aussi les {{ }} directement du fichier Office
         $ext = strtolower(pathinfo($template->storage_path ?: ($template->file_name ?? ''), PATHINFO_EXTENSION));
         $absTemplatePath = $template->storage_path ? $this->resolveAbsPath($template->storage_path) : null;
+        $docxVars = [];
         if (in_array($ext, ['docx', 'xlsx', 'pptx'])
             && $absTemplatePath && file_exists($absTemplatePath))
         {
             $docxVars = $this->extractVarsFromOfficeFile($absTemplatePath);
-            foreach ($docxVars as $dv) {
-                // N'écrase pas les variables BDD déjà présentes (elles ont priorité)
-                if (!isset($replacements[$dv['key']])) {
-                    $replacements[$dv['key']] = $dv['label'];
-                }
-            }
         }
+
+        /* -- Carte de remplacement : slug => label_original_dans_docx -- */
+        $replacements = $coreService->buildReplacementMap($template, $contentVarMap, $docxVars);
+        \Log::info('GENERATE replacements=' . json_encode($replacements));
 
         /* -- Remplacement dans le champ content (texte) --------- */
         $content = $template->content ?? '';
@@ -158,53 +154,10 @@ class SharedTemplateController extends Controller
          *  Source du sub_entity_code : user_direction_assignments
          *  Format : CODE_ADMIN - CODE_ENTITE - 00001 - 2026
          * ══════════════════════════════════════════════════════════ */
-        $docNumber      = null;
-        $subEntityCode  = null;
-        $adminCodeStr   = null;
-        $issuingAdminId = null;
-
-        if ($template->administration_id) {
-            // Récupérer le code de l'entité sous tutelle depuis l'assignation de l'utilisateur
-            $userAssignment = DB::table('user_direction_assignments')
-                ->where('user_id', Auth::id())
-                ->where('direction_scope_id', $template->administration_id)
-                ->first();
-
-            $userSubCode = $userAssignment ? strtoupper($userAssignment->sub_entity_code ?? '') : '';
-
-            DB::transaction(function () use ($template, $userSubCode, &$docNumber, &$subEntityCode, &$adminCodeStr, &$issuingAdminId) {
-                $admin = IssuingAdministration::lockForUpdate()->find($template->administration_id);
-                if (!$admin) return;
-
-                $currentYear   = now()->year;
-                $adminCodeStr  = strtoupper($admin->code ?? 'ADM');
-                $subEntityCode = $userSubCode ?: strtoupper($admin->sub_entity_code ?? '');
-                $issuingAdminId = $admin->id;
-
-                // Compteur par (admin + sous-entité + année) stocké dans app_settings
-                $counterKey = 'doc_counter_' . $admin->id . '_' . strtolower(str_replace(' ', '_', $subEntityCode)) . '_' . $currentYear;
-
-                $setting = AppSetting::lockForUpdate()->where('key', $counterKey)->first();
-                if ($setting) {
-                    $seq = (int)$setting->value + 1;
-                    $setting->update(['value' => $seq]);
-                } else {
-                    $seq = 1;
-                    AppSetting::create([
-                        'key'         => $counterKey,
-                        'value'       => '1',
-                        'description' => "Compteur documents {$adminCodeStr}" . ($subEntityCode ? " / {$subEntityCode}" : '') . " {$currentYear}",
-                    ]);
-                }
-
-                // Format : CODE_ADMIN - CODE_ENTITE - 00001 - 2026
-                if ($subEntityCode) {
-                    $docNumber = sprintf('%s - %s - %05d - %d', $adminCodeStr, $subEntityCode, $seq, $currentYear);
-                } else {
-                    $docNumber = sprintf('%s - %05d - %d', $adminCodeStr, $seq, $currentYear);
-                }
-            });
-        }
+        $numbering = $coreService->reserveDocumentNumber($template, Auth::id());
+        $docNumber = $numbering['document_number'];
+        $subEntityCode = $numbering['sub_entity_code'];
+        $issuingAdminId = $numbering['issuing_administration_id'];
 
         /* ══════════════════════════════════════════════════════════
          *  QR CODE — token + URL de vérification
@@ -291,28 +244,12 @@ class SharedTemplateController extends Controller
                 $absPath = $absDestPath;
 
                 // Injecter document_number, qr_verify_url, et variables date/responsable automatiques
-                $today = now()->locale('fr')->isoFormat('D MMMM YYYY');
-                $autoDefaults = [
-                    // Date du jour (plusieurs variantes de nommage)
-                    'date_du_jour'    => $today,
-                    'date_today'      => $today,
-                    'date'            => $today,
-                    'aujourd_hui'     => $today,
-                    'date_generation' => $today,
-                    // Responsable / signataire (nom de l'utilisateur connecté)
-                    'nom_responsable' => Auth::user()->name ?? '',
-                    'responsable'     => Auth::user()->name ?? '',
-                    'signataire'      => Auth::user()->name ?? '',
-                    'nom_signataire'  => Auth::user()->name ?? '',
-                    // Numéro et QR
-                    'document_number' => $docNumber ?? '',
-                    'qr_verify_url'   => $verifyUrl,
-                ];
-                // Les valeurs saisies par l'utilisateur ont la priorité sur les défauts auto
-                $autoValues = array_merge($autoDefaults, array_filter($values, fn($v) => $v !== null && $v !== ''));
-                // Garantir que document_number et qr_verify_url ne sont pas écrasés par l'utilisateur
-                $autoValues['document_number'] = $docNumber ?? '';
-                $autoValues['qr_verify_url']   = $verifyUrl;
+                $autoValues = $coreService->buildAutoValues(
+                    $values,
+                    $docNumber,
+                    $verifyUrl,
+                    Auth::user()->name ?? ''
+                );
 
                 \Log::info('GENERATE autoValues=' . json_encode($autoValues));
                 \Log::info('GENERATE absSrcPath=' . ($absSrcPath ?: 'NULL') . ' exists=' . (file_exists($absSrcPath) ? 'YES' : 'NO'));
@@ -320,22 +257,7 @@ class SharedTemplateController extends Controller
 
                 // Les labels DB ont PRIORITÉ sur les slugs auto (ordre inversé: auto d'abord, DB ensuite)
                 // Ex: 'date_du_jour' => 'date du jour' (DB label) écrase 'date_du_jour' => 'date_du_jour' (auto slug)
-                $autoReplacements = array_merge(
-                    [
-                        'date_du_jour'    => 'date_du_jour',
-                        'date_today'      => 'date_today',
-                        'date'            => 'date',
-                        'aujourd_hui'     => 'aujourd_hui',
-                        'date_generation' => 'date_generation',
-                        'nom_responsable' => 'nom_responsable',
-                        'responsable'     => 'responsable',
-                        'signataire'      => 'signataire',
-                        'nom_signataire'  => 'nom_signataire',
-                        'document_number' => 'document_number',
-                        'qr_verify_url'   => 'qr_verify_url',
-                    ],
-                    $replacements  // $replacements vient EN DERNIER → ses labels écrasent les slugs auto
-                );
+                $autoReplacements = $coreService->buildAutoReplacements($replacements);
                 $this->replaceInOfficeFile($absPath, $autoReplacements, $autoValues);
                 \Log::info('GENERATE replaceInOfficeFile done. docNumber=' . ($docNumber ?? 'NULL') . ' qrTemp=' . ($qrTempPath ?? 'NULL'));
 
