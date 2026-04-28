@@ -676,6 +676,11 @@ if (!array_key_exists($tab, $tabs)) {
     window._adminBase = _adminBase;
     var _adminTplBase = _adminBase + '/templates';
     window._tplStoreUrl = @json(route('admin.templates.store'));
+    var _tplOoDebug = false;
+    function _tplOoLog() {
+      if (!_tplOoDebug || !window.console || !console.log) return;
+      console.log.apply(console, arguments);
+    }
 
     // Garde de fermeture: pour un template nouvellement créé, empêcher la fermeture
     // du modal tant qu'un fichier n'a pas été confirmé côté serveur.
@@ -706,7 +711,7 @@ if (!array_key_exists($tab, $tabs)) {
         // Réactiver le bouton Fermer
         var closeBtn = document.querySelector('#modal-tpl-oo button[onclick="tplOoClose()"]');
         if (closeBtn) closeBtn.disabled = false;
-        console.log('[CloseGuard] Désarmé');
+        _tplOoLog('[CloseGuard] Désarmé');
     }
 
     function tplOoShowCloseGuardBanner() {
@@ -715,7 +720,7 @@ if (!array_key_exists($tab, $tabs)) {
         var banner = document.getElementById('tpl-oo-close-guard-banner');
         if (banner) {
             banner.style.display = 'flex';
-            console.log('[CloseGuard] Banner visible');
+            _tplOoLog('[CloseGuard] Banner visible');
         }
     }
 
@@ -748,7 +753,7 @@ if (!array_key_exists($tab, $tabs)) {
           }).then(function(r) {
             // If a candidate returns 404/500, try the next one.
             if (!r.ok) {
-              console.log('[CloseGuard] save-state non OK', r.status, candidateUrl);
+              _tplOoLog('[CloseGuard] save-state non OK', r.status, candidateUrl);
               return tryFetchSavedState(idx + 1);
             }
             return r;
@@ -763,7 +768,7 @@ if (!array_key_exists($tab, $tabs)) {
         .then(function(data) {
             if (data && data.file_saved) {
               if (_tplOoCloseGuard.lastState !== 'saved') {
-                console.log('[CloseGuard] Fichier sauvegardé détecté!');
+                    _tplOoLog('[CloseGuard] Fichier sauvegardé détecté!');
               }
               _tplOoCloseGuard.lastState = 'saved';
                 _tplOoCloseGuard.fileSaved = true;
@@ -776,14 +781,14 @@ if (!array_key_exists($tab, $tabs)) {
                 if (banner) banner.style.display = 'none';
             } else {
               if (_tplOoCloseGuard.lastState !== 'unsaved') {
-                console.log('[CloseGuard] Pas encore sauvegardé');
+                    _tplOoLog('[CloseGuard] Pas encore sauvegardé');
                 tplOoShowCloseGuardBanner();
                 _tplOoCloseGuard.lastState = 'unsaved';
               }
             }
         })
         .catch(function(err) {
-          console.log('[CloseGuard] Erreur vérification URLs=' + saveStateCandidates.join(' | ') + ':', err);
+          _tplOoLog('[CloseGuard] Erreur vérification URLs=' + saveStateCandidates.join(' | ') + ':', err);
         })
         .finally(function() {
             _tplOoCloseGuard.inFlight = false;
@@ -796,7 +801,7 @@ if (!array_key_exists($tab, $tabs)) {
         _tplOoCloseGuard.templateId = tplId || null;
         _tplOoCloseGuard.fileSaved = false;
       window._ooCurrentTemplateId = tplId || null;
-        console.log('[CloseGuard] Armé pour template:', tplId);
+        _tplOoLog('[CloseGuard] Armé pour template:', tplId);
 
         tplOoCheckSavedState();
         _tplOoCloseGuard.timer = setInterval(tplOoCheckSavedState, 5000);
@@ -804,16 +809,16 @@ if (!array_key_exists($tab, $tabs)) {
 
     function tplOoCanCloseModal() {
         if (!_tplOoCloseGuard.active) {
-            console.log('[CloseGuard] Pas actif, autoriser fermeture');
+            _tplOoLog('[CloseGuard] Pas actif, autoriser fermeture');
             return true;
         }
         if (_tplOoCloseGuard.fileSaved) {
-            console.log('[CloseGuard] Fichier sauvegardé, autoriser fermeture');
+            _tplOoLog('[CloseGuard] Fichier sauvegardé, autoriser fermeture');
             return true;
         }
       // Important: ne pas bloquer la fermeture. Le callback OO status=2 part souvent à la fermeture.
       // Si on bloque ici, on peut empêcher la sauvegarde serveur et donc la détection de variables.
-      console.log('[CloseGuard] Fermeture autorisée même sans confirmation immédiate serveur');
+      _tplOoLog('[CloseGuard] Fermeture autorisée même sans confirmation immédiate serveur');
       tplOoShowStatus('Fermeture autorisée. Synchronisation en cours côté serveur…', 4000);
         tplOoShowCloseGuardBanner();
       return true;
@@ -1936,14 +1941,14 @@ if (!array_key_exists($tab, $tabs)) {
             if (label) {
               label.textContent = data.count + ' var(s)';
             }
-            console.log('[OO sync] Variables détectées après fermeture:', data.count);
+            _tplOoLog('[OO sync] Variables détectées après fermeture:', data.count);
             return;
           }
 
           if (attempts < maxAttempts) {
             setTimeout(runSyncAttempt, 1500);
           } else {
-            console.log('[OO sync] Fin des tentatives sans variable détectée pour le template', tplId);
+            _tplOoLog('[OO sync] Fin des tentatives sans variable détectée pour le template', tplId);
           }
         })
         .catch(function() {
@@ -1960,9 +1965,9 @@ if (!array_key_exists($tab, $tabs)) {
 
     // ─── Bouton : Fermer ──────────────────────────────────────────────────────
     function tplOoClose(forceClose) {
-        console.log('[tplOoClose] Called with forceClose=', forceClose);
+        _tplOoLog('[tplOoClose] Called with forceClose=', forceClose);
         if (!forceClose && !tplOoCanCloseModal()) {
-            console.log('[tplOoClose] Fermeture bloquée par close-guard');
+            _tplOoLog('[tplOoClose] Fermeture bloquée par close-guard');
             return;
         }
 
@@ -1978,7 +1983,7 @@ if (!array_key_exists($tab, $tabs)) {
       var oldScript = document.getElementById('oo-api-script');
       if (oldScript) oldScript.remove();
       tplOoDisarmCloseGuard();
-      console.log('[tplOoClose] Modal fermé, close-guard désarmé');
+      _tplOoLog('[tplOoClose] Modal fermé, close-guard désarmé');
       closeModal('modal-tpl-oo', true);
 
       tplOoPostCloseSync(tplId);
