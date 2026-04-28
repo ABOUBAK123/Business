@@ -171,9 +171,21 @@
                 // 3) Fallback sur le champ logo direct de l'administration
                 if (!$sidebarLogo && $sidebarAdmin->logo) {
                     $rawLogo = ltrim($sidebarAdmin->logo, '/');
-                    $sidebarLogo = (str_starts_with($rawLogo, 'storage/') || str_starts_with($rawLogo, 'images/'))
-                        ? asset($rawLogo)
-                        : asset('images/logos/' . basename($rawLogo));
+                    if (str_starts_with($rawLogo, 'storage/')) {
+                        $storageRel = ltrim(substr($rawLogo, strlen('storage/')), '/');
+                        if ($storageRel !== '' && \Illuminate\Support\Facades\Storage::disk('public')->exists($storageRel)) {
+                            $sidebarLogo = asset($rawLogo);
+                        }
+                    } elseif (str_starts_with($rawLogo, 'images/')) {
+                        if (file_exists(public_path($rawLogo))) {
+                            $sidebarLogo = asset($rawLogo);
+                        }
+                    } else {
+                        $fallbackRaw = 'images/logos/' . basename($rawLogo);
+                        if (file_exists(public_path($fallbackRaw))) {
+                            $sidebarLogo = asset($fallbackRaw);
+                        }
+                    }
                 }
             }
         }
