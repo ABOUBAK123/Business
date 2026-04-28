@@ -686,6 +686,7 @@ if (!array_key_exists($tab, $tabs)) {
         timer: null,
         inFlight: false,
         bannerShown: false,
+      lastState: 'idle',
     };
 
     function tplOoDisarmCloseGuard() {
@@ -694,6 +695,7 @@ if (!array_key_exists($tab, $tabs)) {
         _tplOoCloseGuard.fileSaved = false;
         _tplOoCloseGuard.inFlight = false;
         _tplOoCloseGuard.bannerShown = false;
+        _tplOoCloseGuard.lastState = 'idle';
         if (_tplOoCloseGuard.timer) {
             clearInterval(_tplOoCloseGuard.timer);
             _tplOoCloseGuard.timer = null;
@@ -760,7 +762,10 @@ if (!array_key_exists($tab, $tabs)) {
         })
         .then(function(data) {
             if (data && data.file_saved) {
+              if (_tplOoCloseGuard.lastState !== 'saved') {
                 console.log('[CloseGuard] Fichier sauvegardé détecté!');
+              }
+              _tplOoCloseGuard.lastState = 'saved';
                 _tplOoCloseGuard.fileSaved = true;
                 tplOoShowStatus('✅ Sauvegarde du modèle confirmée. Vous pouvez maintenant fermer.', 3000);
                 // Réactiver le bouton Fermer quand sauvegardé
@@ -770,8 +775,11 @@ if (!array_key_exists($tab, $tabs)) {
                 var banner = document.getElementById('tpl-oo-close-guard-banner');
                 if (banner) banner.style.display = 'none';
             } else {
+              if (_tplOoCloseGuard.lastState !== 'unsaved') {
                 console.log('[CloseGuard] Pas encore sauvegardé');
                 tplOoShowCloseGuardBanner();
+                _tplOoCloseGuard.lastState = 'unsaved';
+              }
             }
         })
         .catch(function(err) {
@@ -791,7 +799,7 @@ if (!array_key_exists($tab, $tabs)) {
         console.log('[CloseGuard] Armé pour template:', tplId);
 
         tplOoCheckSavedState();
-        _tplOoCloseGuard.timer = setInterval(tplOoCheckSavedState, 2000);
+        _tplOoCloseGuard.timer = setInterval(tplOoCheckSavedState, 5000);
     }
 
     function tplOoCanCloseModal() {
