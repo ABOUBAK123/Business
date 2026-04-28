@@ -478,7 +478,7 @@ if (!array_key_exists($tab, $tabs)) {
                 <i class="fas fa-eraser text-xs"></i> Effacer zone
             </button>
 
-            <button type="button" onclick="tplOoSave()" id="tpl-oo-forcesave-btn"
+            <button type="button" onclick="tplOoForceSave()" id="tpl-oo-forcesave-btn"
                 class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition shadow-sm">
               <i class="fas fa-save text-xs"></i> Enregistrer le modèle
             </button>
@@ -1834,7 +1834,55 @@ if (!array_key_exists($tab, $tabs)) {
     window.tplOoSave = tplOoSave;
     // --- Bouton : Sauvegarder le modele (PDF) --------------------------------
     function tplOoForceSave() {
-      tplOoSave();
+      var tplId = window._ooCurrentTemplateId || new URLSearchParams(window.location.search).get('selected_template');
+      if (!tplId) {
+        tplOoShowStatus('Aucun modèle actif à enregistrer.', 4000);
+        return;
+      }
+
+      var saveBtn = document.getElementById('tpl-oo-forcesave-btn');
+      if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin text-xs"></i> Synchronisation...';
+      }
+
+      tplOoShowStatus('Synchronisation du document avec le serveur en cours...', 0);
+
+      // Important: la persistance OO (status=2) est émise à la fermeture de session.
+      // On redémarre donc l'éditeur dans le modal pour forcer un cycle de sauvegarde.
+      if (window._ooEditorInstance) {
+        try { window._ooEditorInstance.destroyEditor(); } catch(e) {}
+        window._ooEditorInstance = null;
+      }
+      var placeholder = document.getElementById('oo-editor-placeholder');
+      if (placeholder) placeholder.innerHTML = '';
+
+      tplOoPostCloseSync(tplId);
+
+      var csrf = document.querySelector('meta[name="csrf-token"]');
+      setTimeout(function() {
+        fetch(_adminTplBase + '/' + tplId + '/oo-config', {
+          headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf ? csrf.content : '' }
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(cfg) {
+          if (cfg.error) {
+            tplOoShowStatus('Erreur : ' + cfg.error, 7000);
+            return;
+          }
+          tplOoLoadEditor(cfg);
+          tplOoShowStatus('Modèle synchronisé. Les variables sont en cours de mise à jour.', 5000);
+        })
+        .catch(function(err) {
+          tplOoShowStatus('Erreur de synchronisation : ' + err.message, 6000);
+        })
+        .finally(function() {
+          if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="fas fa-save text-xs"></i> Enregistrer le modèle';
+          }
+        });
+      }, 1300);
     }
     window.tplOoForceSave = tplOoForceSave;
 
