@@ -599,6 +599,10 @@
                     class="flex-1 py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 border-b-2 border-transparent text-gray-400 hover:text-gray-700 transition">
                     <i class="fas fa-at text-xs"></i> Directs
                 </button>
+                <button onclick="chatSetTab('online')" id="tab-online"
+                    class="flex-1 py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 border-b-2 border-transparent text-gray-400 hover:text-gray-700 transition">
+                    <i class="fas fa-circle text-[8px] text-green-500"></i> Connectés
+                </button>
             </div>
 
             {{-- Liste salons --}}
@@ -622,6 +626,15 @@
                     <i class="fas fa-chevron-right text-xs text-gray-300 group-hover:text-gray-400 transition"></i>
                 </button>
                 @endforeach
+            </div>
+
+            {{-- Liste en ligne par administration --}}
+            <div id="chat-online-list" class="hidden flex-1 overflow-y-auto">
+                <div id="chat-online-loading" class="px-4 py-6 text-center text-gray-400 text-xs">
+                    <i class="fas fa-spinner fa-spin mb-2 block text-lg"></i>Chargement...
+                </div>
+                <div id="chat-online-empty" class="hidden px-4 py-6 text-center text-gray-400 text-xs">Aucun utilisateur connecté.</div>
+                <div id="chat-online-groups" class="py-2"></div>
             </div>
 
             {{-- Liste directs --}}
@@ -673,6 +686,7 @@
     var CHAT_MESSAGES_URL = '{{ route("chat.messages") }}';
     var CHAT_SEND_URL     = '{{ route("chat.send") }}';
     var CHAT_USERS_URL    = '{{ route("chat.users") }}';
+    var CHAT_ONLINE_URL   = '{{ route("chat.online-by-administration") }}';
 
     // ── État ──────────────────────────────────────────────────
     var _mode     = 'home';  // home | salon | dm
@@ -745,8 +759,13 @@
             + (isSalons ? 'border-[#173b9f] text-[#173b9f]' : 'border-transparent text-gray-400 hover:text-gray-700');
         document.getElementById('tab-directs').className = 'flex-1 py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 border-b-2 transition '
             + (!isSalons ? 'border-[#173b9f] text-[#173b9f]' : 'border-transparent text-gray-400 hover:text-gray-700');
-        document.getElementById('chat-header-sub').textContent = isSalons ? 'Choisissez un salon' : 'Messages directs';
-        if (!isSalons && _users.length === 0) loadUsers();
+        var isOnline  = tab === 'online';
+        document.getElementById('chat-online-list').classList.toggle('hidden', !isOnline);
+        document.getElementById('tab-online').className = 'flex-1 py-2.5 text-xs font-bold flex items-center justify-center gap-1.5 border-b-2 transition '
+            + (isOnline ? 'border-[#173b9f] text-[#173b9f]' : 'border-transparent text-gray-400 hover:text-gray-700');
+        document.getElementById('chat-header-sub').textContent = isSalons ? 'Choisissez un salon' : (isOnline ? 'Utilisateurs en ligne' : 'Messages directs');
+        if (!isSalons && !isOnline && _users.length === 0) loadUsers();
+        if (isOnline) loadOnlineUsers();
     };
 
     // ── Ouvrir un salon ───────────────────────────────────────
@@ -832,6 +851,59 @@
         });
         renderUsers(filtered);
     };
+
+    // ── Chargement utilisateurs en ligne par administration ───
+    function loadOnlineUsers() {
+        var loadingEl = document.getElementById('chat-online-loading');
+        var emptyEl   = document.getElementById('chat-online-empty');
+        var groupsEl  = document.getElementById('chat-online-groups');
+        if (!loadingEl || !groupsEl || !emptyEl) return;
+
+        loadingEl.classList.remove('hidden');
+        emptyEl.classList.add('hidden');
+        groupsEl.innerHTML = '';
+
+        fetch(CHAT_ONLINE_URL, { headers: {'X-Requested-With':'XMLHttpRequest'} })
+            .then(function(r){ return r.json(); })
+            .then(function(groups){
+                var total = 0;
+                groups.forEach(function(group) {
+                    total += Number(group.count || 0);
+                    var usersHtml = (group.users || []).map(function(u) {
+                        var init = String(u.initials||'??').substring(0,2).toUpperCase();
+                        var cc = (init.charCodeAt(0)||0) + (init.charCodeAt(1)||0);
+                        var bg = _COLORS[cc % _COLORS.length];
+                        var safeId   = String(u.id).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+                        var safeName = String(u.name||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+                        var isMe = u.is_me ? true : false;
+                        var row = '<button'
+                            + (isMe ? ' disabled style="cursor:default;opacity:.7;"' : ' onclick="chatOpenDm(\''+safeId+'\',\''+safeName+'\',\''+init+'\')"')
+                            + ' class="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-50 transition text-left">'
+                            + '<span style="width:7px;height:7px;border-radius:9999px;background:#22c55e;flex-shrink:0;display:inline-block;"></span>'
+                            + '<div class="' + bg + ' h-7 w-7 rounded-full text-white text-[10px] font-bold flex items-center justify-center flex-shrink-0">' + esc(init) + '</div>'
+                            + '<div class="flex-1 min-w-0 text-left">'
+                            + '<p class="text-xs font-semibold text-gray-800 truncate">' + esc(u.name||'') + (isMe ? ' <span class="text-[10px] text-gray-400">(Vous)</span>' : '') + '</p>'
+                            + '<p class="text-[10px] text-gray-400">' + esc(u.role||'Utilisateur') + '</p>'
+                            + '</div></button>';
+                        return row;
+                    }).join('');
+
+                    var g = document.createElement('div');
+                    g.className = 'border border-gray-100 rounded-xl overflow-hidden mx-2 mb-2';
+                    g.innerHTML = '<div class="flex items-center justify-between px-3 py-1.5 bg-gray-50 border-b border-gray-100">'
+                        + '<span class="text-[10px] font-bold text-gray-700 truncate" style="max-width:75%;" title="' + esc(group.administration_name||'') + '">'
+                        + esc(group.administration_name || 'Sans administration') + '</span>'
+                        + '<span class="text-[10px] text-gray-500 bg-gray-200 rounded-full px-1.5 py-0.5">' + (group.count||0) + '</span>'
+                        + '</div>' + usersHtml;
+                    groupsEl.appendChild(g);
+                });
+
+                document.getElementById('chat-header-sub').textContent = total + ' utilisateur' + (total > 1 ? 's' : '') + ' en ligne';
+                if (!groups.length) emptyEl.classList.remove('hidden');
+            })
+            .catch(function(){})
+            .finally(function(){ loadingEl.classList.add('hidden'); });
+    }
 
     // ── Polling messages ──────────────────────────────────────
     function startPoll() {
