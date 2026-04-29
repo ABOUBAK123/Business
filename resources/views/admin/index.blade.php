@@ -1744,23 +1744,10 @@ if (!array_key_exists($tab, $tabs)) {
     window.tplOoUnsealZone = tplOoUnsealZone;
 
     // ─── Bouton : Créer un modèle ─────────────────────────────────────────────
-    // Bouton : Créer un modèle — ouvre le panneau inline
+    // Le flux "Créer un modèle" doit passer par l'import pour ouvrir le fichier réel.
     function tplOoCreateModel() {
-        var panel = document.getElementById('tpl-oo-create-panel');
-        if (!panel) return;
-        var form = document.getElementById('tpl-oo-create-form');
-        if (form) form.reset();
-        ['tpl-oo-name-err','tpl-oo-filename-err','tpl-oo-filetype-err'].forEach(function(id) {
-            var el = document.getElementById(id); if (el) el.classList.add('hidden');
-        });
-        ['tpl-oo-name','tpl-oo-filename','tpl-oo-filetype'].forEach(function(id) {
-            var el = document.getElementById(id); if (el) el.classList.remove('border-red-400','ring-2','ring-red-300');
-        });
-        var msg = document.getElementById('tpl-oo-create-msg');
-        if (msg) { msg.textContent = ''; msg.className = 'text-xs font-semibold'; }
-        panel.classList.remove('hidden');
-        var nameEl = document.getElementById('tpl-oo-name');
-        if (nameEl) setTimeout(function(){ nameEl.focus(); }, 80);
+      tplOoOpenUpload();
+      tplOoShowStatus('Sélectionnez un fichier à importer pour créer le modèle.', 5000);
     }
     window.tplOoCreateModel = tplOoCreateModel;
 
