@@ -632,13 +632,14 @@ if (!array_key_exists($tab, $tabs)) {
                 @csrf
                 <div>
                     <label class="block text-xs font-semibold text-purple-700 mb-1">Nom du modèle <span class="text-red-500">*</span></label>
-                    <input id="tpl-oo-up-name" type="text" placeholder="Ex : Contrat de travail"
+                    <input id="tpl-oo-up-name" name="name" type="text" placeholder="Ex : Contrat de travail"
                         class="w-full border border-purple-200 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-purple-400 outline-none bg-white">
+                    <p id="tpl-oo-up-name-err" class="hidden text-red-500 text-xs mt-1"><i class="fas fa-exclamation-circle mr-1"></i>Champ obligatoire</p>
                 </div>
                 @if(auth()->user()->role === 'admin')
                 <div>
                     <label class="block text-xs font-semibold text-purple-700 mb-1">Administration</label>
-                    <select id="tpl-oo-up-admin" class="w-full border border-purple-200 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-purple-400 outline-none bg-white">
+                    <select id="tpl-oo-up-admin" name="administration_id" class="w-full border border-purple-200 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-purple-400 outline-none bg-white">
                         <option value="">-- Toutes --</option>
                         @foreach($emitters as $e)
                         <option value="{{ $e->id }}">{{ $e->name }}</option>
@@ -646,7 +647,7 @@ if (!array_key_exists($tab, $tabs)) {
                     </select>
                 </div>
                 @else
-                <input type="hidden" id="tpl-oo-up-admin" value="{{ auth()->user()->profile->administration_id ?? '' }}">
+                <input type="hidden" id="tpl-oo-up-admin" name="administration_id" value="{{ auth()->user()->profile->administration_id ?? '' }}">
                 <div>
                     <label class="block text-xs font-semibold text-purple-700 mb-1">Administration</label>
                     <div class="w-full border border-purple-100 rounded-lg px-3 py-2 text-xs bg-purple-50 text-purple-800 font-medium">
@@ -661,7 +662,7 @@ if (!array_key_exists($tab, $tabs)) {
                     </button>
                 </div>
                 <div class="md:col-span-3">
-                    <div id="tpl-oo-up-progress" class="hidden mt-2">
+                    <div id="tpl-oo-upload-progress" class="hidden mt-2">
                         <div class="w-full bg-gray-200 rounded-full h-2">
                             <div id="tpl-oo-up-bar" class="bg-purple-600 h-2 rounded-full transition-all" style="width:0%"></div>
                         </div>
@@ -1010,9 +1011,22 @@ if (!array_key_exists($tab, $tabs)) {
         tplOoDisarmCloseGuard();
         var form = document.getElementById('tpl-oo-upload-form');
         if (!form) return;
+
+        // Validation nom
+        var upName = document.getElementById('tpl-oo-up-name');
+        var upNameErr = document.getElementById('tpl-oo-up-name-err');
+        if (!upName || !upName.value.trim()) {
+            if (upName) upName.classList.add('border-red-400', 'ring-2', 'ring-red-300');
+            if (upNameErr) upNameErr.classList.remove('hidden');
+            tplOoShowStatus('Veuillez saisir un nom pour le modèle.', 4000);
+            return;
+        }
+        if (upName) upName.classList.remove('border-red-400', 'ring-2', 'ring-red-300');
+        if (upNameErr) upNameErr.classList.add('hidden');
+
         var fileInput = document.getElementById('tpl-oo-file-input');
         if (!fileInput || !fileInput.files.length) {
-            tplOoShowStatus('Veuillez s�lectionner un fichier.', 4000);
+            tplOoShowStatus('Veuillez sélectionner un fichier.', 4000);
             return;
         }
         var allowed = ['pdf', 'docx', 'xlsx', 'pptx'];
@@ -1022,15 +1036,16 @@ if (!array_key_exists($tab, $tabs)) {
             return;
         }
         var submitBtn = form.querySelector('button[type="submit"]');
-        var progressMsg = document.getElementById('tpl-oo-upload-progress');
+        var progressDiv = document.getElementById('tpl-oo-upload-progress');
         if (submitBtn) submitBtn.disabled = true;
-        if (progressMsg) progressMsg.textContent = 'Upload en cours�';
-        tplOoShowStatus('Envoi du fichier�', 0);
+        if (progressDiv) progressDiv.classList.remove('hidden');
+        tplOoShowStatus('Envoi du fichier…', 0);
 
         var formData = new FormData(form);
+        formData.set('name', upName.value.trim());
         formData.append('file', fileInput.files[0]);
-        var upName = document.getElementById('tpl-oo-up-name');
-        if (upName && upName.value.trim()) formData.set('name', upName.value.trim());
+        var upAdmin = document.getElementById('tpl-oo-up-admin');
+        if (upAdmin && upAdmin.value) formData.set('administration_id', upAdmin.value);
         var xhr = new XMLHttpRequest();
         xhr.open('POST', _adminTplBase + '/upload-file');
         xhr.setRequestHeader('X-CSRF-TOKEN', document.querySelector('meta[name="csrf-token"]').content);
@@ -1038,7 +1053,7 @@ if (!array_key_exists($tab, $tabs)) {
 
         xhr.onload = function() {
             if (submitBtn) submitBtn.disabled = false;
-            if (progressMsg) progressMsg.textContent = '';
+            if (progressDiv) progressDiv.classList.add('hidden');
             if (xhr.status !== 200) {
                 var errMsg = 'Erreur serveur (' + xhr.status + ').';
                 try { var j = JSON.parse(xhr.responseText); errMsg = j.message || errMsg; } catch(ex) {}
@@ -1078,8 +1093,8 @@ if (!array_key_exists($tab, $tabs)) {
 
         xhr.onerror = function() {
             if (submitBtn) submitBtn.disabled = false;
-            if (progressMsg) progressMsg.textContent = 'Erreur r�seau.';
-            tplOoShowStatus('Erreur r�seau lors de l\'upload.', 5000);
+            if (progressDiv) progressDiv.classList.add('hidden');
+            tplOoShowStatus('Erreur réseau lors de l\'upload.', 5000);
         };
 
         xhr.send(formData);
