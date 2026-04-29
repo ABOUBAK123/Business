@@ -100,7 +100,7 @@
         </h3>
         <form method="POST" action="{{ route('profile.language') }}" class="flex items-center gap-4">
             @csrf
-            @php $currentLang = session('locale', config('app.locale', 'fr')); @endphp
+            @php $currentLang = $user->locale ?? session('locale', config('app.locale', 'fr')); @endphp
             <select name="locale" class="border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#2453d6]">
                 <option value="fr" {{ $currentLang === 'fr' ? 'selected' : '' }}>&#127467;&#127479; Fran&ccedil;ais</option>
                 <option value="en" {{ $currentLang === 'en' ? 'selected' : '' }}>&#127468;&#127463; English</option>

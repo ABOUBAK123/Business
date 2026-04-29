@@ -106,6 +106,12 @@ class ProfileController extends Controller
 
         $locale = $validated['locale'];
 
+        $user = Auth::user();
+        if ($user) {
+            $user->locale = $locale;
+            $user->save();
+        }
+
         // Sauvegarder en session
         $request->session()->put('locale', $locale);
         $request->session()->save();
