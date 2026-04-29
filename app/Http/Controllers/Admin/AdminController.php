@@ -1420,7 +1420,11 @@ class AdminController extends Controller
             // Si callback sans URL et template Office sans fichier, créer un bootstrap pour sortir du blocage UI.
             try {
                 $template = \App\Models\DocumentTemplate::find($templateId);
-                if ($template && in_array(strtolower((string) ($template->file_type ?: 'docx')), ['docx', 'xlsx', 'pptx'], true)) {
+                if (
+                    $template
+                    && empty($template->storage_path)
+                    && in_array(strtolower((string) ($template->file_type ?: 'docx')), ['docx', 'xlsx', 'pptx'], true)
+                ) {
                     $this->ensureTemplateBootstrapFile($template);
                 }
             } catch (\Throwable $e) {
