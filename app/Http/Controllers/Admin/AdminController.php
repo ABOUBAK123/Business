@@ -1905,7 +1905,7 @@ class AdminController extends Controller
             $avatarPath = 'images/avatars/' . $filename;
         }
 
-        $user = User::create([
+        $payload = [
             'name'       => $data['name'],
             'full_name'  => $fullName,
             'email'      => $data['email'],
@@ -1915,8 +1915,12 @@ class AdminController extends Controller
             'status'     => $data['status'] ?? 'active',
             'quota'      => $data['quota'] ?? null,
             'avatar'     => $avatarPath,
-            'locale'     => 'fr',
-        ]);
+        ];
+        if (Schema::hasColumn('users', 'locale')) {
+            $payload['locale'] = 'fr';
+        }
+
+        $user = User::create($payload);
 
         if (!empty($data['administration_type']) && !empty($data['administration_id'])) {
             $subEntity = $data['sub_entity_id'] ? SubEntity::find($data['sub_entity_id']) : null;

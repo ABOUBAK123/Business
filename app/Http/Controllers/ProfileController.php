@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 
@@ -107,7 +108,7 @@ class ProfileController extends Controller
         $locale = $validated['locale'];
 
         $user = Auth::user();
-        if ($user) {
+        if ($user && Schema::hasColumn('users', 'locale')) {
             $user->locale = $locale;
             $user->save();
         }

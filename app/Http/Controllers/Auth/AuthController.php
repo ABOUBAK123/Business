@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -76,14 +77,18 @@ class AuthController extends Controller
             'password' => 'required|min:8|confirmed',
         ]);
 
-        $user = User::create([
+        $payload = [
             'name'     => $data['name'],
             'email'    => $data['email'],
             'password' => Hash::make($data['password']),
             'role'     => 'user',
             'status'   => 'active',
-            'locale'   => 'fr',
-        ]);
+        ];
+        if (Schema::hasColumn('users', 'locale')) {
+            $payload['locale'] = 'fr';
+        }
+
+        $user = User::create($payload);
 
         Auth::login($user);
         $request->session()->regenerate();
