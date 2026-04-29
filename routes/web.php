@@ -246,6 +246,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/onlyoffice-token', [AdminController::class, 'onlyofficeToken'])->name('onlyoffice.token');
         Route::post('/templates/upload-file', [AdminController::class, 'uploadTemplateFile'])->name('admin.templates.uploadFile');
         Route::post('/templates/{template}/detect-vars', [AdminController::class, 'detectTemplateVars'])->name('admin.templates.detectVars');
+            Route::post('/templates/{template}/ai-enrich',   [AdminController::class, 'aiEnrichTemplateVars'])->name('admin.templates.aiEnrich');
         Route::post('/templates/{template}/recover-vars', [AdminController::class, 'recoverTemplateVars'])->name('admin.templates.recoverVars');
         Route::get('/templates/{template}/save-state', [AdminController::class, 'templateSaveState'])->name('admin.templates.saveState');
         Route::get('/templates/{template}/oo-config', [AdminController::class, 'getTemplateOoConfig'])->name('admin.templates.ooConfig');

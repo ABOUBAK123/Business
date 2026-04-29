@@ -292,6 +292,11 @@ if (!array_key_exists($tab, $tabs)) {
                             class="px-2 py-1 rounded bg-yellow-100 text-yellow-700 text-xs hover:bg-yellow-200 transition flex items-center gap-1">
                         <i class="fas fa-magic text-xs"></i> <span id="detect-label-{{ $tpl->id }}">{{ $tpl->variables->count() > 0 ? $tpl->variables->count().' vars' : 'Détecter' }}</span>
                     </button>
+                      <button type="button" onclick="tplAiEnrich('{{ $tpl->id }}','{{ addslashes($tpl->name) }}')" id="ai-enrich-btn-{{ $tpl->id }}"
+                          class="px-2 py-1 rounded bg-purple-100 text-purple-700 text-xs hover:bg-purple-200 transition flex items-center gap-1"
+                          title="Enrichir les variables avec l'IA Ollama (labels, types, obligatoire)">
+                        <i class="fas fa-robot text-xs"></i> <span id="ai-enrich-label-{{ $tpl->id }}">✨ IA</span>
+                      </button>
                     {{-- Récupérer les variables (urgent) si fichier existe mais 0 variables --}}
                     @if($tpl->variables->count() === 0)
                     <button type="button" onclick="tplRecoverVars('{{ $tpl->id }}','{{ addslashes($tpl->name) }}')" id="recover-btn-{{ $tpl->id }}"
@@ -1189,6 +1194,58 @@ if (!array_key_exists($tab, $tabs)) {
       })
       .then(function(r) { return r.json(); })
       .then(function(data) {
+          // --- Enrichissement IA (Ollama) des variables d'un template ---------------
+          function tplAiEnrich(tplId, tplName) {
+            var btn   = document.getElementById('ai-enrich-btn-' + tplId);
+            var lbl   = document.getElementById('ai-enrich-label-' + tplId);
+            var csrf  = document.querySelector('meta[name="csrf-token"]');
+
+            if (!confirm('Analyser les variables de "' + tplName + '" avec l\'IA (Ollama) pour enrichir les libellés et types ?\n\nSi Ollama est indisponible, un enrichissement heuristique sera appliqué.')) {
+              return;
+            }
+
+            if (btn) btn.disabled = true;
+            if (lbl) lbl.textContent = '⏳ …';
+
+            fetch(_adminTplBase + '/' + tplId + '/ai-enrich', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': csrf ? csrf.content : '',
+                'Accept': 'application/json'
+              }
+            })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+              if (btn) btn.disabled = false;
+              if (lbl) lbl.textContent = '✨ IA';
+
+              if (data.success) {
+                var detail = '\n\nVariables enrichies :';
+                (data.variables || []).slice(0, 6).forEach(function(v) {
+                  detail += '\n• [' + v.key + '] → ' + v.label + ' (' + v.field_type + (v.required ? ', requis' : '') + ')';
+                });
+                if ((data.variables || []).length > 6) {
+                  detail += '\n  + ' + (data.variables.length - 6) + ' autres…';
+                }
+                if (data.source === 'fallback') {
+                  alert('⚠️ ' + data.message + detail + '\n\nRecharger la page pour voir les changements.');
+                } else {
+                  alert('✅ ' + data.message + detail + '\n\nRecharger la page pour voir les changements.');
+                }
+                tplNavigate(window.location.pathname + '?tab=templates&selected_template=' + tplId);
+              } else {
+                alert('❌ ' + (data.message || 'Erreur lors de l\'enrichissement IA.'));
+              }
+            })
+            .catch(function(err) {
+              if (btn) btn.disabled = false;
+              if (lbl) lbl.textContent = '✨ IA';
+              alert('❌ Erreur réseau : ' + err.message);
+            });
+          }
+          window.tplAiEnrich = tplAiEnrich;
+
         var lbl = document.getElementById('detect-label-' + tplId);
         if (lbl && data && typeof data.count === 'number') {
           lbl.textContent = data.count > 0 ? data.count + ' vars' : 'D�tecter';

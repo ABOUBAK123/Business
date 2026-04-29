@@ -2218,6 +2218,91 @@ class AdminController extends Controller
         return redirect()->route('admin.index', ['tab' => 'users'])->with('success', 'Statut mis à jour.');
     }
 
+    // ── Enrichissement IA (Ollama) des variables d'un template ─────────────────────
+    public function aiEnrichTemplateVars(\App\Models\DocumentTemplate $template)
+    {
+        try {
+            $ollama = new \App\Services\OllamaService();
+
+            // Vérifier la disponibilité d'Ollama
+            $available = $ollama->isAvailable();
+
+            // Construire la liste des variables existantes (ou les détecter si aucune)
+            $existingVars = $template->variables()->get();
+
+            if ($existingVars->isEmpty()) {
+                // Tenter une détection rapide depuis le fichier
+                $rawVars = [];
+                if ($template->storage_path) {
+                    $ext = strtolower(pathinfo($template->storage_path, PATHINFO_EXTENSION));
+                    if (in_array($ext, ['docx', 'xlsx', 'pptx'])) {
+                        $absPath = str_starts_with($template->storage_path, 'images/')
+                            ? public_path($template->storage_path)
+                            : Storage::disk('public')->path($template->storage_path);
+                        $rawVars = $this->extractVarsFromUploadedFile($absPath);
+                    }
+                }
+                if (empty($rawVars) && $template->content) {
+                    $rawVars = array_values($this->extractVarsFromTemplateText($template->content));
+                }
+                if (empty($rawVars)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Aucune variable trouvée. Détectez d\'abord les variables avec le bouton "Détecter".',
+                    ], 422);
+                }
+                // Sauvegarder les variables brutes avant enrichissement
+                $this->saveDetectedTemplateVars($template, $rawVars);
+                $existingVars = $template->variables()->get();
+            }
+
+            $rawArray = $existingVars->map(fn ($v) => ['key' => $v->key, 'label' => $v->label])->toArray();
+
+            // Enrichir (avec IA ou fallback heuristique)
+            if ($available) {
+                $enriched = $ollama->enrichVariables($rawArray);
+                $source   = 'ollama';
+            } else {
+                $enriched = $ollama->fallbackEnrich($rawArray);
+                $source   = 'fallback';
+            }
+
+            // Mettre à jour chaque variable en base
+            $validTypes = ['text', 'date', 'number', 'select', 'textarea'];
+            foreach ($enriched as $item) {
+                $key = $item['key'] ?? null;
+                if (!$key) continue;
+                $type = in_array($item['field_type'] ?? '', $validTypes, true) ? $item['field_type'] : 'text';
+                $template->variables()
+                    ->where('key', $key)
+                    ->update([
+                        'label'       => $item['label']       ?? $key,
+                        'field_type'  => $type,
+                        'required'    => (bool) ($item['required'] ?? false),
+                        'placeholder' => $item['placeholder']  ?? '',
+                    ]);
+            }
+
+            return response()->json([
+                'success'   => true,
+                'source'    => $source,
+                'available' => $available,
+                'message'   => ($available
+                    ? '✅ ' . count($enriched) . ' variable(s) enrichie(s) par Ollama (' . $ollama->getModel() . ').'
+                    : '⚠️ Ollama indisponible. Enrichissement heuristique appliqué sur ' . count($enriched) . ' variable(s).'),
+                'variables' => $enriched,
+                'count'     => count($enriched),
+            ]);
+
+        } catch (\Throwable $e) {
+            Log::error('aiEnrichTemplateVars: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur lors de l\'enrichissement IA : ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
     // ── Re-détection des variables [variable] pour un template existant ─────────────
     public function detectTemplateVars(\App\Models\DocumentTemplate $template)
     {
