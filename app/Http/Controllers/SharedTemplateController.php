@@ -18,6 +18,25 @@ use Illuminate\Support\Str;
 
 class SharedTemplateController extends Controller
 {
+    private function allowedSharedTemplateIdsForUser(string $userId): array
+    {
+        $shareMapRaw = AppSetting::where('key', 'template_share_map')->value('value');
+        $shareMap = [];
+
+        if ($shareMapRaw) {
+            try {
+                $shareMap = json_decode($shareMapRaw, true) ?: [];
+            } catch (\Exception $e) {
+                $shareMap = [];
+            }
+        }
+
+        return collect($shareMap)
+            ->filter(fn ($users) => in_array($userId, (array) $users, true))
+            ->keys()
+            ->all();
+    }
+
     /* ══════════════════════════════════════════════════════════
      *  INDEX — liste des templates partagés avec l'utilisateur
      * ══════════════════════════════════════════════════════════ */
@@ -26,26 +45,13 @@ class SharedTemplateController extends Controller
         $user   = Auth::user();
         $search = $request->get('q', '');
 
-        $shareMapRaw = AppSetting::where('key', 'template_share_map')->value('value');
-        $shareMap    = [];
-        if ($shareMapRaw) {
-            try { $shareMap = json_decode($shareMapRaw, true) ?: []; } catch (\Exception $e) {}
+        $allowedIds = $this->allowedSharedTemplateIdsForUser((string) $user->id);
+
+        if (empty($allowedIds)) {
+            return view('shared-templates.index', ['templates' => collect(), 'search' => $search]);
         }
 
-        $userId     = $user->id;
-        $allowedIds = collect($shareMap)
-            ->filter(fn($users) => in_array($userId, (array) $users))
-            ->keys()
-            ->toArray();
-
-        if ($user->role === 'admin') {
-            $query = DocumentTemplate::with(['variables', 'administration']);
-        } else {
-            if (empty($allowedIds)) {
-                return view('shared-templates.index', ['templates' => collect(), 'search' => $search]);
-            }
-            $query = DocumentTemplate::with(['variables', 'administration'])->whereIn('id', $allowedIds);
-        }
+        $query = DocumentTemplate::with(['variables', 'administration'])->whereIn('id', $allowedIds);
 
         if ($search) {
             $query->where('name', 'LIKE', "%{$search}%");
@@ -83,6 +89,9 @@ class SharedTemplateController extends Controller
      * ══════════════════════════════════════════════════════════ */
     public function generate(Request $request, DocumentTemplate $template)
     {
+        $allowedIds = $this->allowedSharedTemplateIdsForUser((string) Auth::id());
+        abort_unless(in_array((string) $template->id, array_map('strval', $allowedIds), true), 403);
+
         $request->validate([
             'values'   => 'nullable|array',
             'values.*' => 'nullable|string|max:5000',
