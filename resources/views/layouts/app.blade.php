@@ -139,6 +139,7 @@
     @php
         $sidebarLogo        = null;
         $sidebarAdminName   = null;
+        $sidebarAdminCode   = null;
         $sidebarDisplayName = 'E-Parapheur';
         $sidebarUser        = auth()->user();
         if ($sidebarUser && $sidebarUser->profile_id) {
@@ -147,6 +148,7 @@
             if ($sidebarProfile && $sidebarProfile->administration) {
                 $sidebarAdmin     = $sidebarProfile->administration;
                 $sidebarAdminName = $sidebarAdmin->name;
+                $sidebarAdminCode = $sidebarAdmin->code ?? null;
                 $sidebarThemPfx   = 'theme_emitter_' . $sidebarAdmin->id . '_';
 
                 // Charger les clés theming utiles en une seule requête
@@ -155,10 +157,9 @@
                     $sidebarThemPfx . 'app_name',
                 ])->pluck('value', 'key');
 
-                // 1) Nom affiché : app_name theming → nom DB administration → 'E-Parapheur'
-                $sidebarAppName = $sidebarSettings[$sidebarThemPfx . 'app_name'] ?? null;
-                $sidebarDisplayName = ($sidebarAppName && trim($sidebarAppName) !== '')
-                    ? trim($sidebarAppName)
+                // 1) Libellé affiché : code administration en priorité
+                $sidebarDisplayName = ($sidebarAdminCode && trim($sidebarAdminCode) !== '')
+                    ? trim($sidebarAdminCode)
                     : ($sidebarAdminName ?: 'E-Parapheur');
 
                 // 2) Logo theming depuis AppSetting (stocké dans public disk)
