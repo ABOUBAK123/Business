@@ -76,6 +76,42 @@ class AdminController extends Controller
         return $appOrigin . ($configuredPath !== '' ? $configuredPath : $basePath);
     }
 
+    /**
+     * Résout le périmètre d'administration de l'utilisateur connecté.
+     *
+     * Retourne ['type' => 'emitter'|'recipient', 'id' => uuid] si l'utilisateur
+     * est limité à une administration, ou null si super-admin (accès total).
+     */
+    private function resolveAdminScope(): ?array
+    {
+        $user = auth()->user();
+        if (!$user) return null;
+
+        // Super-admin : rôle admin sans profil applicatif
+        if ($user->role === 'admin' && !$user->profile_id) {
+            return null;
+        }
+
+        // Source prioritaire : UserDirectionAssignment (contient type + id)
+        $assignment = UserDirectionAssignment::where('user_id', $user->id)->first();
+        if ($assignment && $assignment->direction_scope_id) {
+            return [
+                'type' => $assignment->direction_scope_type,
+                'id'   => $assignment->direction_scope_id,
+            ];
+        }
+
+        // Fallback : profil applicatif → administration émettrice
+        if ($user->profile_id) {
+            $profile = AdministrationProfile::find($user->profile_id);
+            if ($profile && $profile->administration_id) {
+                return ['type' => 'emitter', 'id' => $profile->administration_id];
+            }
+        }
+
+        return null;
+    }
+
     public function index(Request $request)
     {
         $tab = $request->get('tab', 'overview');
@@ -107,38 +143,123 @@ class AdminController extends Controller
         $sigProviders   = collect();
         $courrierArchivalDays = 0;
 
-        try {
-            $settings       = AppSetting::all()->keyBy('key');
-            $users          = User::latest()->paginate(20, ['*'], 'users_page');
-            $templates      = DocumentTemplate::with(['variables', 'administration'])->latest()->paginate(200, ['*'], 'tpl_page');
-            $emitters       = IssuingAdministration::latest()->get();
-            $recipients     = RecipientAdministration::latest()->get();
-            $directionTypes = DirectionType::latest()->get();
-            $subEntities    = SubEntity::with('directionType')->latest()->get();
+        // Périmètre d'administration de l'utilisateur connecté (null = super-admin)
+        $adminScope = $this->resolveAdminScope();
 
-            $emitterCodes   = $emitters->pluck('code', 'id');
-            $recipientCodes = $recipients->pluck('code', 'id');
+        try {
+            $settings = AppSetting::all()->keyBy('key');
+
+            // ── Utilisateurs ─────────────────────────────────────────────────
+            $usersQuery = User::latest();
+            if ($adminScope) {
+                $scopedUserIds = UserDirectionAssignment::where('direction_scope_type', $adminScope['type'])
+                    ->where('direction_scope_id', $adminScope['id'])
+                    ->pluck('user_id');
+                $usersQuery->whereIn('id', $scopedUserIds);
+            }
+            $users = $usersQuery->paginate(20, ['*'], 'users_page');
+
+            // ── Templates ────────────────────────────────────────────────────
+            $tplQuery = DocumentTemplate::with(['variables', 'administration'])->latest();
+            if ($adminScope && $adminScope['type'] === 'emitter') {
+                $tplQuery->where('administration_id', $adminScope['id']);
+            } elseif ($adminScope && $adminScope['type'] === 'recipient') {
+                $tplQuery->whereNull('id'); // recipients n'ont pas de templates propres
+            }
+            $templates = $tplQuery->paginate(200, ['*'], 'tpl_page');
+
+            // ── Administrations émettrices ────────────────────────────────────
+            if ($adminScope && $adminScope['type'] === 'emitter') {
+                $emitters = IssuingAdministration::where('id', $adminScope['id'])->get();
+            } elseif ($adminScope && $adminScope['type'] === 'recipient') {
+                $emitters = collect();
+            } else {
+                $emitters = IssuingAdministration::latest()->get();
+            }
+
+            // ── Administrations destinataires ────────────────────────────────
+            if ($adminScope && $adminScope['type'] === 'recipient') {
+                $recipients = RecipientAdministration::where('id', $adminScope['id'])->get();
+            } else {
+                $recipients = RecipientAdministration::latest()->get();
+            }
+
+            $directionTypes = DirectionType::latest()->get();
+
+            // ── Entités sous tutelle ──────────────────────────────────────────
+            $subEntitiesQuery = SubEntity::with('directionType')->latest();
+            if ($adminScope) {
+                $subEntitiesQuery->where('scope_type', $adminScope['type'])
+                                 ->where('scope_id', $adminScope['id']);
+            }
+            $subEntities = $subEntitiesQuery->get();
+
+            $emitterCodes   = IssuingAdministration::pluck('code', 'id');
+            $recipientCodes = RecipientAdministration::pluck('code', 'id');
             $subEntities    = $subEntities->map(function (SubEntity $subEntity) use ($emitterCodes, $recipientCodes) {
                 $adminCode = $subEntity->scope_type === 'recipient'
                     ? ($recipientCodes[$subEntity->scope_id] ?? null)
                     : ($emitterCodes[$subEntity->scope_id] ?? null);
-
                 $subEntity->setAttribute('administration_code', $adminCode);
                 return $subEntity;
             });
 
-            $requestedActs  = RequestedAct::with(['administration', 'recipientAdministration'])->latest()->get();
-            $routingRules   = RoutingRule::with(['template', 'recipient'])->latest()->paginate(15, ['*'], 'routing_page');
-            $profiles       = AdministrationProfile::with('administration')->latest()->paginate(15, ['*'], 'profiles_page');
-            $profilesList   = AdministrationProfile::select('id','name','administration_id')->orderBy('name')->get();
+            // ── Actes demandés ────────────────────────────────────────────────
+            $actsQuery = RequestedAct::with(['administration', 'recipientAdministration'])->latest();
+            if ($adminScope && $adminScope['type'] === 'emitter') {
+                $actsQuery->where('administration_id', $adminScope['id']);
+            } elseif ($adminScope && $adminScope['type'] === 'recipient') {
+                $actsQuery->where('recipient_administration_id', $adminScope['id']);
+            }
+            $requestedActs = $actsQuery->get();
+
+            // ── Règles de routage ─────────────────────────────────────────────
+            $routingQuery = RoutingRule::with(['template', 'recipient'])->latest();
+            if ($adminScope && $adminScope['type'] === 'emitter') {
+                $scopedTplIds = DocumentTemplate::where('administration_id', $adminScope['id'])->pluck('id');
+                $routingQuery->whereIn('template_id', $scopedTplIds);
+            } elseif ($adminScope && $adminScope['type'] === 'recipient') {
+                $routingQuery->where('recipient_id', $adminScope['id']);
+            }
+            $routingRules = $routingQuery->paginate(15, ['*'], 'routing_page');
+
+            // ── Profils ───────────────────────────────────────────────────────
+            $profilesQuery = AdministrationProfile::with('administration')->latest();
+            $profilesListQuery = AdministrationProfile::select('id','name','administration_id')->orderBy('name');
+            if ($adminScope && $adminScope['type'] === 'emitter') {
+                $profilesQuery->where('administration_id', $adminScope['id']);
+                $profilesListQuery->where('administration_id', $adminScope['id']);
+            } elseif ($adminScope && $adminScope['type'] === 'recipient') {
+                $profilesQuery->whereNull('id');
+                $profilesListQuery->whereNull('id');
+            }
+            $profiles     = $profilesQuery->paginate(15, ['*'], 'profiles_page');
+            $profilesList = $profilesListQuery->get();
+
             $instructions   = Instruction::latest()->get();
             $allUsers       = User::select('id','name','email')->latest()->get();
             $shareMapRaw    = AppSetting::where('key', 'template_share_map')->value('value');
             $shareMap       = json_decode($shareMapRaw ?: '{}', true) ?: [];
             $onlyofficeUrl  = AppSetting::where('key', 'onlyoffice_server_url')->value('value') ?: '';
             $onlyofficeSecret = AppSetting::where('key', 'onlyoffice_secret')->value('value') ?: '';
-            $dirAssignments  = UserDirectionAssignment::all()->keyBy('user_id');
-            $sigProviders   = SignatureProviderConfig::all()->keyBy('administration_id');
+
+            // ── Assignments de direction ──────────────────────────────────────
+            $dirAssignQuery = UserDirectionAssignment::query();
+            if ($adminScope) {
+                $dirAssignQuery->where('direction_scope_type', $adminScope['type'])
+                               ->where('direction_scope_id', $adminScope['id']);
+            }
+            $dirAssignments = $dirAssignQuery->get()->keyBy('user_id');
+
+            // ── Fournisseurs de signature ─────────────────────────────────────
+            $sigQuery = SignatureProviderConfig::query();
+            if ($adminScope && $adminScope['type'] === 'emitter') {
+                $sigQuery->where('administration_id', $adminScope['id']);
+            } elseif ($adminScope && $adminScope['type'] === 'recipient') {
+                $sigQuery->whereNull('id');
+            }
+            $sigProviders = $sigQuery->get()->keyBy('administration_id');
+
             $courrierArchivalDays = (int) AppSetting::where('key', 'courrier_archival_days')->value('value');
         } catch (\Throwable $e) {
             if ($tab !== 'emitters') {
@@ -202,7 +323,7 @@ class AdminController extends Controller
             'directionTypes', 'subEntities', 'requestedActs', 'routingRules', 'profiles', 'profilesList',
             'instructions',
             'allUsers', 'shareMap', 'onlyofficeUrl', 'onlyofficeJwt', 'appPublicUrl', 'dirAssignments',
-            'sigProviders', 'courrierArchivalDays'
+            'sigProviders', 'courrierArchivalDays', 'adminScope'
         ));
     }
 
@@ -1327,13 +1448,18 @@ class AdminController extends Controller
             'file_type' => 'required|in:pdf,docx,xlsx,pptx',
             'content'   => 'nullable|string',
         ]);
+        $adminScope = $this->resolveAdminScope();
+        // Forcer l'administration si l'utilisateur est scoped
+        $administrationId = ($adminScope && $adminScope['type'] === 'emitter')
+            ? $adminScope['id']
+            : ($request->input('administration_id') ?: null);
         $template = DocumentTemplate::create([
             'id'               => Str::uuid(),
             'name'             => $request->input('name'),
             'file_name'        => $request->input('file_name', ''),
             'file_type'        => $request->input('file_type'),
             'content'          => $request->input('content', ''),
-            'administration_id'=> $request->input('administration_id') ?: null,
+            'administration_id'=> $administrationId,
             'created_by'       => auth()->id(),
         ]);
 
@@ -1667,9 +1793,10 @@ class AdminController extends Controller
     // ── Entités sous tutelle ─────────────────────────────────────────────────
     public function storeSubEntity(Request $request)
     {
+        $adminScope = $this->resolveAdminScope();
         $request->validate([
-            'scope_type'        => 'required|in:emitter,recipient',
-            'scope_id'          => 'required|string|max:50',
+            'scope_type'        => $adminScope ? 'nullable|in:emitter,recipient' : 'required|in:emitter,recipient',
+            'scope_id'          => $adminScope ? 'nullable|string|max:50' : 'required|string|max:50',
             'name'              => 'required|string|max:255',
             'code'              => 'required|string|max:50',
             'parent_code'       => 'nullable|string|max:50',
@@ -1679,8 +1806,14 @@ class AdminController extends Controller
             'description'       => 'nullable|string',
         ]);
 
-        $scopeType = $request->input('scope_type');
-        $scopeId   = $request->input('scope_id');
+        // Forcer scope_type + scope_id si l'utilisateur est scoped
+        if (isset($adminScope) && $adminScope) {
+            $scopeType = $adminScope['type'];
+            $scopeId   = $adminScope['id'];
+        } else {
+            $scopeType = $request->input('scope_type');
+            $scopeId   = $request->input('scope_id');
+        }
         $code      = strtoupper(trim((string) $request->input('code')));
 
         // Unicité du code par administration (scope_type + scope_id), pas globale
@@ -1696,9 +1829,11 @@ class AdminController extends Controller
         }
 
         $data = $request->only([
-            'scope_type', 'scope_id', 'name', 'parent_code',
+            'name', 'parent_code',
             'direction_type_id', 'manager_name', 'manager_email', 'description',
         ]);
+        $data['scope_type'] = $scopeType;
+        $data['scope_id']   = $scopeId;
         $data['code']      = $code;
         $data['is_active'] = $request->boolean('is_active', true);
         SubEntity::create($data);
@@ -1756,12 +1891,17 @@ class AdminController extends Controller
     public function storeRequestedAct(Request $request)
     {
         $data = $request->validate([
-            'administration_id'  => 'required|string',
+            'administration_id'  => 'nullable|string',
             'direction_code'     => 'nullable|string|max:50',
             'document_name'      => 'required|string|max:255',
             'required_documents' => 'nullable|string',
             'applicant_fields'   => 'nullable|string',
         ]);
+        // Forcer l'administration si l'utilisateur est scoped
+        $adminScope = $this->resolveAdminScope();
+        if ($adminScope && $adminScope['type'] === 'emitter') {
+            $data['administration_id'] = $adminScope['id'];
+        }
         $data['required_documents'] = json_decode($data['required_documents'] ?? '[]', true) ?: [];
         $data['applicant_fields']   = json_decode($data['applicant_fields']   ?? '[]', true) ?: [];
         RequestedAct::create($data);
@@ -1799,11 +1939,16 @@ class AdminController extends Controller
             'permissions'       => 'nullable|array',
         ]);
         $menuPermissions = $data['permissions'] ?? [];
+        // Forcer l'administration si l'utilisateur est scoped
+        $adminScope = $this->resolveAdminScope();
+        $administrationId = ($adminScope && $adminScope['type'] === 'emitter')
+            ? $adminScope['id']
+            : ($data['administration_id'] ?? null);
         AdministrationProfile::create([
             'id'                => Str::uuid(),
             'name'              => $data['name'],
             'description'       => $data['description'] ?? '',
-            'administration_id' => $data['administration_id'] ?? null,
+            'administration_id' => $administrationId,
             'permissions'       => [
                 'description'       => $data['description'] ?? '',
                 'menuPermissions'   => $menuPermissions,

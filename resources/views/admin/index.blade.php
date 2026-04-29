@@ -47,6 +47,22 @@ if (!array_key_exists($tab, $tabs)) {
 }
 @endphp
 
+{{-- Bandeau d'information pour les admins d'administration (scope restreint) --}}
+@if(isset($adminScope) && $adminScope)
+@php
+    $scopedAdminLabel = null;
+    if ($adminScope['type'] === 'emitter') {
+        $scopedAdminLabel = \App\Models\IssuingAdministration::find($adminScope['id'])?->name;
+    } else {
+        $scopedAdminLabel = \App\Models\RecipientAdministration::find($adminScope['id'])?->name;
+    }
+@endphp
+<div class="mb-4 flex items-center gap-3 px-4 py-3 bg-blue-50 border border-blue-200 rounded-xl text-sm text-blue-800">
+    <i class="fas fa-building text-blue-500 flex-shrink-0"></i>
+    <span>Vous gérez l'administration <strong>{{ $scopedAdminLabel ?? $adminScope['id'] }}</strong>. Seules les données de cette administration sont visibles et modifiables.</span>
+</div>
+@endif
+
 {{-- Barre d'onglets --}}
 <div class="flex flex-wrap gap-1.5 mb-6 bg-white rounded-2xl border border-gray-200 p-2 shadow-sm">
     @foreach($tabs as $key => [$icon, $label, $color, $perm])
@@ -171,12 +187,20 @@ if (!array_key_exists($tab, $tabs)) {
 
             {{-- Ligne 2 : administration + OnlyOffice --}}
             <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                @if(isset($adminScope) && $adminScope && $adminScope['type'] === 'emitter')
+                <input type="hidden" name="administration_id" value="{{ $adminScope['id'] }}">
+                <div class="md:col-span-2 border border-blue-100 rounded-lg px-3 py-2 text-xs bg-blue-50 text-blue-800 font-medium flex items-center gap-2">
+                  <i class="fas fa-building text-blue-400"></i>
+                  {{ $emitters->first()?->name ?? '--' }}
+                </div>
+                @else
                 <select name="administration_id" class="md:col-span-2 border border-gray-300 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-blue-300 outline-none">
-                    <option value="">• Administration émettrice •</option>
-                    @foreach($emitters as $e)
-                    <option value="{{ $e->id }}" {{ old('administration_id', $selectedTplId && request('tpl_action') === 'edit' ? ($selectedTpl->administration_id ?? '') : $filterEmitter) === $e->id ? 'selected' : '' }}>{{ $e->name }}</option>
-                    @endforeach
+                  <option value="">• Administration émettrice •</option>
+                  @foreach($emitters as $e)
+                  <option value="{{ $e->id }}" {{ old('administration_id', $selectedTplId && request('tpl_action') === 'edit' ? ($selectedTpl->administration_id ?? '') : $filterEmitter) === $e->id ? 'selected' : '' }}>{{ $e->name }}</option>
+                  @endforeach
                 </select>
+                @endif
 
                 {{-- Bouton éditeur OnlyOffice --}}
                 <button type="button" onclick="tplOpenOnlyOffice()"
@@ -534,29 +558,39 @@ if (!array_key_exists($tab, $tabs)) {
                     </select>
                     <p id="tpl-oo-filetype-err" class="hidden text-red-500 text-xs mt-1"><i class="fas fa-exclamation-circle mr-1"></i>Champ obligatoire</p>
                 </div>
-                @if(auth()->user()->role === 'admin')
+                @if(isset($adminScope) && $adminScope && $adminScope['type'] === 'emitter')
+                {{-- Admin d'administration scopé: administration fixée --}}
+                <input type="hidden" id="tpl-oo-admin" name="administration_id" value="{{ $adminScope['id'] }}">
                 <div>
-                    <label class="block text-xs font-semibold text-blue-700 mb-1">Administration</label>
-                    <select id="tpl-oo-admin" name="administration_id"
-                        class="w-full border border-blue-200 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-blue-400 outline-none bg-white">
-                        <option value="">-- Toutes --</option>
-                        @foreach($emitters as $e)
-                        <option value="{{ $e->id }}">{{ $e->name }}</option>
-                        @endforeach
-                    </select>
+                  <label class="block text-xs font-semibold text-blue-700 mb-1">Administration</label>
+                  <div class="w-full border border-blue-100 rounded-lg px-3 py-2 text-xs bg-blue-50 text-blue-800 font-medium flex items-center gap-2">
+                    <i class="fas fa-building text-blue-400"></i>
+                    {{ $emitters->first()?->name ?? '--' }}
+                  </div>
                 </div>
-@else
+                @elseif(auth()->user()->role === 'admin')
+                <div>
+                  <label class="block text-xs font-semibold text-blue-700 mb-1">Administration</label>
+                  <select id="tpl-oo-admin" name="administration_id"
+                    class="w-full border border-blue-200 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-blue-400 outline-none bg-white">
+                    <option value="">-- Toutes --</option>
+                    @foreach($emitters as $e)
+                    <option value="{{ $e->id }}">{{ $e->name }}</option>
+                    @endforeach
+                  </select>
+                </div>
+        @else
                 {{-- Utilisateur non SUPER ADMIN : administration fixee automatiquement --}}
                 <input type="hidden" id="tpl-oo-admin" name="administration_id"
-                    value="{{ auth()->user()->profile->administration_id ?? '' }}">
+                  value="{{ auth()->user()->profile->administration_id ?? '' }}">
                 <div>
-                    <label class="block text-xs font-semibold text-blue-700 mb-1">Administration</label>
-                    <div class="w-full border border-blue-100 rounded-lg px-3 py-2 text-xs bg-blue-50 text-blue-800 font-medium flex items-center gap-2">
-                        <i class="fas fa-building text-blue-400"></i>
-                        {{ auth()->user()->profile->administration->name ?? '--' }}
-                    </div>
+                  <label class="block text-xs font-semibold text-blue-700 mb-1">Administration</label>
+                  <div class="w-full border border-blue-100 rounded-lg px-3 py-2 text-xs bg-blue-50 text-blue-800 font-medium flex items-center gap-2">
+                    <i class="fas fa-building text-blue-400"></i>
+                    {{ auth()->user()->profile->administration->name ?? '--' }}
+                  </div>
                 </div>
-@endif
+        @endif
                 <div class="md:col-span-4 flex items-center gap-3">
                     <button type="submit" id="tpl-oo-submit-btn"
                         class="flex items-center gap-2 px-5 py-2 bg-blue-700 hover:bg-blue-800 text-white text-xs font-bold rounded-lg transition shadow">
@@ -2966,6 +3000,13 @@ document.addEventListener('DOMContentLoaded', function() {
       @csrf
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        @if(isset($adminScope) && $adminScope && $adminScope['type'] === 'emitter')
+        <input type="hidden" name="administration_id" value="{{ $adminScope['id'] }}">
+        <div class="border border-gray-200 rounded-xl px-4 py-3 text-sm bg-gray-50 text-gray-700 flex items-center gap-2">
+            <i class="fas fa-building text-gray-400"></i>
+            {{ $emitters->first()?->name ?? '--' }}
+        </div>
+        @else
         <select name="administration_id" id="act-admin-select" required
           onchange="actFilterDirections(this.value)"
           class="border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-300 focus:border-amber-400 outline-none">
@@ -2974,6 +3015,7 @@ document.addEventListener('DOMContentLoaded', function() {
           <option value="{{ $em->id }}" {{ $actAdminId === $em->id ? 'selected' : '' }}>{{ $em->name }}</option>
           @endforeach
         </select>
+        @endif
         <select name="direction_code" id="act-dir-select"
           class="border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-300 focus:border-amber-400 outline-none">
           <option value="">Direction</option>
@@ -3874,22 +3916,31 @@ function toggleOoSecret() {
           </select>
         </div>
       </div>
-
-      <div>
-        <label class="block text-xs font-medium text-gray-600 mb-1">Profil applicatif <span class="text-red-500">*</span></label>
-        <select id="c-role-profile" name="profile_id" required disabled
-          class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none disabled:bg-gray-50 disabled:text-gray-400">
-          <option value="">« Choisir une administration d'abord »</option>
-        </select>
-        <p class="text-[11px] text-gray-400 mt-0.5">Détermine la visibilité des onglets et sous-onglets dans l'application.</p>
-      </div>
-
-      <div>
-        <label class="block text-xs font-medium text-gray-600 mb-1">Direction sous tutelle</label>
-        <select id="c-sub-entity" name="sub_entity_id" disabled
-          class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none disabled:bg-gray-50 disabled:text-gray-400">
-          <option value="">Direction sous tutelle</option>
-        </select>
+        @if(isset($adminScope) && $adminScope)
+        <input type="hidden" name="administration_type" value="{{ $adminScope['type'] }}">
+        <input type="hidden" name="administration_id" value="{{ $adminScope['id'] }}">
+        <div class="col-span-2 border border-blue-100 rounded-lg px-3 py-2.5 text-sm bg-blue-50 text-blue-800 flex items-center gap-2">
+            <i class="fas fa-building text-blue-400"></i>
+            <span>{{ $adminScope['type'] === 'emitter' ? ($emitters->first()?->name ?? '--') : ($recipients->first()?->name ?? '--') }}</span>
+        </div>
+        @else
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Type d'administration</label>
+          <select id="c-admin-type" name="administration_type" onchange="userAdminTypeChange('c')"
+            class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
+            <option value="">« Sélectionner »</option>
+            <option value="emitter">Émettrice</option>
+            <option value="recipient">Destinataire</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Administration</label>
+          <select id="c-admin-id" name="administration_id" onchange="userAdminIdChange('c')" disabled
+            class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none disabled:bg-gray-50 disabled:text-gray-400">
+            <option value="">Administration</option>
+          </select>
+        </div>
+        @endif
       </div>
 
       <div>
@@ -4002,6 +4053,14 @@ function toggleOoSecret() {
       </select>
 
       <div class="grid grid-cols-2 gap-3">
+        @if(isset($adminScope) && $adminScope)
+        <input type="hidden" name="administration_type" value="{{ $adminScope['type'] }}">
+        <input type="hidden" name="administration_id" value="{{ $adminScope['id'] }}">
+        <div class="col-span-2 border border-blue-100 rounded-lg px-3 py-2.5 text-sm bg-blue-50 text-blue-800 flex items-center gap-2">
+            <i class="fas fa-building text-blue-400"></i>
+            <span>{{ $adminScope['type'] === 'emitter' ? ($emitters->first()?->name ?? '--') : ($recipients->first()?->name ?? '--') }}</span>
+        </div>
+        @else
         <select id="e-admin-type" name="administration_type" onchange="userAdminTypeChange('e')"
           class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
           <option value="">Type d'administration</option>
@@ -4012,6 +4071,7 @@ function toggleOoSecret() {
           class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
           <option value="">Administration</option>
         </select>
+        @endif
       </div>
 
       <select id="e-sub-entity" name="sub_entity_id"
@@ -5188,12 +5248,20 @@ if (request('edit_profile')) {
                 </div>
                 <div class="col-span-2">
                     <label class="block text-sm font-semibold text-gray-700 mb-1">Administration associée</label>
+                    @if(isset($adminScope) && $adminScope && $adminScope['type'] === 'emitter')
+                    <input type="hidden" name="administration_id" value="{{ $adminScope['id'] }}">
+                    <div class="w-full border border-gray-100 rounded-xl px-4 py-2.5 text-sm bg-gray-50 text-gray-700 flex items-center gap-2">
+                      <i class="fas fa-building text-gray-400"></i>
+                      {{ $emitters->first()?->name ?? '--' }}
+                    </div>
+                    @else
                     <select name="administration_id" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400">
-                        <option value="">« Aucune (global) »</option>
-                        @foreach($emitters as $e)
-                        <option value="{{ $e->id }}">{{ $e->name }}</option>
-                        @endforeach
+                      <option value="">« Aucune (global) »</option>
+                      @foreach($emitters as $e)
+                      <option value="{{ $e->id }}">{{ $e->name }}</option>
+                      @endforeach
                     </select>
+                    @endif
                 </div>
             </div>
             <div>
