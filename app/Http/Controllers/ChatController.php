@@ -4,11 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\ChatMessage;
 use App\Models\AppSetting;
+use App\Models\IssuingAdministration;
 use App\Models\User;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class ChatController extends Controller
@@ -42,6 +44,32 @@ class ChatController extends Controller
         return $s ? $s->value : 'all';
     }
 
+    private function usersHasIssuingAdministrationColumn(): bool
+    {
+        return Schema::hasColumn('users', 'issuing_administration_id');
+    }
+
+    private function applyUsersScope($query, User $me, string $scope)
+    {
+        if ($scope === 'same_admin' && $this->usersHasIssuingAdministrationColumn() && !empty($me->issuing_administration_id)) {
+            $query->where('issuing_administration_id', $me->issuing_administration_id);
+        }
+
+        return $query;
+    }
+
+    private function resolveAdministrationNames(array $administrationIds): array
+    {
+        $ids = array_values(array_filter(array_unique($administrationIds)));
+        if (empty($ids)) {
+            return [];
+        }
+
+        return IssuingAdministration::whereIn('id', $ids)
+            ->pluck('name', 'id')
+            ->toArray();
+    }
+
     public function index()
     {
         abort_unless($this->chatEnabled(), 403, 'Le chat est désactivé par l\'administrateur.');
@@ -61,27 +89,87 @@ class ChatController extends Controller
         $this->touchOnline((string) $me->id);
         $scope = $this->chatScope();
 
-        $q = User::where('id', '!=', $me->id)->orderBy('name');
+        $q = User::where('id', '!=', $me->id)
+            ->orderBy('name');
 
-        if ($scope === 'same_admin') {
-            // Même administration uniquement. Si l'utilisateur n'a pas d'admin liée,
-            // on évite de filtrer pour ne pas renvoyer une liste vide.
-            if (!empty($me->issuing_administration_id)) {
-                $q->where('issuing_administration_id', $me->issuing_administration_id);
-            }
+        $q = $this->applyUsersScope($q, $me, $scope);
+
+        $select = ['id', 'name', 'role'];
+        if ($this->usersHasIssuingAdministrationColumn()) {
+            $select[] = 'issuing_administration_id';
         }
 
-        $users = $q->select('id', 'name', 'role', 'issuing_administration_id')->get()
-            ->filter(fn($u) => $this->isUserOnline((string) $u->id))
-            ->map(fn($u) => [
+        $usersRaw = $q->select($select)->get()
+            ->filter(fn ($u) => $this->isUserOnline((string) $u->id));
+
+        $adminNameById = $this->resolveAdministrationNames($usersRaw
+            ->pluck('issuing_administration_id')
+            ->filter()
+            ->all());
+
+        $users = $usersRaw->map(fn ($u) => [
                 'id'       => $u->id,
                 'name'     => $u->name,
                 'initials' => strtoupper(substr($u->name, 0, 2)),
                 'role'     => $u->role ?? 'user',
                 'online'   => true,
+                'administration_id' => $u->issuing_administration_id ?? null,
+                'administration_name' => $adminNameById[$u->issuing_administration_id] ?? 'Sans administration',
             ]);
 
         return response()->json($users);
+    }
+
+    /** Liste des utilisateurs en ligne groupés par administration */
+    public function onlineByAdministration(Request $request)
+    {
+        $me = Auth::user();
+        $this->touchOnline((string) $me->id);
+        $scope = $this->chatScope();
+
+        $q = User::query()->orderBy('name');
+        $q = $this->applyUsersScope($q, $me, $scope);
+
+        $select = ['id', 'name', 'role'];
+        if ($this->usersHasIssuingAdministrationColumn()) {
+            $select[] = 'issuing_administration_id';
+        }
+
+        $onlineRaw = $q->select($select)->get()
+            ->filter(fn ($u) => $this->isUserOnline((string) $u->id));
+
+        $adminNameById = $this->resolveAdministrationNames($onlineRaw
+            ->pluck('issuing_administration_id')
+            ->filter()
+            ->all());
+
+        $grouped = $onlineRaw
+            ->map(function ($u) use ($adminNameById, $me) {
+                $adminId = $u->issuing_administration_id ?? null;
+                return [
+                    'id' => $u->id,
+                    'name' => $u->name,
+                    'initials' => strtoupper(substr($u->name, 0, 2)),
+                    'role' => $u->role ?? 'user',
+                    'is_me' => (string) $u->id === (string) $me->id,
+                    'administration_id' => $adminId,
+                    'administration_name' => $adminNameById[$adminId] ?? 'Sans administration',
+                ];
+            })
+            ->groupBy(fn ($u) => ($u['administration_id'] ?? 'none') . '|' . $u['administration_name'])
+            ->map(function ($users, $groupKey) {
+                [$administrationId, $administrationName] = explode('|', $groupKey, 2);
+                return [
+                    'administration_id' => $administrationId === 'none' ? null : $administrationId,
+                    'administration_name' => $administrationName,
+                    'count' => $users->count(),
+                    'users' => $users->values(),
+                ];
+            })
+            ->sortBy('administration_name', SORT_NATURAL | SORT_FLAG_CASE)
+            ->values();
+
+        return response()->json($grouped);
     }
 
     /** Messages d'un salon ou d'une conversation directe */

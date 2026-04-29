@@ -49,6 +49,23 @@
 .tab-btn.on { color:#2453d6; border-bottom-color:#2453d6; }
 .tab-btn.off { color:#94a3b8; }
 
+/* Colonne connectes */
+#online-panel { width:300px; flex-shrink:0; border-left:1px solid #f1f2f5; background:#fbfcff; display:flex; flex-direction:column; }
+#online-header { padding:.85rem 1rem; border-bottom:1px solid #eef2f7; display:flex; align-items:center; justify-content:space-between; }
+#online-body { flex:1; overflow-y:auto; padding:.55rem .75rem; }
+.admin-group { border:1px solid #e6ebf3; background:#fff; border-radius:.9rem; overflow:hidden; margin-bottom:.65rem; }
+.admin-group-hd { display:flex; align-items:center; justify-content:space-between; padding:.55rem .7rem; background:#f8fafc; border-bottom:1px solid #edf2f7; }
+.admin-group-name { font-size:.75rem; font-weight:700; color:#0f172a; }
+.admin-group-count { font-size:.67rem; color:#64748b; background:#e2e8f0; border-radius:9999px; padding:.1rem .45rem; }
+.online-user { display:flex; align-items:center; gap:.55rem; padding:.5rem .65rem; border-bottom:1px solid #f5f7fb; }
+.online-user:last-child { border-bottom:0; }
+.online-meta { min-width:0; }
+.online-name { font-size:.78rem; font-weight:600; color:#1e293b; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.online-role { font-size:.67rem; color:#94a3b8; }
+.online-dot { width:7px; height:7px; border-radius:9999px; background:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,.14); flex-shrink:0; }
+
+@media(max-width:1024px){ #online-panel{display:none;} }
+
 @media(max-width:640px){ #conv-panel{width:100%;} #msg-panel{display:none;} #chat-wrap.sm-msg #conv-panel{display:none;} #chat-wrap.sm-msg #msg-panel{display:flex;} }
 </style>
 @endverbatim
@@ -96,6 +113,19 @@
             <button id="msg-send" disabled onclick="sendMessage()">
                 <i class="fas fa-paper-plane text-sm"></i>
             </button>
+        </div>
+    </div>
+
+    {{-- ══ CONNECTES PAR ADMINISTRATION ══ --}}
+    <div id="online-panel">
+        <div id="online-header">
+            <div class="text-xs font-semibold text-slate-700">Utilisateurs en ligne</div>
+            <div id="online-total" class="text-[11px] text-slate-500">0</div>
+        </div>
+        <div id="online-body">
+            <div id="online-loading" class="px-2 py-4 text-xs text-slate-400"><i class="fas fa-circle-notch fa-spin mr-1"></i>Chargement...</div>
+            <div id="online-empty" class="hidden px-2 py-4 text-xs text-slate-400">Aucun utilisateur connecte.</div>
+            <div id="online-groups"></div>
         </div>
     </div>
 </div>
@@ -183,6 +213,61 @@ async function loadUsers() {
     filterConv();
 }
 
+async function loadOnlineByAdministration() {
+    const loadingEl = document.getElementById('online-loading');
+    const emptyEl = document.getElementById('online-empty');
+    const groupsEl = document.getElementById('online-groups');
+    const totalEl = document.getElementById('online-total');
+
+    if (!loadingEl || !groupsEl || !totalEl || !emptyEl) return;
+
+    loadingEl.classList.remove('hidden');
+    emptyEl.classList.add('hidden');
+
+    try {
+        const r = await fetch('/chat/online-by-administration');
+        if (!r.ok) return;
+
+        const groups = await r.json();
+        groupsEl.innerHTML = '';
+
+        let total = 0;
+        groups.forEach(group => {
+            total += Number(group.count || 0);
+            const g = document.createElement('div');
+            g.className = 'admin-group';
+
+            const usersHtml = (group.users || []).map(u => {
+                const c = COLORS[u.name.charCodeAt(0) % COLORS.length];
+                return `<div class="online-user">
+                    <div class="online-dot"></div>
+                    <div class="c-av ${c}" style="width:28px;height:28px;font-size:.65rem;">${esc(u.initials)}</div>
+                    <div class="online-meta" style="flex:1;">
+                        <div class="online-name">${esc(u.name)}${u.is_me ? ' (Vous)' : ''}</div>
+                        <div class="online-role">${ucRole(u.role)}</div>
+                    </div>
+                </div>`;
+            }).join('');
+
+            g.innerHTML = `<div class="admin-group-hd">
+                <div class="admin-group-name" title="${esc(group.administration_name || 'Sans administration')}">${esc(group.administration_name || 'Sans administration')}</div>
+                <div class="admin-group-count">${group.count || 0}</div>
+            </div>${usersHtml}`;
+
+            groupsEl.appendChild(g);
+        });
+
+        totalEl.textContent = `${total} en ligne`;
+        if (!groups.length) {
+            emptyEl.classList.remove('hidden');
+        }
+    } catch (e) {
+        console.error(e);
+    } finally {
+        loadingEl.classList.add('hidden');
+    }
+}
+
 function dmRoom(a,b){ return 'dm_'+[a,b].sort().join('_'); }
 function ucRole(r){ return r==='admin'?'Administrateur':r==='superadmin'?'Super Admin':'Utilisateur'; }
 
@@ -205,7 +290,10 @@ function startPresenceLoops() {
         if (curTab === 'direct') {
             loadUsers();
         }
+        loadOnlineByAdministration();
     }, 20000);
+
+    loadOnlineByAdministration();
 }
 
 // ── Ouvrir conversation ───────────────────────────────────────
@@ -337,6 +425,7 @@ document.addEventListener('visibilitychange', function() {
     if (!document.hidden) {
         sendHeartbeat();
         if (curTab === 'direct') loadUsers();
+        loadOnlineByAdministration();
     }
 });
 

@@ -194,6 +194,7 @@ Route::middleware('auth')->group(function () {
     // Chat
     Route::get('/chat', [ChatController::class, 'index'])->name('chat.index');
     Route::get('/chat/users', [ChatController::class, 'users'])->name('chat.users');
+    Route::get('/chat/online-by-administration', [ChatController::class, 'onlineByAdministration'])->name('chat.online-by-administration');
     Route::get('/chat/messages', [ChatController::class, 'messages'])->name('chat.messages');
     Route::post('/chat/send', [ChatController::class, 'send'])->name('chat.send');
     Route::post('/chat/heartbeat', [ChatController::class, 'heartbeat'])->name('chat.heartbeat');
