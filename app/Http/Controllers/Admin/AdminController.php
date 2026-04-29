@@ -1062,10 +1062,15 @@ class AdminController extends Controller
         if (!$exists && in_array($ext, ['docx', 'xlsx', 'pptx'], true)) {
             $this->ensureTemplateBootstrapFile($template->fresh() ?: $template);
             $template = $template->fresh() ?: $template;
-            if ($template->storage_path && str_starts_with($template->storage_path, 'images/')) {
-                $absCheck = public_path($template->storage_path);
-                $exists = file_exists($absCheck);
-                $storagePubPath = '/' . ltrim($template->storage_path, '/');
+            if ($template->storage_path) {
+                if (str_starts_with($template->storage_path, 'images/')) {
+                    $absCheck = public_path($template->storage_path);
+                    $exists = file_exists($absCheck);
+                    $storagePubPath = '/' . ltrim($template->storage_path, '/');
+                } else {
+                    $exists = \Illuminate\Support\Facades\Storage::disk('public')->exists($template->storage_path);
+                    $storagePubPath = \Illuminate\Support\Facades\Storage::url($template->storage_path);
+                }
             }
         }
 
@@ -1542,10 +1547,16 @@ class AdminController extends Controller
             return;
         }
 
-        if ($template->storage_path && str_starts_with($template->storage_path, 'images/')) {
-            $existing = public_path($template->storage_path);
-            if (file_exists($existing)) {
-                return;
+        if ($template->storage_path) {
+            if (str_starts_with($template->storage_path, 'images/')) {
+                $existing = public_path($template->storage_path);
+                if (file_exists($existing)) {
+                    return;
+                }
+            } else {
+                if (\Illuminate\Support\Facades\Storage::disk('public')->exists($template->storage_path)) {
+                    return;
+                }
             }
         }
 
