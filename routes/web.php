@@ -67,6 +67,8 @@ Route::get('/e-administration_laravel/documents/{document}/onlyoffice-file', [Do
     ->name('documents.onlyofficeFile.subdir');
 Route::get('/e-administration_laravel/public/documents/{document}/onlyoffice-file', [DocumentController::class, 'onlyofficeFile'])
     ->name('documents.onlyofficeFile.subdir.public');
+Route::get('/public/documents/{document}/onlyoffice-file', [DocumentController::class, 'onlyofficeFile'])
+    ->name('documents.onlyofficeFile.public');
 
 // Alias callbacks OnlyOffice (utile en sous-dossier/ngrok)
 Route::post('/api/oo-callback/document/{document}', [DocumentController::class, 'onlyofficeCallback'])
@@ -75,6 +77,8 @@ Route::post('/e-administration_laravel/api/oo-callback/document/{document}', [Do
     ->name('oo.document.callback.web.subdir');
 Route::post('/e-administration_laravel/public/api/oo-callback/document/{document}', [DocumentController::class, 'onlyofficeCallback'])
     ->name('oo.document.callback.web.subdir.public');
+Route::post('/public/api/oo-callback/document/{document}', [DocumentController::class, 'onlyofficeCallback'])
+    ->name('oo.document.callback.web.public');
 
 Route::post('/api/oo-callback/template/{templateId}', [AdminController::class, 'ooTemplateCallback'])
     ->name('oo.template.callback.web');
