@@ -53,6 +53,66 @@
                   action="{{ route('public.act-requests.store', [$administration->id, $requestedAct->id]) }}">
                 @csrf
 
+                {{-- Secteur de compétence + Administration réceptrice --}}
+                @php
+                    $sectorLabels = [
+                        'fiscalite'      => 'Fiscalité & Finances',
+                        'social'         => 'Protection Sociale',
+                        'travail'        => 'Travail & Emploi',
+                        'urbanisme'      => 'Urbanisme & Logement',
+                        'education'      => 'Éducation & Formation',
+                        'sante'          => 'Santé',
+                        'justice'        => 'Justice',
+                        'environnement'  => 'Environnement',
+                        'commerce'       => 'Commerce & Industrie',
+                        'banques'        => 'Banques',
+                        'securite'       => 'Sécurité',
+                        'administration' => 'Administration',
+                        'agriculture'    => 'Agriculture',
+                        'autre'          => 'Autre',
+                    ];
+                    $sectors = $recipients->map(fn($r) => $r->metadata['sector'] ?? '')
+                                          ->filter()->unique()->sort()->values();
+                @endphp
+                <div class="rounded-xl border border-blue-100 bg-blue-50 p-4 space-y-3">
+                    <p class="text-xs font-semibold text-blue-800">Administration réceptrice de votre demande</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Secteur de compétence</label>
+                            <select id="pub-sector-select"
+                                    onchange="pubFilterRecipients(this.value)"
+                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
+                                <option value="">— Tous les secteurs —</option>
+                                @foreach($sectors as $sv)
+                                    <option value="{{ $sv }}">{{ $sectorLabels[$sv] ?? ucfirst($sv) }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Administration réceptrice *</label>
+                            <select name="recipient_administration_id" id="pub-recip-select" required
+                                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
+                                <option value="">— Sélectionner —</option>
+                                @foreach($recipients as $recip)
+                                    <option value="{{ $recip->id }}"
+                                            data-sector="{{ $recip->metadata['sector'] ?? '' }}"
+                                            {{ old('recipient_administration_id') === $recip->id ? 'selected' : '' }}>
+                                        {{ $recip->name }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Motif de la demande --}}
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Motif de la demande *</label>
+                    <textarea name="motif" rows="3" required
+                              placeholder="Expliquez brièvement le motif de votre demande..."
+                              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 min-h-[88px]">{{ old('motif') }}</textarea>
+                </div>
+
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                         <label class="block text-xs font-medium text-gray-700 mb-1">Nom complet *</label>
@@ -286,6 +346,21 @@
 
             updateLabelPickerState();
         })();
+
+        // Filtre administration réceptrice par secteur
+        function pubFilterRecipients(sector) {
+            var sel = document.getElementById('pub-recip-select');
+            var prev = sel.value;
+            Array.prototype.forEach.call(sel.options, function(opt) {
+                if (!opt.dataset.sector && opt.value === '') { return; } // keep placeholder
+                var show = !sector || opt.dataset.sector === sector || opt.value === '';
+                opt.style.display = show ? '' : 'none';
+            });
+            if (prev && sel.querySelector('option[value="'+prev+'"]') &&
+                sel.querySelector('option[value="'+prev+'"]').style.display === 'none') {
+                sel.value = '';
+            }
+        }
     </script>
 </body>
 </html>

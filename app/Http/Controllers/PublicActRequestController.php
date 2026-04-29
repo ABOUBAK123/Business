@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\ActRequestSubmission;
 use App\Models\IssuingAdministration;
+use App\Models\RecipientAdministration;
 use App\Models\RequestedAct;
 use App\Models\SubEntity;
 use Illuminate\Http\Request;
@@ -94,7 +95,12 @@ class PublicActRequestController extends Controller
             ->orderBy('name')
             ->get(['code', 'name']);
 
-        return view('public-act-requests.create', compact('administration', 'requestedAct', 'directions'));
+        $recipients = RecipientAdministration::query()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'metadata']);
+
+        return view('public-act-requests.create', compact('administration', 'requestedAct', 'directions', 'recipients'));
     }
 
     public function store(Request $request, string $administration_id, string $requested_act_id)
@@ -109,16 +115,18 @@ class PublicActRequestController extends Controller
             ->findOrFail($requested_act_id);
 
         $request->validate([
-            'applicant_full_name' => 'required|string|max:255',
-            'applicant_email' => 'required|email|max:255',
-            'applicant_phone' => 'nullable|string|max:50',
-            'direction_code' => 'nullable|string|max:100',
-            'note' => 'nullable|string|max:2000',
-            'extra' => 'nullable|array',
-            'attachments_files' => 'nullable|array',
-            'attachments_files.*' => 'nullable|file|max:10240',
-            'attachment_labels' => 'nullable|array',
-            'attachment_labels.*' => 'nullable|string|max:255',
+            'applicant_full_name'        => 'required|string|max:255',
+            'applicant_email'            => 'required|email|max:255',
+            'applicant_phone'            => 'nullable|string|max:50',
+            'direction_code'             => 'nullable|string|max:100',
+            'recipient_administration_id'=> 'nullable|exists:recipient_administrations,id',
+            'motif'                      => 'nullable|string|max:2000',
+            'note'                       => 'nullable|string|max:2000',
+            'extra'                      => 'nullable|array',
+            'attachments_files'          => 'nullable|array',
+            'attachments_files.*'        => 'nullable|file|max:10240',
+            'attachment_labels'          => 'nullable|array',
+            'attachment_labels.*'        => 'nullable|string|max:255',
         ]);
 
         $extraPayload = [];
@@ -198,18 +206,20 @@ class PublicActRequestController extends Controller
         $directionCode = trim((string) ($requestedAct->direction_code ?: $request->input('direction_code', '')));
 
         ActRequestSubmission::create([
-            'requested_act_id' => $requestedAct->id,
-            'emitter_administration_id' => $administration->id,
-            'direction_code' => $directionCode,
-            'requested_document_name' => (string) $requestedAct->document_name,
-            'applicant_full_name' => (string) $request->input('applicant_full_name'),
-            'applicant_email' => (string) $request->input('applicant_email', ''),
-            'applicant_phone' => (string) $request->input('applicant_phone', ''),
-            'applicant_payload' => array_merge($extraPayload, [
+            'requested_act_id'            => $requestedAct->id,
+            'emitter_administration_id'   => $administration->id,
+            'direction_code'              => $directionCode,
+            'recipient_administration_id' => $request->input('recipient_administration_id') ?: null,
+            'motif'                       => trim((string) $request->input('motif', '')),
+            'requested_document_name'     => (string) $requestedAct->document_name,
+            'applicant_full_name'         => (string) $request->input('applicant_full_name'),
+            'applicant_email'             => (string) $request->input('applicant_email', ''),
+            'applicant_phone'             => (string) $request->input('applicant_phone', ''),
+            'applicant_payload'           => array_merge($extraPayload, [
                 '_note' => trim((string) $request->input('note', '')),
             ]),
-            'attachments' => $attachments,
-            'status' => 'pending',
+            'attachments'                 => $attachments,
+            'status'                      => 'pending',
         ]);
 
         return redirect()

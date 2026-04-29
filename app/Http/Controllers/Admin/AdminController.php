@@ -1755,13 +1755,11 @@ class AdminController extends Controller
     public function storeRequestedAct(Request $request)
     {
         $data = $request->validate([
-            'administration_id'          => 'required|string',
-            'direction_code'             => 'nullable|string|max:50',
-            'recipient_administration_id'=> 'nullable|exists:recipient_administrations,id',
-            'motif'                      => 'nullable|string|max:1000',
-            'document_name'              => 'required|string|max:255',
-            'required_documents'         => 'nullable|string',
-            'applicant_fields'           => 'nullable|string',
+            'administration_id'  => 'required|string',
+            'direction_code'     => 'nullable|string|max:50',
+            'document_name'      => 'required|string|max:255',
+            'required_documents' => 'nullable|string',
+            'applicant_fields'   => 'nullable|string',
         ]);
         $data['required_documents'] = json_decode($data['required_documents'] ?? '[]', true) ?: [];
         $data['applicant_fields']   = json_decode($data['applicant_fields']   ?? '[]', true) ?: [];
@@ -1772,13 +1770,11 @@ class AdminController extends Controller
     public function updateRequestedAct(Request $request, RequestedAct $requestedAct)
     {
         $data = $request->validate([
-            'administration_id'          => 'required|string',
-            'direction_code'             => 'nullable|string|max:50',
-            'recipient_administration_id'=> 'nullable|exists:recipient_administrations,id',
-            'motif'                      => 'nullable|string|max:1000',
-            'document_name'              => 'required|string|max:255',
-            'required_documents'         => 'nullable|string',
-            'applicant_fields'           => 'nullable|string',
+            'administration_id'  => 'required|string',
+            'direction_code'     => 'nullable|string|max:50',
+            'document_name'      => 'required|string|max:255',
+            'required_documents' => 'nullable|string',
+            'applicant_fields'   => 'nullable|string',
         ]);
         $data['required_documents'] = json_decode($data['required_documents'] ?? '[]', true) ?: [];
         $data['applicant_fields']   = json_decode($data['applicant_fields']   ?? '[]', true) ?: [];

@@ -2930,43 +2930,11 @@ document.addEventListener('DOMContentLoaded', function() {
 {{-- ══════════════════════ ACTES DEMANDÉS ══════════════════════ --}}
 @elseif($tab === 'requested-acts')
 @php
-    $actAction       = request('act_action');
-    $selActId        = request('selected_act');
-    $editAct         = ($actAction === 'edit' && $selActId) ? $requestedActs->firstWhere('id', $selActId) : null;
-    $actAdminId      = old('administration_id',           $editAct?->administration_id           ?? '');
-    $actDirCode      = old('direction_code',              $editAct?->direction_code              ?? '');
-    $actRecipId      = old('recipient_administration_id', $editAct?->recipient_administration_id ?? '');
-    $actMotif        = old('motif',                       $editAct?->motif                       ?? '');
-    // Build recipients JSON with sector from metadata for JS filtering
-    $actRecipientsJs = $recipients->map(fn($r) => [
-        'id'     => $r->id,
-        'name'   => $r->name,
-        'sector' => $r->metadata['sector'] ?? '',
-    ])->values();
-    // Distinct sectors list
-    $actSectors = $recipients->map(fn($r) => $r->metadata['sector'] ?? '')->filter()->unique()->sort()->values();
-    $actSectorLabels = [
-        'fiscalite'     => 'Fiscalité & Finances',
-        'social'        => 'Protection Sociale',
-        'travail'       => 'Travail & Emploi',
-        'urbanisme'     => 'Urbanisme & Logement',
-        'education'     => 'Éducation & Formation',
-        'sante'         => 'Santé',
-        'justice'       => 'Justice',
-        'environnement' => 'Environnement',
-        'commerce'      => 'Commerce & Industrie',
-        'banques'       => 'Banques',
-        'securite'      => 'Sécurité',
-        'administration'=> 'Administration',
-        'agriculture'   => 'Agriculture',
-        'autre'         => 'Autre',
-    ];
-    // Sector of the current recipient (for edit pre-selection)
-    $actEditSector = '';
-    if ($actRecipId) {
-        $actEditRecip  = $recipients->firstWhere('id', $actRecipId);
-        $actEditSector = $actEditRecip?->metadata['sector'] ?? '';
-    }
+    $actAction  = request('act_action');
+    $selActId   = request('selected_act');
+    $editAct    = ($actAction === 'edit' && $selActId) ? $requestedActs->firstWhere('id', $selActId) : null;
+    $actAdminId = old('administration_id', $editAct?->administration_id ?? '');
+    $actDirCode = old('direction_code',    $editAct?->direction_code    ?? '');
 @endphp
 
 <div class="grid grid-cols-1 xl:grid-cols-[1fr_1.1fr] gap-5">
@@ -3020,46 +2988,6 @@ document.addEventListener('DOMContentLoaded', function() {
       <input type="text" name="document_name" value="{{ old('document_name', $editAct?->document_name) }}"
         placeholder="Nom du document" required
         class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-amber-300 focus:border-amber-400 outline-none">
-
-      {{-- Secteur de compétence + Administration réceptrice --}}
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div class="space-y-1">
-          <label class="text-xs font-semibold text-gray-700">Secteur de compétence</label>
-          <select id="act-sector-select"
-            onchange="actFilterRecipients(this.value)"
-            class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-300 focus:border-amber-400 outline-none">
-            <option value="">— Tous les secteurs —</option>
-            @foreach($actSectors as $sv)
-            <option value="{{ $sv }}" {{ $actEditSector === $sv ? 'selected' : '' }}>
-              {{ $actSectorLabels[$sv] ?? ucfirst($sv) }}
-            </option>
-            @endforeach
-          </select>
-        </div>
-        <div class="space-y-1">
-          <label class="text-xs font-semibold text-gray-700">Administration réceptrice</label>
-          <select name="recipient_administration_id" id="act-recip-select"
-            class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:ring-2 focus:ring-amber-300 focus:border-amber-400 outline-none">
-            <option value="">— Sélectionner —</option>
-            @foreach($recipients as $recip)
-            <option
-              value="{{ $recip->id }}"
-              data-sector="{{ $recip->metadata['sector'] ?? '' }}"
-              {{ $actRecipId === $recip->id ? 'selected' : '' }}>
-              {{ $recip->name }}
-            </option>
-            @endforeach
-          </select>
-        </div>
-      </div>
-
-      {{-- Motif de la demande --}}
-      <div class="space-y-1">
-        <label class="text-xs font-semibold text-gray-700">Motif de la demande de l'acte</label>
-        <textarea name="motif" rows="3"
-          placeholder="Décrivez le motif ou l'objet de la demande de cet acte..."
-          class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm resize-none placeholder:text-gray-400 focus:ring-2 focus:ring-amber-300 focus:border-amber-400 outline-none">{{ $actMotif }}</textarea>
-      </div>
 
       <div class="space-y-2">
         <label class="text-xs font-semibold text-gray-700">Liste des documents a fournir</label>
@@ -3133,19 +3061,13 @@ document.addEventListener('DOMContentLoaded', function() {
     <div class="space-y-3" id="act-cards">
       @foreach($requestedActs as $act)
       @php
-        $actSearch = strtolower($act->document_name . ' ' . ($act->administration?->name ?? '') . ' ' . ($act->direction_code ?? '') . ' ' . ($act->recipientAdministration?->name ?? '') . ' ' . ($act->motif ?? '') . ' ' . implode(' ', $act->required_documents ?? []) . ' ' . collect($act->applicant_fields ?? [])->pluck('label')->implode(' '));
+        $actSearch = strtolower($act->document_name . ' ' . ($act->administration?->name ?? '') . ' ' . ($act->direction_code ?? '') . ' ' . implode(' ', $act->required_documents ?? []) . ' ' . collect($act->applicant_fields ?? [])->pluck('label')->implode(' '));
       @endphp
       <div class="act-card rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-2 {{ $editAct && $editAct->id === $act->id ? 'border-amber-400 bg-amber-50' : '' }}"
         data-search="{{ $actSearch }}">
         <p class="text-sm font-semibold text-gray-800">{{ $act->document_name }}</p>
         <p class="text-xs text-gray-600">Administration : {{ $act->administration?->name ?? '&mdash;' }}</p>
         <p class="text-xs text-gray-600">Direction : {{ $act->direction_code ?? '&mdash;' }}</p>
-        @if($act->recipient_administration_id)
-        <p class="text-xs text-gray-600">Administration réceptrice : {{ $act->recipientAdministration?->name ?? '&mdash;' }}</p>
-        @endif
-        @if($act->motif)
-        <p class="text-xs text-gray-500 italic">Motif : {{ Str::limit($act->motif, 80) }}</p>
-        @endif
         <p class="text-xs text-gray-400">Cree le {{ $act->created_at->format('d/m/Y H:i') }}</p>
         @if(!empty($act->required_documents))
         <div class="pt-1">
@@ -3234,18 +3156,6 @@ function actFilterDirections(adminId) {
     });
     if (sel.value && sel.selectedOptions[0] && sel.selectedOptions[0].dataset.admin !== adminId) sel.value = '';
 }
-function actFilterRecipients(sector) {
-    var sel = document.getElementById('act-recip-select');
-    var prev = sel.value;
-    sel.querySelectorAll('option[data-sector]').forEach(function(opt) {
-        var show = !sector || opt.dataset.sector === sector;
-        opt.style.display = show ? '' : 'none';
-    });
-    // Reset selection if the currently selected option is now hidden
-    if (prev && sel.querySelector('option[value="'+prev+'"]') && sel.querySelector('option[value="'+prev+'"]').style.display === 'none') {
-        sel.value = '';
-    }
-}
 function actSearch(q) {
     q = q.toLowerCase().trim();
     var vis = 0, tot = 0;
@@ -3261,8 +3171,6 @@ document.addEventListener('DOMContentLoaded', function() {
     actRenderDocs(); actRenderFields();
     var a = document.getElementById('act-admin-select');
     if (a && a.value) actFilterDirections(a.value);
-    var s = document.getElementById('act-sector-select');
-    if (s && s.value) actFilterRecipients(s.value);
 });
 </script>
 @endpush

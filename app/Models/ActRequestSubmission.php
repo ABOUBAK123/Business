@@ -13,6 +13,8 @@ class ActRequestSubmission extends Model
         'requested_act_id',
         'emitter_administration_id',
         'direction_code',
+        'recipient_administration_id',
+        'motif',
         'requested_document_name',
         'applicant_full_name',
         'applicant_email',
@@ -35,5 +37,10 @@ class ActRequestSubmission extends Model
     public function administration()
     {
         return $this->belongsTo(IssuingAdministration::class, 'emitter_administration_id');
+    }
+
+    public function recipientAdministration()
+    {
+        return $this->belongsTo(RecipientAdministration::class, 'recipient_administration_id');
     }
 }
