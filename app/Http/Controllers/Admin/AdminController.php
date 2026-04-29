@@ -194,8 +194,12 @@ class AdminController extends Controller
             }
             $subEntities = $subEntitiesQuery->get();
 
-            $emitterCodes   = IssuingAdministration::pluck('code', 'id');
-            $recipientCodes = RecipientAdministration::pluck('code', 'id');
+            // Compat prod: certaines bases anciennes n'ont pas la colonne `code`.
+            $emitterCodeColumn = Schema::hasColumn('issuing_administrations', 'code') ? 'code' : 'name';
+            $recipientCodeColumn = Schema::hasColumn('recipient_administrations', 'code') ? 'code' : 'name';
+
+            $emitterCodes   = IssuingAdministration::pluck($emitterCodeColumn, 'id');
+            $recipientCodes = RecipientAdministration::pluck($recipientCodeColumn, 'id');
             $subEntities    = $subEntities->map(function (SubEntity $subEntity) use ($emitterCodes, $recipientCodes) {
                 $adminCode = $subEntity->scope_type === 'recipient'
                     ? ($recipientCodes[$subEntity->scope_id] ?? null)
