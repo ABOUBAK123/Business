@@ -1166,14 +1166,15 @@ if (!array_key_exists($tab, $tabs)) {
       if (btn) btn.disabled = true;
       if (lbl) lbl.textContent = '⏳ ...';
 
-      fetch(_adminTplBase + '/' + tplId + '/ai-enrich', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-CSRF-TOKEN': csrf ? csrf.content : '',
-          'Accept': 'application/json'
-        }
-      })
+      function runAiEnrichRequest() {
+        fetch(_adminTplBase + '/' + tplId + '/ai-enrich', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': csrf ? csrf.content : '',
+            'Accept': 'application/json'
+          }
+        })
       .then(function(r) { return r.json(); })
       .then(function(data) {
         if (btn) btn.disabled = false;
@@ -1198,6 +1199,30 @@ if (!array_key_exists($tab, $tabs)) {
         if (lbl) lbl.textContent = '✨ IA';
         alert('❌ Erreur réseau : ' + err.message);
       });
+
+      }
+
+      // Si le template est encore la session OO courante, déclencher un force-save
+      // avant enrichissement pour éviter d'analyser une ancienne version du fichier.
+      var currentTplId = String(window._ooCurrentTemplateId || '');
+      var currentDocKey = String(window._ooCurrentDocKey || '');
+      if (currentTplId === String(tplId) && currentDocKey) {
+        fetch(_adminTplBase + '/' + tplId + '/force-save', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': csrf ? csrf.content : '',
+            'Accept': 'application/json'
+          },
+          body: JSON.stringify({ doc_key: currentDocKey })
+        })
+        .finally(function() {
+          setTimeout(runAiEnrichRequest, 1200);
+        });
+        return;
+      }
+
+      runAiEnrichRequest();
     }
     window.tplAiEnrich = tplAiEnrich;
 

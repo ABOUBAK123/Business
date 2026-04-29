@@ -2227,33 +2227,32 @@ class AdminController extends Controller
             // Vérifier la disponibilité d'Ollama
             $available = $ollama->isAvailable();
 
-            // Construire la liste des variables existantes (ou les détecter si aucune)
-            $existingVars = $template->variables()->get();
+            // Toujours refaire une détection brute pour capter les nouvelles balises
+            // ajoutées récemment dans OnlyOffice (ou dans le contenu HTML du template).
+            $detected = $this->extractVarsFromTemplateText($template->content);
 
-            if ($existingVars->isEmpty()) {
-                // Tenter une détection rapide depuis le fichier
-                $rawVars = [];
-                if ($template->storage_path) {
-                    $ext = strtolower(pathinfo($template->storage_path, PATHINFO_EXTENSION));
-                    if (in_array($ext, ['docx', 'xlsx', 'pptx'])) {
-                        $absPath = str_starts_with($template->storage_path, 'images/')
-                            ? public_path($template->storage_path)
-                            : Storage::disk('public')->path($template->storage_path);
-                        $rawVars = $this->extractVarsFromUploadedFile($absPath);
+            if ($template->storage_path) {
+                $ext = strtolower(pathinfo($template->storage_path, PATHINFO_EXTENSION));
+                if (in_array($ext, ['docx', 'xlsx', 'pptx'])) {
+                    $absPath = str_starts_with($template->storage_path, 'images/')
+                        ? public_path($template->storage_path)
+                        : Storage::disk('public')->path($template->storage_path);
+                    foreach ($this->extractVarsFromUploadedFile($absPath) as $fileVar) {
+                        $detected[$fileVar['key']] = $fileVar;
                     }
                 }
-                if (empty($rawVars) && $template->content) {
-                    $rawVars = array_values($this->extractVarsFromTemplateText($template->content));
-                }
-                if (empty($rawVars)) {
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Aucune variable trouvée. Détectez d\'abord les variables avec le bouton "Détecter".',
-                    ], 422);
-                }
-                // Sauvegarder les variables brutes avant enrichissement
-                $this->saveDetectedTemplateVars($template, $rawVars);
-                $existingVars = $template->variables()->get();
+            }
+
+            if (!empty($detected)) {
+                $this->saveDetectedTemplateVars($template, array_values($detected));
+            }
+
+            $existingVars = $template->variables()->get();
+            if ($existingVars->isEmpty()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Aucune variable détectée dans le fichier actuel. Si vous venez d\'éditer dans OnlyOffice, enregistrez/fermez le document puis réessayez.',
+                ], 422);
             }
 
             $rawArray = $existingVars->map(fn ($v) => ['key' => $v->key, 'label' => $v->label])->toArray();
