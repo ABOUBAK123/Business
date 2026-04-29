@@ -13,7 +13,7 @@ use Illuminate\Support\Str;
 
 class ChatController extends Controller
 {
-    private const ONLINE_TTL_SECONDS = 70;
+    private const ONLINE_TTL_SECONDS = 300;
 
     private function onlineKey(string $userId): string
     {

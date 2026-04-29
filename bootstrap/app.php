@@ -15,6 +15,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // SetLocale dans le groupe web (APRÈS StartSession, sinon session non disponible)
         $middleware->web(append: [
             \App\Http\Middleware\SetLocale::class,
+            \App\Http\Middleware\TrackUserPresence::class,
         ]);
 
         $middleware->validateCsrfTokens(except: [
