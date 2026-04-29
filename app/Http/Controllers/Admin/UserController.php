@@ -6,7 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Database\QueryException;
 
 class UserController extends Controller
 {
@@ -34,10 +34,18 @@ class UserController extends Controller
         ]);
         $data['password'] = Hash::make($data['password']);
         $data['status']   = 'active';
-        if (Schema::hasColumn('users', 'locale')) {
-            $data['locale'] = 'fr';
+        $data['locale']   = 'fr';
+        try {
+            User::create($data);
+        } catch (QueryException $e) {
+            $msg = strtolower($e->getMessage());
+            if (str_contains($msg, 'unknown column') && str_contains($msg, 'locale')) {
+                unset($data['locale']);
+                User::create($data);
+            } else {
+                throw $e;
+            }
         }
-        User::create($data);
         return redirect()->route('admin.users.index')->with('success', 'Utilisateur créé.');
     }
 

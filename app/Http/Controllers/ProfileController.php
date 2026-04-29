@@ -5,8 +5,8 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Database\QueryException;
 use Illuminate\Validation\Rule;
 
 class ProfileController extends Controller
@@ -108,9 +108,16 @@ class ProfileController extends Controller
         $locale = $validated['locale'];
 
         $user = Auth::user();
-        if ($user && Schema::hasColumn('users', 'locale')) {
-            $user->locale = $locale;
-            $user->save();
+        if ($user) {
+            try {
+                $user->locale = $locale;
+                $user->save();
+            } catch (QueryException $e) {
+                $msg = strtolower($e->getMessage());
+                if (!(str_contains($msg, 'unknown column') && str_contains($msg, 'locale'))) {
+                    throw $e;
+                }
+            }
         }
 
         // Sauvegarder en session

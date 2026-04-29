@@ -27,6 +27,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Database\QueryException;
 
 class AdminController extends Controller
 {
@@ -1915,12 +1916,20 @@ class AdminController extends Controller
             'status'     => $data['status'] ?? 'active',
             'quota'      => $data['quota'] ?? null,
             'avatar'     => $avatarPath,
+            'locale'     => 'fr',
         ];
-        if (Schema::hasColumn('users', 'locale')) {
-            $payload['locale'] = 'fr';
-        }
 
-        $user = User::create($payload);
+        try {
+            $user = User::create($payload);
+        } catch (QueryException $e) {
+            $msg = strtolower($e->getMessage());
+            if (str_contains($msg, 'unknown column') && str_contains($msg, 'locale')) {
+                unset($payload['locale']);
+                $user = User::create($payload);
+            } else {
+                throw $e;
+            }
+        }
 
         if (!empty($data['administration_type']) && !empty($data['administration_id'])) {
             $subEntity = $data['sub_entity_id'] ? SubEntity::find($data['sub_entity_id']) : null;

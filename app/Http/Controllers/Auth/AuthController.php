@@ -9,8 +9,8 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Password;
 use Illuminate\Support\Facades\RateLimiter;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Illuminate\Database\QueryException;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -83,12 +83,20 @@ class AuthController extends Controller
             'password' => Hash::make($data['password']),
             'role'     => 'user',
             'status'   => 'active',
+            'locale'   => 'fr',
         ];
-        if (Schema::hasColumn('users', 'locale')) {
-            $payload['locale'] = 'fr';
-        }
 
-        $user = User::create($payload);
+        try {
+            $user = User::create($payload);
+        } catch (QueryException $e) {
+            $msg = strtolower($e->getMessage());
+            if (str_contains($msg, 'unknown column') && str_contains($msg, 'locale')) {
+                unset($payload['locale']);
+                $user = User::create($payload);
+            } else {
+                throw $e;
+            }
+        }
 
         Auth::login($user);
         $request->session()->regenerate();
