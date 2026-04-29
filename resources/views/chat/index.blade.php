@@ -50,7 +50,7 @@
 .tab-btn.off { color:#94a3b8; }
 
 /* Colonne connectes */
-#online-panel { width:300px; flex-shrink:0; border-left:1px solid #f1f2f5; background:#fbfcff; display:flex; flex-direction:column; }
+#online-panel { width:260px; flex-shrink:0; border-left:1px solid #f1f2f5; background:#fbfcff; display:flex; flex-direction:column; }
 #online-header { padding:.85rem 1rem; border-bottom:1px solid #eef2f7; display:flex; align-items:center; justify-content:space-between; }
 #online-body { flex:1; overflow-y:auto; padding:.55rem .75rem; }
 .admin-group { border:1px solid #e6ebf3; background:#fff; border-radius:.9rem; overflow:hidden; margin-bottom:.65rem; }
@@ -64,7 +64,7 @@
 .online-role { font-size:.67rem; color:#94a3b8; }
 .online-dot { width:7px; height:7px; border-radius:9999px; background:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,.14); flex-shrink:0; }
 
-@media(max-width:1024px){ #online-panel{display:none;} }
+@media(max-width:768px){ #online-panel{display:none;} }
 
 @media(max-width:640px){ #conv-panel{width:100%;} #msg-panel{display:none;} #chat-wrap.sm-msg #conv-panel{display:none;} #chat-wrap.sm-msg #msg-panel{display:flex;} }
 </style>
