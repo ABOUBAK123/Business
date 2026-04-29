@@ -1915,6 +1915,7 @@ class AdminController extends Controller
             'status'     => $data['status'] ?? 'active',
             'quota'      => $data['quota'] ?? null,
             'avatar'     => $avatarPath,
+            'locale'     => 'fr',
         ]);
 
         if (!empty($data['administration_type']) && !empty($data['administration_id'])) {

@@ -82,6 +82,7 @@ class AuthController extends Controller
             'password' => Hash::make($data['password']),
             'role'     => 'user',
             'status'   => 'active',
+            'locale'   => 'fr',
         ]);
 
         Auth::login($user);

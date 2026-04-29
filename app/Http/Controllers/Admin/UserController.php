@@ -33,6 +33,7 @@ class UserController extends Controller
         ]);
         $data['password'] = Hash::make($data['password']);
         $data['status']   = 'active';
+        $data['locale']   = 'fr';
         User::create($data);
         return redirect()->route('admin.users.index')->with('success', 'Utilisateur créé.');
     }
