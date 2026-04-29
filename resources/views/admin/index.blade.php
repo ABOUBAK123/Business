@@ -287,7 +287,7 @@ if (!array_key_exists($tab, $tabs)) {
                         <i class="fas fa-sliders-h text-xs"></i> Variables
                     </button>
                     {{-- Auto-détecter variables depuis fichier --}}
-                    @if($tpl->storage_path && in_array($tpl->file_type, ['docx','xlsx','pptx']))
+                    @if(in_array($tpl->file_type, ['docx','xlsx','pptx']))
                     <button type="button" onclick="tplDetectVars('{{ $tpl->id }}','{{ addslashes($tpl->name) }}')" id="detect-btn-{{ $tpl->id }}"
                             class="px-2 py-1 rounded bg-yellow-100 text-yellow-700 text-xs hover:bg-yellow-200 transition flex items-center gap-1">
                         <i class="fas fa-magic text-xs"></i> <span id="detect-label-{{ $tpl->id }}">{{ $tpl->variables->count() > 0 ? $tpl->variables->count().' vars' : 'Détecter' }}</span>
@@ -298,20 +298,21 @@ if (!array_key_exists($tab, $tabs)) {
                         <i class="fas fa-robot text-xs"></i> <span id="ai-enrich-label-{{ $tpl->id }}">✨ IA</span>
                       </button>
                     {{-- Récupérer les variables (urgent) si fichier existe mais 0 variables --}}
-                    @if($tpl->variables->count() === 0)
+                    @if($tpl->variables->count() === 0 && $tpl->storage_path)
                     <button type="button" onclick="tplRecoverVars('{{ $tpl->id }}','{{ addslashes($tpl->name) }}')" id="recover-btn-{{ $tpl->id }}"
                             class="px-2 py-1 rounded bg-orange-500 text-white text-xs hover:bg-orange-600 transition flex items-center gap-1 animate-pulse"
                             title="Réextrait les variables d'un fichier déjà stocké">
                         <i class="fas fa-exclamation-triangle text-xs"></i> Récupérer
                     </button>
                     @endif
-                    @elseif(!$tpl->storage_path && $tpl->variables->count() === 0 && in_array($tpl->file_type, ['docx','xlsx','pptx']))
+                    @if(!$tpl->storage_path && $tpl->variables->count() === 0)
                     {{-- Template sans fichier : demander d'ouvrir dans OO pour enregistrer --}}
                     <button type="button" onclick="tplOoEdit('{{ $tpl->id }}','{{ addslashes($tpl->name) }}')"
                             class="px-2 py-1 rounded bg-red-500 text-white text-xs hover:bg-red-600 transition flex items-center gap-1 animate-pulse"
                             title="Ce template n'a pas encore été enregistré dans OnlyOffice. Cliquez pour l'ouvrir et enregistrer.">
                         <i class="fas fa-exclamation-circle text-xs"></i> À enregistrer!
                     </button>
+                    @endif
                     @endif
                 </div>
             </div>
@@ -465,16 +466,6 @@ if (!array_key_exists($tab, $tabs)) {
 {{-- ═══ MODAL TEMPLATE ONLYOFFICE ═══ --}}
 <div id="modal-tpl-oo" class="adm-modal">
     <div class="adm-modal-box" style="max-width:96vw;width:96vw;max-height:96vh;height:96vh;padding:0;display:flex;flex-direction:column;">
-
-        {{-- Banner d'avertissement close-guard --}}
-        <div id="tpl-oo-close-guard-banner" style="display:none;" class="flex items-center gap-3 px-4 py-3 bg-red-500 text-white text-sm font-semibold shadow-md flex-shrink-0">
-            <i class="fas fa-lock text-lg"></i>
-          <span>⚠️ <strong>Modèle non encore confirmé côté serveur.</strong> L’auto-sauvegarde est active. Vous pouvez aussi cliquer sur <strong>Enregistrer le modèle</strong>, puis attendre la confirmation ci-dessous.</span>
-            <div class="ml-auto flex items-center gap-2">
-                <div class="inline-block w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                <span>Vérification...</span>
-            </div>
-        </div>
 
         {{-- Barre d'outils --}}
         <div class="flex items-center gap-2 px-4 py-2 border-b border-gray-100 bg-white flex-shrink-0 flex-wrap">
@@ -820,8 +811,8 @@ if (!array_key_exists($tab, $tabs)) {
                 if (banner) banner.style.display = 'none';
             } else {
               if (_tplOoCloseGuard.lastState !== 'unsaved') {
-                    _tplOoLog('[CloseGuard] Pas encore sauvegardé');
-                tplOoShowCloseGuardBanner();
+                    _tplOoLog('[CloseGuard] Pas encore sauvegardé (mode informatif)');
+                tplOoShowStatus('Synchronisation en cours côté serveur… vous pouvez continuer.', 2500);
                 _tplOoCloseGuard.lastState = 'unsaved';
               }
             }
@@ -859,7 +850,6 @@ if (!array_key_exists($tab, $tabs)) {
       // Si on bloque ici, on peut empêcher la sauvegarde serveur et donc la détection de variables.
       _tplOoLog('[CloseGuard] Fermeture autorisée même sans confirmation immédiate serveur');
       tplOoShowStatus('Fermeture autorisée. Synchronisation en cours côté serveur…', 4000);
-        tplOoShowCloseGuardBanner();
       return true;
     }
     window.tplOoCanCloseModal = tplOoCanCloseModal;
