@@ -3825,7 +3825,17 @@ function toggleOoSecret() {
     <form method="POST" action="{{ route('admin.users-tab.store') }}" enctype="multipart/form-data"
       class="flex flex-col flex-1 overflow-y-auto px-6 py-4 space-y-4">
       @csrf
-      <input type="hidden" name="role" value="user">
+
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Rôle système <span class="text-red-500">*</span></label>
+        <select name="role" required
+          class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
+          <option value="user">Utilisateur</option>
+          <option value="manager">Manager</option>
+          <option value="signer">Signataire</option>
+          <option value="admin">Administrateur</option>
+        </select>
+      </div>
 
       <div class="grid grid-cols-2 gap-3">
         <div>

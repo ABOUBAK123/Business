@@ -22,7 +22,7 @@
                        class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
             </div>
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Rôle</label>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Rôle système</label>
                 <select name="role" class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                     @foreach(['user'=>'Utilisateur','manager'=>'Manager','signer'=>'Signataire','admin'=>'Administrateur'] as $v => $l)
                     <option value="{{ $v }}" {{ old('role') === $v ? 'selected' : '' }}>{{ $l }}</option>
