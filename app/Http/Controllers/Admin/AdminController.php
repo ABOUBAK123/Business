@@ -430,6 +430,22 @@ class AdminController extends Controller
         // Stocker dans storage/app/public/templates/
         $storedPath = $file->storeAs('templates', $fileName, 'public');
 
+        // ── Auto-extraction des variables {{}} depuis le fichier Office ────────
+        $extractedVars = [];
+        if (in_array($ext, ['docx', 'xlsx', 'pptx'])) {
+            $absPath = \Illuminate\Support\Facades\Storage::disk('public')->path($storedPath);
+            $extractedVars = $this->extractVarsFromUploadedFile($absPath);
+
+            // Un modèle Office sans variable n'est pas utile: on refuse sa création.
+            if (count($extractedVars) === 0) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($storedPath);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Aucune variable détectée dans le fichier. Ajoutez des balises (ex: {{ nom_client }}) puis réessayez.',
+                ], 422);
+            }
+        }
+
         $targetTemplateId = (string) ($request->input('template_id') ?: '');
         $template = null;
         if ($targetTemplateId !== '') {
@@ -456,11 +472,7 @@ class AdminController extends Controller
             ]);
         }
 
-        // ── Auto-extraction des variables {{}} depuis le fichier Office ────────
-        $extractedVars = [];
-        if (in_array($ext, ['docx', 'xlsx', 'pptx'])) {
-            $absPath = \Illuminate\Support\Facades\Storage::disk('public')->path($storedPath);
-            $extractedVars = $this->extractVarsFromUploadedFile($absPath);
+        if (!empty($extractedVars)) {
             foreach ($extractedVars as $v) {
                 \App\Models\TemplateVariable::firstOrCreate(
                     ['template_id' => $template->id, 'key' => $v['key']],

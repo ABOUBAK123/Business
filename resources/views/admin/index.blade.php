@@ -1765,9 +1765,9 @@ if (!array_key_exists($tab, $tabs)) {
     // ─── Bouton : Créer un modèle ─────────────────────────────────────────────
     function tplOoCreateModel() {
       var createPanel = document.getElementById('tpl-oo-create-panel');
-      var uploadPanel = document.getElementById('tpl-oo-upload-panel');
-      if (uploadPanel) uploadPanel.classList.add('hidden');
-      if (createPanel) createPanel.classList.remove('hidden');
+      if (createPanel) createPanel.classList.add('hidden');
+      tplOoOpenUpload(null);
+      tplOoShowStatus('Importez un fichier contenant des variables (ex: {{ nom_client }}).', 6000);
     }
     window.tplOoCreateModel = tplOoCreateModel;
 
