@@ -3899,23 +3899,6 @@ function toggleOoSecret() {
       </div>
 
       <div class="grid grid-cols-2 gap-3">
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Type d'administration</label>
-          <select id="c-admin-type" name="administration_type" onchange="userAdminTypeChange('c')"
-            class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
-            <option value="">« Sélectionner »</option>
-            <option value="emitter">Émettrice</option>
-            <option value="recipient">Destinataire</option>
-          </select>
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-gray-600 mb-1">Administration</label>
-          <select id="c-admin-id" name="administration_id" onchange="userAdminIdChange('c')" disabled
-            class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none disabled:bg-gray-50 disabled:text-gray-400">
-            <option value="">Administration</option>
-          </select>
-        </div>
-      </div>
         @if(isset($adminScope) && $adminScope)
         <input type="hidden" name="administration_type" value="{{ $adminScope['type'] }}">
         <input type="hidden" name="administration_id" value="{{ $adminScope['id'] }}">
