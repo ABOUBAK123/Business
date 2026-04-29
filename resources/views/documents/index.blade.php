@@ -43,7 +43,7 @@
 
 
 <!-- Inputs fichiers cachés -->
-<input type="file" id="fileInput" class="hidden" multiple accept=".pdf,.docx,.xlsx,.pptx">
+<input type="file" id="fileInput" class="hidden" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.csv">
 <input type="file" id="folderInput" class="hidden" multiple webkitdirectory directory>
 
 <!-- Barre d'actions supérieure -->

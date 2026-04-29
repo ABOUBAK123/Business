@@ -105,7 +105,7 @@ class DocumentController extends Controller
     public function uploadAjax(Request $request)
     {
         $request->validate([
-            'file'  => 'required|file|mimes:pdf,docx,xlsx,pptx,odt,ods|max:51200',
+            'file'  => 'required|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,odt,ods,odp,csv|max:51200',
             'title' => 'nullable|string|max:500',
         ]);
 
@@ -145,7 +145,7 @@ class DocumentController extends Controller
     {
         $request->validate([
             'title' => 'required|string|max:500',
-            'file'  => 'required|file|mimes:pdf,docx,xlsx,pptx|max:51200',
+            'file'  => 'required|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,odt,ods,odp,csv|max:51200',
         ]);
 
         $file     = $request->file('file');
@@ -789,7 +789,7 @@ class DocumentController extends Controller
             $docUrl = url($signedUrl);
         }
 
-        $fileExt = pathinfo(parse_url($doc->file_path, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'docx';
+        $fileExt = strtolower(pathinfo(parse_url($doc->file_path, PHP_URL_PATH), PATHINFO_EXTENSION) ?: 'docx');
         $docType = match($fileExt) {
             'xlsx', 'xls', 'ods', 'csv' => 'cell',
             'pptx', 'ppt', 'odp'         => 'slide',
