@@ -5121,6 +5121,12 @@ $permissionTree = [
       'administration.instructions'        => 'Instructions',
         'administration.user-profiles'      => 'Profils & Rôles',
     ]],
+    'meetings'         => ['label' => 'Réunions', 'children' => [
+        'meetings.view'           => 'Voir les réunions',
+        'meetings.create'         => 'Créer / modifier',
+        'meetings.manage-rooms'   => 'Gérer les salles',
+        'meetings.attendance'     => 'Suivi des présences',
+    ]],
 ];
 $editProfile = null;
 if (request('edit_profile')) {
