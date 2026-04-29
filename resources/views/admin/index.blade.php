@@ -1744,10 +1744,11 @@ if (!array_key_exists($tab, $tabs)) {
     window.tplOoUnsealZone = tplOoUnsealZone;
 
     // ─── Bouton : Créer un modèle ─────────────────────────────────────────────
-    // Le flux "Créer un modèle" doit passer par l'import pour ouvrir le fichier réel.
     function tplOoCreateModel() {
-      tplOoOpenUpload();
-      tplOoShowStatus('Sélectionnez un fichier à importer pour créer le modèle.', 5000);
+      var createPanel = document.getElementById('tpl-oo-create-panel');
+      var uploadPanel = document.getElementById('tpl-oo-upload-panel');
+      if (uploadPanel) uploadPanel.classList.add('hidden');
+      if (createPanel) createPanel.classList.remove('hidden');
     }
     window.tplOoCreateModel = tplOoCreateModel;
 
