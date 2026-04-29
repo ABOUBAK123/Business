@@ -6,7 +6,7 @@
 
 @verbatim
 <style>
-#chat-wrap { display:flex; height:calc(100vh - 185px); min-height:520px; background:#fff; border-radius:1.5rem; border:1px solid #e5e7eb; box-shadow:0 1px 8px rgba(0,0,0,.06); overflow:hidden; }
+#chat-wrap { position:relative; display:flex; height:calc(100vh - 185px); min-height:520px; background:#fff; border-radius:1.5rem; border:1px solid #e5e7eb; box-shadow:0 1px 8px rgba(0,0,0,.06); overflow:hidden; }
 
 /* Panneau gauche */
 #conv-panel { width:290px; flex-shrink:0; border-right:1px solid #f1f2f5; display:flex; flex-direction:column; background:#fafafa; }
@@ -64,7 +64,23 @@
 .online-role { font-size:.67rem; color:#94a3b8; }
 .online-dot { width:7px; height:7px; border-radius:9999px; background:#22c55e; box-shadow:0 0 0 3px rgba(34,197,94,.14); flex-shrink:0; }
 
+.online-toggle-btn { border:1px solid #dbe3ef; background:#fff; color:#334155; font-size:.72rem; border-radius:.65rem; padding:.35rem .6rem; display:inline-flex; align-items:center; gap:.35rem; }
+.online-toggle-btn:hover { background:#f8fafc; }
+#online-toggle-row { display:none; padding:.45rem .65rem; border-bottom:1px solid #f1f2f5; background:#fff; }
+#online-close { display:none; border:0; background:transparent; color:#94a3b8; font-size:.85rem; cursor:pointer; }
+#online-backdrop { display:none; }
+
 @media(max-width:768px){ #online-panel{display:none;} }
+
+@media(max-width:768px){
+    #online-toggle-row { display:block; }
+    #online-toggle-msg { display:inline-flex; }
+    #online-panel { position:absolute; top:0; right:0; bottom:0; width:min(88vw,320px); z-index:31; display:none; box-shadow:-12px 0 24px rgba(15,23,42,.18); }
+    #online-close { display:inline-block; }
+    #online-backdrop { position:absolute; inset:0; background:rgba(2,6,23,.32); z-index:30; display:none; }
+    #chat-wrap.show-online #online-panel { display:flex; }
+    #chat-wrap.show-online #online-backdrop { display:block; }
+}
 
 @media(max-width:640px){ #conv-panel{width:100%;} #msg-panel{display:none;} #chat-wrap.sm-msg #conv-panel{display:none;} #chat-wrap.sm-msg #msg-panel{display:flex;} }
 </style>
@@ -78,6 +94,12 @@
         <div class="flex border-b border-gray-100 bg-white">
             <button class="tab-btn on" id="tab-group"  onclick="setTab('group')"><i class="fas fa-hashtag mr-1 text-xs"></i>Salons</button>
             <button class="tab-btn off" id="tab-direct" onclick="setTab('direct')"><i class="fas fa-user mr-1 text-xs"></i>Directs</button>
+        </div>
+        <div id="online-toggle-row">
+            <button id="online-toggle-list" class="online-toggle-btn" onclick="toggleOnlinePanel()">
+                <i class="fas fa-users text-[11px]"></i>
+                <span>Afficher les connectés</span>
+            </button>
         </div>
         <div id="conv-list">
             <div id="list-group"></div>
@@ -98,6 +120,10 @@
                 <div id="hdr-name" class="font-bold text-gray-800 text-sm">Général</div>
                 <div id="hdr-sub"  class="text-xs text-gray-400">Salon public</div>
             </div>
+            <button id="online-toggle-msg" class="online-toggle-btn" onclick="toggleOnlinePanel()">
+                <i class="fas fa-users text-[11px]"></i>
+                <span>Connectés</span>
+            </button>
         </div>
 
         <div id="msg-body">
@@ -120,7 +146,10 @@
     <div id="online-panel">
         <div id="online-header">
             <div class="text-xs font-semibold text-slate-700">Utilisateurs en ligne</div>
-            <div id="online-total" class="text-[11px] text-slate-500">0</div>
+            <div class="flex items-center gap-2">
+                <div id="online-total" class="text-[11px] text-slate-500">0</div>
+                <button id="online-close" onclick="toggleOnlinePanel(false)"><i class="fas fa-times"></i></button>
+            </div>
         </div>
         <div id="online-body">
             <div id="online-loading" class="px-2 py-4 text-xs text-slate-400"><i class="fas fa-circle-notch fa-spin mr-1"></i>Chargement...</div>
@@ -128,6 +157,8 @@
             <div id="online-groups"></div>
         </div>
     </div>
+
+    <div id="online-backdrop" onclick="toggleOnlinePanel(false)"></div>
 </div>
 
 @push('scripts')
@@ -144,6 +175,25 @@ let seenMsgIds = new Set();
 let fetching = false;
 let hbTimer = null;
 let contactsTimer = null;
+
+function syncOnlineToggleLabels() {
+    const isOpen = document.getElementById('chat-wrap').classList.contains('show-online');
+    const listBtnText = document.querySelector('#online-toggle-list span');
+    if (listBtnText) {
+        listBtnText.textContent = isOpen ? 'Masquer les connectes' : 'Afficher les connectes';
+    }
+}
+
+function toggleOnlinePanel(forceState = null) {
+    const wrap = document.getElementById('chat-wrap');
+    const isMobile = window.matchMedia('(max-width: 768px)').matches;
+    if (!isMobile) return;
+
+    const isOpen = wrap.classList.contains('show-online');
+    const nextState = forceState === null ? !isOpen : !!forceState;
+    wrap.classList.toggle('show-online', nextState);
+    syncOnlineToggleLabels();
+}
 
 // Salons prédéfinis
 const SALONS = [
@@ -315,6 +365,7 @@ function openConv(room, name, color, type) {
     panel.classList.remove('hidden');
     panel.style.display = 'flex';
     document.getElementById('chat-wrap').classList.add('sm-msg');
+    toggleOnlinePanel(false);
 
     const inp = document.getElementById('msg-input');
     inp.disabled    = false;
@@ -429,7 +480,16 @@ document.addEventListener('visibilitychange', function() {
     }
 });
 
+window.addEventListener('resize', function() {
+    const wrap = document.getElementById('chat-wrap');
+    if (!window.matchMedia('(max-width: 768px)').matches) {
+        wrap.classList.remove('show-online');
+    }
+    syncOnlineToggleLabels();
+});
+
 startPresenceLoops();
+syncOnlineToggleLabels();
 </script>
 @endpush
 
