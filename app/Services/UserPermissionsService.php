@@ -7,6 +7,18 @@ use App\Models\User;
 
 class UserPermissionsService
 {
+    private function isSuperAdminProfile(?AdministrationProfile $profile): bool
+    {
+        if (!$profile || !is_string($profile->name)) {
+            return false;
+        }
+
+        $normalized = strtoupper(trim(str_replace(['_', '-'], ' ', $profile->name)));
+        $normalized = preg_replace('/\s+/', ' ', $normalized) ?? $normalized;
+
+        return $normalized === 'SUPER ADMIN';
+    }
+
     /**
      * Permissions disponibles dans l'application (arbre complet).
      * Cle = ID permission, valeur = libelle affiché.
@@ -80,6 +92,16 @@ class UserPermissionsService
      */
     public function resolve(User $user): array
     {
+        $profile = null;
+        if ($user->profile_id) {
+            $profile = AdministrationProfile::find($user->profile_id);
+        }
+
+        // Exception métier: profil applicatif SUPER ADMIN = accès total.
+        if ($this->isSuperAdminProfile($profile)) {
+            return ['isElevated' => true, 'permissions' => []];
+        }
+
         // Super-admin = rôle système admin SANS profil applicatif → accès total à tout
         // Un admin AVEC un profil applicatif est limité aux onglets cochés dans ce profil
         if ($user->role === 'admin' && !$user->profile_id) {
@@ -87,8 +109,7 @@ class UserPermissionsService
         }
 
         // Profil applicatif associé (s'applique à tous les rôles système, y compris admin)
-        if ($user->profile_id) {
-            $profile = AdministrationProfile::find($user->profile_id);
+        if ($profile) {
             if ($profile && is_array($profile->permissions)) {
                 $perms = $profile->permissions;
                 $menuPerms = $perms['menuPermissions'] ?? [];

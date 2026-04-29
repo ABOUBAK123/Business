@@ -31,6 +31,18 @@ use Illuminate\Database\QueryException;
 
 class AdminController extends Controller
 {
+    private function isSuperAdminProfile(?AdministrationProfile $profile): bool
+    {
+        if (!$profile || !is_string($profile->name)) {
+            return false;
+        }
+
+        $normalized = strtoupper(trim(str_replace(['_', '-'], ' ', $profile->name)));
+        $normalized = preg_replace('/\s+/', ' ', $normalized) ?? $normalized;
+
+        return $normalized === 'SUPER ADMIN';
+    }
+
     private function extractOrigin(?string $url): ?string
     {
         $url = trim((string) $url);
@@ -87,6 +99,16 @@ class AdminController extends Controller
         $user = auth()->user();
         if (!$user) return null;
 
+        $profile = null;
+        if ($user->profile_id) {
+            $profile = AdministrationProfile::find($user->profile_id);
+        }
+
+        // Exception métier: profil applicatif SUPER ADMIN => accès global sans scope.
+        if ($this->isSuperAdminProfile($profile)) {
+            return null;
+        }
+
         // Super-admin : rôle admin sans profil applicatif
         if ($user->role === 'admin' && !$user->profile_id) {
             return null;
@@ -102,8 +124,7 @@ class AdminController extends Controller
         }
 
         // Fallback : profil applicatif → administration émettrice
-        if ($user->profile_id) {
-            $profile = AdministrationProfile::find($user->profile_id);
+        if ($profile) {
             if ($profile && $profile->administration_id) {
                 return ['type' => 'emitter', 'id' => $profile->administration_id];
             }
