@@ -71,20 +71,24 @@
                         'agriculture'    => 'Agriculture',
                         'autre'          => 'Autre',
                     ];
-                    $sectors = $recipients->map(fn($r) => $r->metadata['sector'] ?? '')
-                                          ->filter()->unique()->sort()->values();
+                    $selectedRecipientId = (string) old('recipient_administration_id', '');
+                    $selectedSector = (string) old('recipient_sector', '');
+                    if ($selectedSector === '' && $selectedRecipientId !== '') {
+                        $selectedRecipient = $recipients->firstWhere('id', $selectedRecipientId);
+                        $selectedSector = (string) ($selectedRecipient?->metadata['sector'] ?? '');
+                    }
                 @endphp
                 <div class="rounded-xl border border-blue-100 bg-blue-50 p-4 space-y-3">
                     <p class="text-xs font-semibold text-blue-800">Administration réceptrice de votre demande</p>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
                             <label class="block text-xs font-medium text-gray-700 mb-1">Secteur de compétence</label>
-                            <select id="pub-sector-select"
+                            <select id="pub-sector-select" name="recipient_sector"
                                     onchange="pubFilterRecipients(this.value)"
                                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
                                 <option value="">— Tous les secteurs —</option>
-                                @foreach($sectors as $sv)
-                                    <option value="{{ $sv }}">{{ $sectorLabels[$sv] ?? ucfirst($sv) }}</option>
+                                @foreach($sectorLabels as $sv => $sl)
+                                    <option value="{{ $sv }}" {{ $selectedSector === $sv ? 'selected' : '' }}>{{ $sl }}</option>
                                 @endforeach
                             </select>
                         </div>
@@ -96,7 +100,7 @@
                                 @foreach($recipients as $recip)
                                     <option value="{{ $recip->id }}"
                                             data-sector="{{ $recip->metadata['sector'] ?? '' }}"
-                                            {{ old('recipient_administration_id') === $recip->id ? 'selected' : '' }}>
+                                            {{ $selectedRecipientId === $recip->id ? 'selected' : '' }}>
                                         {{ $recip->name }}
                                     </option>
                                 @endforeach
@@ -360,6 +364,11 @@
                 sel.querySelector('option[value="'+prev+'"]').style.display === 'none') {
                 sel.value = '';
             }
+        }
+
+        var sectorInit = document.getElementById('pub-sector-select');
+        if (sectorInit) {
+            pubFilterRecipients(sectorInit.value || '');
         }
     </script>
 </body>
