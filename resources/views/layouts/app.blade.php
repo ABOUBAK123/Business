@@ -283,6 +283,13 @@
         </a>
         @endif
 
+        @if($canMenu('meetings'))
+        <a href="{{ route('meetings.index') }}"
+           class="nav-link {{ request()->routeIs('meetings.*') || request()->routeIs('meetings.rooms.*') ? 'active' : '' }}">
+            <i class="fas fa-people-group"></i> Réunions
+        </a>
+        @endif
+
         @if($canMenu('qrcode'))
         <a href="{{ route('qr-verification.index') }}"
            class="nav-link {{ request()->routeIs('qr-verification.*') ? 'active' : '' }}">

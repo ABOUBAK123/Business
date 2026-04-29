@@ -65,6 +65,12 @@ class UserPermissionsService
             'act-requests.view'    => 'Voir les demandes',
             'act-requests.process' => 'Traiter les demandes',
         ]],
+        'meetings'                => ['label' => 'Réunions',                'children' => [
+            'meetings.view'        => 'Voir les réunions',
+            'meetings.create'      => 'Créer des réunions',
+            'meetings.attendance'  => 'Gérer l\'émargement',
+            'meetings.minutes'     => 'Rédiger les comptes rendus',
+        ]],
         'administration'          => ['label' => 'Administration',          'children' => [
             'administration.templates'          => 'Templates de documents',
             'administration.emitters'           => 'Administrations émettrices',

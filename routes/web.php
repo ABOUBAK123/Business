@@ -13,6 +13,9 @@ use App\Http\Controllers\ActRequestController;
 use App\Http\Controllers\PublicActRequestController;
 use App\Http\Controllers\QrVerificationController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\MeetingController;
+use App\Http\Controllers\MeetingRoomController;
+use App\Http\Controllers\MeetingAttendanceController;
 use App\Http\Controllers\DebugController;
 use App\Http\Controllers\SessionDebugController;
 use App\Http\Controllers\Admin\AppSettingController;
@@ -104,6 +107,10 @@ Route::get('/demande-acte', [PublicActRequestController::class, 'index'])->name(
 Route::get('/demande-acte/{administration_id}', [PublicActRequestController::class, 'showActsByAdministration'])->name('public.act-requests.by-admin');
 Route::get('/demande-acte/{administration_id}/{requested_act_id}', [PublicActRequestController::class, 'create'])->name('public.act-requests.create');
 Route::post('/demande-acte/{administration_id}/{requested_act_id}', [PublicActRequestController::class, 'store'])->name('public.act-requests.store');
+
+// Emargement public par QR code (sans authentification)
+Route::get('/meetings/qr/{token}', [MeetingAttendanceController::class, 'showByToken'])->name('meetings.qr.show');
+Route::post('/meetings/qr/{token}', [MeetingAttendanceController::class, 'signByToken'])->name('meetings.qr.sign');
 
 // Téléchargement public d'un document via token QR
 Route::get('/qr-download/{token}', [QrVerificationController::class, 'downloadByToken'])->name('qr.download');
@@ -200,6 +207,17 @@ Route::middleware('auth')->group(function () {
 
     // Demandes d'actes
     Route::get('/act-requests', [ActRequestController::class, 'index'])->name('act-requests.index');
+
+    // Reunions
+    Route::get('/meetings', [MeetingController::class, 'index'])->name('meetings.index');
+    Route::get('/meetings/create', [MeetingController::class, 'create'])->name('meetings.create');
+    Route::post('/meetings', [MeetingController::class, 'store'])->name('meetings.store');
+    Route::get('/meetings/{meeting}', [MeetingController::class, 'show'])->name('meetings.show');
+    Route::get('/meetings/{meeting}/dashboard', [MeetingAttendanceController::class, 'dashboard'])->name('meetings.dashboard');
+
+    // Salles de reunion
+    Route::get('/meeting-rooms', [MeetingRoomController::class, 'index'])->name('meetings.rooms.index');
+    Route::post('/meeting-rooms', [MeetingRoomController::class, 'store'])->name('meetings.rooms.store');
 
     // Vérification QR
     Route::get('/qr-verification',        [QrVerificationController::class, 'index'])->name('qr-verification.index');
