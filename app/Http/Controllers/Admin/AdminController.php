@@ -1346,23 +1346,45 @@ class AdminController extends Controller
                         $ext      = strtolower($template->file_type ?: 'docx');
                         $filename = 'tpl_' . preg_replace('/[^a-zA-Z0-9_\-]/', '', $templateId) . '_' . time() . '.' . $ext;
                         $destDir  = public_path('images/templates');
-                        if (!is_dir($destDir)) {
-                            mkdir($destDir, 0755, true);
-                        }
+                        $savedAbsPath = '';
+                        $savedStoragePath = '';
+
                         // Supprimer l'ancien fichier si existant dans le dossier attendu
                         if ($template->storage_path && str_starts_with($template->storage_path, 'images/templates/')) {
                             $old = public_path($template->storage_path);
                             if (file_exists($old)) {
-                                unlink($old);
+                                @unlink($old);
                             }
                         }
-                        file_put_contents($destDir . '/' . $filename, $fileContent);
-                        $template->storage_path = 'images/templates/' . $filename;
+
+                        // Essai 1: écriture legacy dans public/images/templates
+                        try {
+                            if (!is_dir($destDir)) {
+                                mkdir($destDir, 0755, true);
+                            }
+                            file_put_contents($destDir . '/' . $filename, $fileContent);
+                            $savedAbsPath = $destDir . '/' . $filename;
+                            $savedStoragePath = 'images/templates/' . $filename;
+                        } catch (\Throwable $writePublicError) {
+                            // Essai 2 (fallback): disque public Laravel (storage/app/public/templates)
+                            $fallbackStoragePath = 'templates/' . $filename;
+                            \Illuminate\Support\Facades\Storage::disk('public')->put($fallbackStoragePath, $fileContent);
+                            $savedAbsPath = \Illuminate\Support\Facades\Storage::disk('public')->path($fallbackStoragePath);
+                            $savedStoragePath = $fallbackStoragePath;
+
+                            \Log::warning('OO callback write fallback to storage/public', [
+                                'template_id' => $templateId,
+                                'error' => $writePublicError->getMessage(),
+                                'saved_path' => $savedStoragePath,
+                            ]);
+                        }
+
+                        $template->storage_path = $savedStoragePath;
                         $template->save();
-                        \Log::info('OO file saved: images/templates/' . $filename . ' size=' . strlen($fileContent));
+                        \Log::info('OO file saved: ' . $savedStoragePath . ' size=' . strlen($fileContent));
 
                         // ── Extraction automatique des variables après sauvegarde OO ──
-                        $absNewPath = $destDir . '/' . $filename;
+                        $absNewPath = $savedAbsPath;
                         if (in_array($ext, ['docx', 'xlsx', 'pptx']) && file_exists($absNewPath)) {
                             foreach ($this->extractVarsFromUploadedFile($absNewPath) as $fileVar) {
                                 \App\Models\TemplateVariable::firstOrCreate(
