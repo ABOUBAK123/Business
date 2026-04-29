@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Database\QueryException;
 
 class UserController extends Controller
@@ -32,20 +33,37 @@ class UserController extends Controller
             'password' => 'required|string|min:8',
             'role'     => 'required|in:admin,user,signer,manager',
         ]);
-        $data['password'] = Hash::make($data['password']);
-        $data['status']   = 'active';
-        $data['locale']   = 'fr';
+
+        $payload = [
+            'name'      => $data['name'],
+            'full_name' => $data['name'],
+            'email'     => $data['email'],
+            'password'  => Hash::make($data['password']),
+            'role'      => $data['role'],
+            'status'    => 'active',
+            'locale'    => 'fr',
+        ];
+
         try {
-            User::create($data);
-        } catch (QueryException $e) {
+            User::create($payload);
+        } catch (\Throwable $e) {
+            Log::error('Admin UserController@store failed', [
+                'email' => $data['email'] ?? null,
+                'message' => $e->getMessage(),
+            ]);
+
             $msg = strtolower($e->getMessage());
-            if (str_contains($msg, 'unknown column') && str_contains($msg, 'locale')) {
-                unset($data['locale']);
-                User::create($data);
-            } else {
-                throw $e;
+            if ($e instanceof QueryException && str_contains($msg, 'unknown column') && str_contains($msg, 'locale')) {
+                unset($payload['locale']);
+                User::create($payload);
+                return redirect()->route('admin.users.index')->with('success', 'Utilisateur créé.');
             }
+
+            return back()
+                ->withInput()
+                ->withErrors(['users' => 'Échec de création utilisateur: ' . $e->getMessage()]);
         }
+
         return redirect()->route('admin.users.index')->with('success', 'Utilisateur créé.');
     }
 

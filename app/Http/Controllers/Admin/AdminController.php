@@ -1897,55 +1897,66 @@ class AdminController extends Controller
             'sub_entity_id'        => 'nullable|string|max:36',
         ]);
 
-        $fullName = trim(($data['prenoms'] ?? '') . ' ' . $data['nom']);
-        $avatarPath = null;
-        if ($request->hasFile('avatar')) {
-            $file = $request->file('avatar');
-            $filename = uniqid('avatar_') . '.' . $file->getClientOriginalExtension();
-            $file->move(public_path('images/avatars'), $filename);
-            $avatarPath = 'images/avatars/' . $filename;
-        }
-
-        $payload = [
-            'name'       => $data['name'],
-            'full_name'  => $fullName,
-            'email'      => $data['email'],
-            'password'   => Hash::make($data['password']),
-            'role'       => $data['role'],
-            'profile_id' => $data['profile_id'] ?? null,
-            'status'     => $data['status'] ?? 'active',
-            'quota'      => $data['quota'] ?? null,
-            'avatar'     => $avatarPath,
-            'locale'     => 'fr',
-        ];
-
         try {
-            $user = User::create($payload);
-        } catch (QueryException $e) {
-            $msg = strtolower($e->getMessage());
-            if (str_contains($msg, 'unknown column') && str_contains($msg, 'locale')) {
-                unset($payload['locale']);
-                $user = User::create($payload);
-            } else {
-                throw $e;
+            $fullName = trim(($data['prenoms'] ?? '') . ' ' . $data['nom']);
+            $avatarPath = null;
+            if ($request->hasFile('avatar')) {
+                $file = $request->file('avatar');
+                $filename = uniqid('avatar_') . '.' . $file->getClientOriginalExtension();
+                $file->move(public_path('images/avatars'), $filename);
+                $avatarPath = 'images/avatars/' . $filename;
             }
-        }
 
-        if (!empty($data['administration_type']) && !empty($data['administration_id'])) {
-            $subEntity = $data['sub_entity_id'] ? SubEntity::find($data['sub_entity_id']) : null;
-            $admin = $data['administration_type'] === 'emitter'
-                ? IssuingAdministration::find($data['administration_id'])
-                : RecipientAdministration::find($data['administration_id']);
-            UserDirectionAssignment::create([
-                'user_id'              => $user->id,
-                'direction_scope_type' => $data['administration_type'],
-                'direction_scope_id'   => $data['administration_id'],
-                'sub_entity_code'      => $subEntity?->code ?? null,
-                'direction_label'      => $subEntity?->name ?? $admin?->name ?? '',
+            $payload = [
+                'name'       => $data['name'],
+                'full_name'  => $fullName,
+                'email'      => $data['email'],
+                'password'   => Hash::make($data['password']),
+                'role'       => $data['role'],
+                'profile_id' => $data['profile_id'] ?? null,
+                'status'     => $data['status'] ?? 'active',
+                'quota'      => $data['quota'] ?? null,
+                'avatar'     => $avatarPath,
+                'locale'     => 'fr',
+            ];
+
+            try {
+                $user = User::create($payload);
+            } catch (QueryException $e) {
+                $msg = strtolower($e->getMessage());
+                if (str_contains($msg, 'unknown column') && str_contains($msg, 'locale')) {
+                    unset($payload['locale']);
+                    $user = User::create($payload);
+                } else {
+                    throw $e;
+                }
+            }
+
+            if (!empty($data['administration_type']) && !empty($data['administration_id'])) {
+                $subEntity = $data['sub_entity_id'] ? SubEntity::find($data['sub_entity_id']) : null;
+                $admin = $data['administration_type'] === 'emitter'
+                    ? IssuingAdministration::find($data['administration_id'])
+                    : RecipientAdministration::find($data['administration_id']);
+                UserDirectionAssignment::create([
+                    'user_id'              => $user->id,
+                    'direction_scope_type' => $data['administration_type'],
+                    'direction_scope_id'   => $data['administration_id'],
+                    'sub_entity_code'      => $subEntity?->code ?? null,
+                    'direction_label'      => $subEntity?->name ?? $admin?->name ?? '',
+                ]);
+            }
+
+            return redirect()->route('admin.index', ['tab' => 'users'])->with('success', 'Utilisateur créé avec succès.');
+        } catch (\Throwable $e) {
+            Log::error('storeUserTab failed', [
+                'email' => $data['email'] ?? null,
+                'message' => $e->getMessage(),
             ]);
-        }
 
-        return redirect()->route('admin.index', ['tab' => 'users'])->with('success', 'Utilisateur créé avec succès.');
+            return back()
+                ->withInput()
+                ->withErrors(['users' => 'Échec de création utilisateur: ' . $e->getMessage()]);
+        }
     }
 
     public function updateUserTab(Request $request, User $user)
