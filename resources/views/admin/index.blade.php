@@ -3876,12 +3876,12 @@ function toggleOoSecret() {
       </div>
 
       <div>
-        <label class="block text-xs font-medium text-gray-600 mb-1">Rôle <span class="text-red-500">*</span></label>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Profil applicatif <span class="text-red-500">*</span></label>
         <select id="c-role-profile" name="profile_id" required disabled
           class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none disabled:bg-gray-50 disabled:text-gray-400">
           <option value="">« Choisir une administration d'abord »</option>
         </select>
-        <p class="text-[11px] text-gray-400 mt-0.5">Les rôles disponibles dépendent de l'administration sélectionnée.</p>
+        <p class="text-[11px] text-gray-400 mt-0.5">Détermine la visibilité des onglets et sous-onglets dans l'application.</p>
       </div>
 
       <div>
@@ -3995,7 +3995,7 @@ function toggleOoSecret() {
       </select>
       <select id="e-profile" name="profile_id"
         class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
-        <option value="">« Profil métier (optionnel) »</option>
+        <option value="">« Aucun profil applicatif (super-admin si rôle admin) »</option>
         @foreach($profiles as $p)
         <option value="{{ $p->id }}">{{ $p->name }}</option>
         @endforeach

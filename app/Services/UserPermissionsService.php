@@ -80,12 +80,13 @@ class UserPermissionsService
      */
     public function resolve(User $user): array
     {
-        // Les admins Laravel ont tous les droits
-        if ($user->role === 'admin') {
+        // Super-admin = rôle système admin SANS profil applicatif → accès total à tout
+        // Un admin AVEC un profil applicatif est limité aux onglets cochés dans ce profil
+        if ($user->role === 'admin' && !$user->profile_id) {
             return ['isElevated' => true, 'permissions' => []];
         }
 
-        // Profil applicatif associé
+        // Profil applicatif associé (s'applique à tous les rôles système, y compris admin)
         if ($user->profile_id) {
             $profile = AdministrationProfile::find($user->profile_id);
             if ($profile && is_array($profile->permissions)) {
