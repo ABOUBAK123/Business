@@ -1058,8 +1058,23 @@ class AdminController extends Controller
             $storagePubPath = null;
         }
 
-        // Fallback robuste: créer un fichier bootstrap local si le template Office n'a pas de fichier.
-        if (!$exists && in_array($ext, ['docx', 'xlsx', 'pptx'], true)) {
+        // Si un storage_path est défini mais le fichier est introuvable, ne pas
+        // basculer silencieusement vers un template vierge: remonter une erreur claire.
+        if (!$exists && !empty($template->storage_path)) {
+            \Log::warning('OO getTemplateOoConfig file missing for existing storage_path', [
+                'template_id' => (string) $template->id,
+                'storage_path' => (string) $template->storage_path,
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'error' => 'Le fichier du modèle est introuvable sur le serveur. Réimportez le modèle avant ouverture dans OnlyOffice.',
+            ], 422);
+        }
+
+        // Fallback robuste: créer un fichier bootstrap local seulement si le template Office
+        // n'a vraiment aucun fichier associé.
+        if (!$exists && empty($template->storage_path) && in_array($ext, ['docx', 'xlsx', 'pptx'], true)) {
             $this->ensureTemplateBootstrapFile($template->fresh() ?: $template);
             $template = $template->fresh() ?: $template;
             if ($template->storage_path) {
