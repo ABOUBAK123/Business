@@ -41,8 +41,11 @@ class ChatController extends Controller
         $q = User::where('id', '!=', $me->id)->orderBy('name');
 
         if ($scope === 'same_admin') {
-            // Même administration uniquement
-            $q->where('issuing_administration_id', $me->issuing_administration_id);
+            // Même administration uniquement. Si l'utilisateur n'a pas d'admin liée,
+            // on évite de filtrer pour ne pas renvoyer une liste vide.
+            if (!empty($me->issuing_administration_id)) {
+                $q->where('issuing_administration_id', $me->issuing_administration_id);
+            }
         }
 
         $users = $q->select('id', 'name', 'role', 'issuing_administration_id')->get()

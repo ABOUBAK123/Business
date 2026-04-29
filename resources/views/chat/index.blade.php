@@ -110,6 +110,8 @@ let curTab  = 'group';
 let lastTs  = null;
 let timer   = null;
 let users   = {};
+let seenMsgIds = new Set();
+let fetching = false;
 
 // Salons prédéfinis
 const SALONS = [
@@ -184,6 +186,7 @@ function ucRole(r){ return r==='admin'?'Administrateur':r==='superadmin'?'Super 
 // ── Ouvrir conversation ───────────────────────────────────────
 function openConv(room, name, color, type) {
     curRoom=room; curName=name; curColor=color; curType=type; lastTs=null;
+    seenMsgIds = new Set();
 
     document.querySelectorAll('.conv-item').forEach(e=>e.classList.remove('active'));
     const ci = document.querySelector(`.conv-item[data-room="${room}"]`);
@@ -215,6 +218,8 @@ function openConv(room, name, color, type) {
 // ── Polling ───────────────────────────────────────────────────
 async function fetchMessages(init) {
     if (!curRoom) return;
+    if (fetching) return;
+    fetching = true;
     let url = `/chat/messages?room=${encodeURIComponent(curRoom)}`;
     if (!init && lastTs) url += `&since=${encodeURIComponent(lastTs)}`;
     try {
@@ -227,7 +232,10 @@ async function fetchMessages(init) {
         msgs.forEach(m => appendMsg(m));
         lastTs = msgs[msgs.length-1].ts;
         if (init || atBot) body.scrollTop = body.scrollHeight;
-    } catch(e) {}
+    } catch(e) {
+    } finally {
+        fetching = false;
+    }
 }
 
 // ── Afficher bulle ────────────────────────────────────────────
@@ -235,6 +243,11 @@ function appendMsg(m) {
     const body = document.getElementById('msg-body');
     const nc = document.getElementById('no-conv-msg');
     if (nc) nc.remove();
+
+    if (m && m.id && seenMsgIds.has(m.id)) return;
+    if (m && m.id) seenMsgIds.add(m.id);
+
+    if (m && m.id && body.querySelector(`.msg-row[data-id="${m.id}"]`)) return;
 
     const row = document.createElement('div');
     row.className = 'msg-row' + (m.mine?' mine':'');
@@ -297,85 +310,4 @@ document.getElementById('conv-search').addEventListener('input', filterConv);
 </script>
 @endpush
 
-@endsection
-@extends('layouts.app')
-@section('title', 'Chat')
-@section('page-title', 'Chat')
-@section('content')
-
-<div class="max-w-3xl mx-auto flex flex-col h-[calc(100vh-160px)]">
-    <div class="bg-white rounded-xl border border-gray-100 shadow-sm flex flex-col flex-1 overflow-hidden">
-
-        <!-- Header -->
-        <div class="p-4 border-b border-gray-100 flex items-center gap-3">
-            <div class="w-9 h-9 bg-indigo-100 rounded-full flex items-center justify-center">
-                <i class="fas fa-comments text-indigo-600"></i>
-            </div>
-            <div>
-                <p class="font-semibold text-gray-800 text-sm">Salle générale</p>
-                <p class="text-xs text-gray-400" id="onlineStatus">Connecté</p>
-            </div>
-        </div>
-
-        <!-- Messages -->
-        <div id="messages" class="flex-1 overflow-y-auto p-4 space-y-3">
-            <div class="text-center text-xs text-gray-400 py-4">Chargement des messages...</div>
-        </div>
-
-        <!-- Zone de saisie -->
-        <div class="p-4 border-t border-gray-100">
-            <form id="chatForm" class="flex gap-3">
-                @csrf
-                <input type="text" id="messageInput" placeholder="Écrire un message..."
-                       class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                       autocomplete="off">
-                <button type="submit" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-indigo-700">
-                    <i class="fas fa-paper-plane"></i>
-                </button>
-            </form>
-        </div>
-    </div>
-</div>
-
-<script>
-const myName = @json(auth()->user()->name);
-let lastId = 0;
-
-async function loadMessages() {
-    const res = await fetch('{{ route('chat.messages') }}');
-    const msgs = await res.json();
-    renderMessages(msgs);
-}
-
-function renderMessages(msgs) {
-    const box = document.getElementById('messages');
-    box.innerHTML = msgs.map(m => {
-        const isMe = m.sender_name === myName;
-        return `<div class="flex ${isMe ? 'justify-end' : 'justify-start'}">
-            <div class="max-w-xs ${isMe ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-800'} rounded-2xl px-4 py-2 text-sm">
-                ${!isMe ? `<p class="text-xs font-bold mb-1 ${isMe ? 'text-indigo-200' : 'text-indigo-600'}">${m.sender_name}</p>` : ''}
-                <p>${m.text}</p>
-            </div>
-        </div>`;
-    }).join('') || '<div class="text-center text-xs text-gray-400 py-8">Aucun message pour l\'instant</div>';
-    box.scrollTop = box.scrollHeight;
-}
-
-document.getElementById('chatForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const input = document.getElementById('messageInput');
-    const text = input.value.trim();
-    if (!text) return;
-    input.value = '';
-    await fetch('{{ route('chat.send') }}', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('[name=_token]')?.value || '{{ csrf_token() }}'},
-        body: JSON.stringify({ text, room: 'general' })
-    });
-    await loadMessages();
-});
-
-loadMessages();
-setInterval(loadMessages, 3000);
-</script>
 @endsection
