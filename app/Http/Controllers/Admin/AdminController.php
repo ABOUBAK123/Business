@@ -1901,10 +1901,8 @@ class AdminController extends Controller
             $fullName = trim(($data['prenoms'] ?? '') . ' ' . $data['nom']);
             $avatarPath = null;
             if ($request->hasFile('avatar')) {
-                $file = $request->file('avatar');
-                $filename = uniqid('avatar_') . '.' . $file->getClientOriginalExtension();
-                $file->move(public_path('images/avatars'), $filename);
-                $avatarPath = 'images/avatars/' . $filename;
+                $storedPath = $request->file('avatar')->store('avatars', 'public');
+                $avatarPath = 'storage/' . ltrim($storedPath, '/');
             }
 
             $payload = [
@@ -1991,14 +1989,17 @@ class AdminController extends Controller
             $update['password'] = Hash::make($data['password']);
         }
         if ($request->hasFile('avatar')) {
-            if ($user->avatar && str_starts_with($user->avatar, 'images/')) {
+            if ($user->avatar && str_starts_with($user->avatar, 'storage/')) {
+                $oldStorage = ltrim(substr($user->avatar, strlen('storage/')), '/');
+                if (Storage::disk('public')->exists($oldStorage)) {
+                    Storage::disk('public')->delete($oldStorage);
+                }
+            } elseif ($user->avatar && str_starts_with($user->avatar, 'images/')) {
                 $old = public_path($user->avatar);
                 if (file_exists($old)) @unlink($old);
             }
-            $file = $request->file('avatar');
-            $filename = uniqid('avatar_') . '.' . $file->getClientOriginalExtension();
-            $file->move(public_path('images/avatars'), $filename);
-            $update['avatar'] = 'images/avatars/' . $filename;
+            $storedPath = $request->file('avatar')->store('avatars', 'public');
+            $update['avatar'] = 'storage/' . ltrim($storedPath, '/');
         }
         $user->update($update);
 
@@ -2027,7 +2028,12 @@ class AdminController extends Controller
 
     public function destroyUserTab(User $user)
     {
-        if ($user->avatar && str_starts_with($user->avatar, 'images/')) {
+        if ($user->avatar && str_starts_with($user->avatar, 'storage/')) {
+            $oldStorage = ltrim(substr($user->avatar, strlen('storage/')), '/');
+            if (Storage::disk('public')->exists($oldStorage)) {
+                Storage::disk('public')->delete($oldStorage);
+            }
+        } elseif ($user->avatar && str_starts_with($user->avatar, 'images/')) {
             $old = public_path($user->avatar);
             if (file_exists($old)) @unlink($old);
         }

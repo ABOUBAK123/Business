@@ -44,8 +44,13 @@ class ProfileController extends Controller
 
         $user = Auth::user();
 
-        // Supprimer l'ancienne photo si elle est dans public/images/avatars/
-        if ($user->avatar && str_starts_with($user->avatar, 'images/avatars/')) {
+        // Supprimer l'ancienne photo (nouveau format storage/* et ancien format images/*)
+        if ($user->avatar && str_starts_with($user->avatar, 'storage/')) {
+            $oldStorage = ltrim(substr($user->avatar, strlen('storage/')), '/');
+            if (Storage::disk('public')->exists($oldStorage)) {
+                Storage::disk('public')->delete($oldStorage);
+            }
+        } elseif ($user->avatar && str_starts_with($user->avatar, 'images/avatars/')) {
             $oldPath = public_path($user->avatar);
             if (file_exists($oldPath)) {
                 @unlink($oldPath);
@@ -63,9 +68,8 @@ class ProfileController extends Controller
         ];
         $safExt   = $mimeToExt[$file->getMimeType()] ?? 'jpg';
         $filename = uniqid('avatar_') . '.' . $safExt;
-
-        $file->move(public_path('images/avatars'), $filename);
-        $user->avatar = 'images/avatars/' . $filename;
+        $storedPath = Storage::disk('public')->putFileAs('avatars', $file, $filename);
+        $user->avatar = 'storage/' . ltrim($storedPath, '/');
         $user->save();
 
         return back()->with('success', 'Photo de profil mise à jour.');

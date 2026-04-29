@@ -13,7 +13,7 @@
         <div class="px-6 py-6 border-b border-gray-100 bg-gradient-to-r from-[#2453d6] to-blue-500 flex items-center gap-5">
             <div class="relative group flex-shrink-0">
                 <div class="h-20 w-20 rounded-full overflow-hidden border-4 border-white/40 flex items-center justify-center font-black text-3xl text-white bg-white/20">
-                    @if($user->avatar && file_exists(public_path($user->avatar)))
+                    @if($user->avatar)
                         <img src="{{ asset($user->avatar) }}" alt="avatar" class="h-full w-full object-cover">
                     @else
                         {{ strtoupper(substr($user->name ?? 'U', 0, 2)) }}
