@@ -418,6 +418,7 @@ class AdminController extends Controller
             ],
             'name'              => 'required|string|max:255',
             'administration_id' => 'nullable|string',
+            'template_id'       => 'nullable|string',
         ]);
 
         $file      = $request->file('file');
@@ -429,16 +430,31 @@ class AdminController extends Controller
         // Stocker dans storage/app/public/templates/
         $storedPath = $file->storeAs('templates', $fileName, 'public');
 
-        // Créer le template en base
-        $template = DocumentTemplate::create([
-            'name'              => $request->input('name'),
-            'file_name'         => $file->getClientOriginalName(),
-            'file_type'         => $ext,
-            'storage_path'      => $storedPath,
-            'content'           => '',
-            'administration_id' => $request->input('administration_id') ?: null,
-            'created_by'        => auth()->id(),
-        ]);
+        $targetTemplateId = (string) ($request->input('template_id') ?: '');
+        $template = null;
+        if ($targetTemplateId !== '') {
+            $template = DocumentTemplate::find($targetTemplateId);
+        }
+
+        if ($template) {
+            $template->name = (string) $request->input('name');
+            $template->file_name = (string) $file->getClientOriginalName();
+            $template->file_type = (string) $ext;
+            $template->storage_path = (string) $storedPath;
+            $template->administration_id = $request->input('administration_id') ?: null;
+            $template->save();
+        } else {
+            // Créer le template en base
+            $template = DocumentTemplate::create([
+                'name'              => $request->input('name'),
+                'file_name'         => $file->getClientOriginalName(),
+                'file_type'         => $ext,
+                'storage_path'      => $storedPath,
+                'content'           => '',
+                'administration_id' => $request->input('administration_id') ?: null,
+                'created_by'        => auth()->id(),
+            ]);
+        }
 
         // ── Auto-extraction des variables {{}} depuis le fichier Office ────────
         $extractedVars = [];

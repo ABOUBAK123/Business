@@ -706,6 +706,7 @@ if (!array_key_exists($tab, $tabs)) {
     var _adminBase = _adminBaseRuntime || _adminBaseServer || '/admin';
     window._adminBase = _adminBase;
     var _adminTplBase = _adminBase + '/templates';
+    var _tplOoUploadTargetId = null;
     window._tplStoreUrl = @json(route('admin.templates.store'));
     var _tplOoDebug = false;
     function _tplOoLog() {
@@ -943,9 +944,10 @@ if (!array_key_exists($tab, $tabs)) {
 
 
     // --- Ouvrir le panneau d'import de fichier --------------------------------
-    function tplOoOpenUpload() {
+    function tplOoOpenUpload(targetTemplateId) {
         var uploadPanel = document.getElementById('tpl-oo-upload-panel');
         var createPanel = document.getElementById('tpl-oo-create-panel');
+      _tplOoUploadTargetId = targetTemplateId || null;
         if (uploadPanel) uploadPanel.classList.remove('hidden');
         if (createPanel) createPanel.classList.add('hidden');
         tplOoShowStatus('S�lectionnez un fichier DOCX, XLSX, PPTX ou PDF � importer comme mod�le.', 0);
@@ -1046,6 +1048,7 @@ if (!array_key_exists($tab, $tabs)) {
         formData.append('file', fileInput.files[0]);
         var upAdmin = document.getElementById('tpl-oo-up-admin');
         if (upAdmin && upAdmin.value) formData.set('administration_id', upAdmin.value);
+        if (_tplOoUploadTargetId) formData.set('template_id', _tplOoUploadTargetId);
         var xhr = new XMLHttpRequest();
         xhr.open('POST', _adminTplBase + '/upload-file');
         xhr.setRequestHeader('X-CSRF-TOKEN', document.querySelector('meta[name="csrf-token"]').content);
@@ -1063,6 +1066,7 @@ if (!array_key_exists($tab, $tabs)) {
             var cfg = JSON.parse(xhr.responseText);
             var upPanel = document.getElementById('tpl-oo-upload-panel');
             if (upPanel) upPanel.classList.add('hidden');
+            _tplOoUploadTargetId = null;
             tplOoShowStatus('Chargement en cours...', 0);
 
             var tplId = cfg.template_id || null;
@@ -1841,35 +1845,17 @@ if (!array_key_exists($tab, $tabs)) {
                 return;
             }
             tplOoClosCreatePanel();
-            tplOoShowStatus('Modèle créé avec succès. Ouverture de l\'éditeur OnlyOffice…', 5000);
+            tplOoShowStatus('Modèle créé. Importez maintenant le fichier source du modèle.', 6000);
             tplOoInjectInList(data);
             if (nameEl) nameEl.value = '';
             if (fileEl) fileEl.value = '';
             if (typeEl) typeEl.value = 'docx';
 
-            // Ouvrir immédiatement le template créé dans OnlyOffice
+            // Ouvrir le panneau d'import pour remplacer le bootstrap par le vrai fichier
             var tplId = data.id || data.template_id;
             if (tplId) {
-              tplOoArmCloseGuard(tplId);
               openModal('modal-tpl-oo');
-              fetch(_adminTplBase + '/' + tplId + '/oo-config', {
-                headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfMeta ? csrfMeta.content : '' }
-              })
-              .then(function(r) { return r.json(); })
-              .then(function(cfg) {
-                if (cfg.error) { tplOoShowStatus('Erreur : ' + cfg.error, 7000); return; }
-                if (cfg.warning) { tplOoShowStatus('Avertissement réseau : ' + cfg.warning, 8000); }
-                if (cfg.template_id && cfg.template_id !== tplId) {
-                  console.log('[CloseGuard] Mismatch create flow: expected', tplId, 'got', cfg.template_id);
-                  tplOoArmCloseGuard(cfg.template_id);
-                }
-                if (cfg.has_file) {
-                  // Avec bootstrap serveur, on n'a plus besoin de bloquer la fermeture en continu.
-                  tplOoDisarmCloseGuard();
-                }
-                tplOoLoadEditor(cfg);
-              })
-              .catch(function(err) { tplOoShowStatus('Erreur réseau : ' + err.message, 5000); });
+              tplOoOpenUpload(tplId);
             }
         })
         .catch(function(err) {
