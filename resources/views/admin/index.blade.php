@@ -1767,7 +1767,7 @@ if (!array_key_exists($tab, $tabs)) {
       var createPanel = document.getElementById('tpl-oo-create-panel');
       if (createPanel) createPanel.classList.add('hidden');
       tplOoOpenUpload(null);
-      tplOoShowStatus('Importez un fichier contenant des variables (ex: {{ nom_client }}).', 6000);
+      tplOoShowStatus('Importez un fichier contenant des variables (ex: @{{ nom_client }}).', 6000);
     }
     window.tplOoCreateModel = tplOoCreateModel;
 
