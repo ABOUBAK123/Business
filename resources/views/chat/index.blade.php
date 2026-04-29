@@ -112,6 +112,8 @@ let timer   = null;
 let users   = {};
 let seenMsgIds = new Set();
 let fetching = false;
+let hbTimer = null;
+let contactsTimer = null;
 
 // Salons prédéfinis
 const SALONS = [
@@ -148,7 +150,7 @@ function setTab(tab) {
         document.getElementById('tab-'+t).className = 'tab-btn ' + (t===tab?'on':'off');
         document.getElementById('list-'+t).classList.toggle('hidden', t!==tab);
     });
-    if (tab === 'direct' && Object.keys(users).length === 0) loadUsers();
+    if (tab === 'direct') loadUsers();
 }
 
 // ── Charger contacts ─────────────────────────────────────────
@@ -160,6 +162,7 @@ async function loadUsers() {
         const list = await r.json();
         const el = document.getElementById('list-direct');
         el.innerHTML = '';
+        users = {};
         list.forEach(u => {
             users[u.id] = u;
             const c   = COLORS[u.name.charCodeAt(0) % COLORS.length];
@@ -170,7 +173,7 @@ async function loadUsers() {
             d.dataset.name = u.name;
             d.dataset.color = c;
             d.innerHTML = `<div class="c-av ${c}">${u.initials}</div>
-                <div style="flex:1;min-width:0"><div class="conv-name">${esc(u.name)}</div><div class="conv-preview">${ucRole(u.role)}</div></div>`;
+                <div style="flex:1;min-width:0"><div class="conv-name">${esc(u.name)}</div><div class="conv-preview"><span style="display:inline-block;width:7px;height:7px;border-radius:9999px;background:#22c55e;vertical-align:middle;margin-right:6px;"></span>En ligne • ${ucRole(u.role)}</div></div>`;
             d.onclick = () => openConv(dm, u.name, c, 'direct');
             el.appendChild(d);
         });
@@ -182,6 +185,28 @@ async function loadUsers() {
 
 function dmRoom(a,b){ return 'dm_'+[a,b].sort().join('_'); }
 function ucRole(r){ return r==='admin'?'Administrateur':r==='superadmin'?'Super Admin':'Utilisateur'; }
+
+async function sendHeartbeat() {
+    try {
+        await fetch('/chat/heartbeat', {
+            method: 'POST',
+            headers: {'X-CSRF-TOKEN': CSRF}
+        });
+    } catch (e) {}
+}
+
+function startPresenceLoops() {
+    sendHeartbeat();
+    if (hbTimer) clearInterval(hbTimer);
+    hbTimer = setInterval(sendHeartbeat, 20000);
+
+    if (contactsTimer) clearInterval(contactsTimer);
+    contactsTimer = setInterval(function() {
+        if (curTab === 'direct') {
+            loadUsers();
+        }
+    }, 20000);
+}
 
 // ── Ouvrir conversation ───────────────────────────────────────
 function openConv(room, name, color, type) {
@@ -307,6 +332,15 @@ function filterConv(){
     });
 }
 document.getElementById('conv-search').addEventListener('input', filterConv);
+
+document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) {
+        sendHeartbeat();
+        if (curTab === 'direct') loadUsers();
+    }
+});
+
+startPresenceLoops();
 </script>
 @endpush
 

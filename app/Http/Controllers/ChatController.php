@@ -8,10 +8,28 @@ use App\Models\User;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 
 class ChatController extends Controller
 {
+    private const ONLINE_TTL_SECONDS = 70;
+
+    private function onlineKey(string $userId): string
+    {
+        return 'chat:online:' . $userId;
+    }
+
+    private function touchOnline(string $userId): void
+    {
+        Cache::put($this->onlineKey($userId), true, now()->addSeconds(self::ONLINE_TTL_SECONDS));
+    }
+
+    private function isUserOnline(string $userId): bool
+    {
+        return Cache::has($this->onlineKey($userId));
+    }
+
     private function chatEnabled(): bool
     {
         $s = AppSetting::where('key', 'chat_enabled')->first();
@@ -27,6 +45,10 @@ class ChatController extends Controller
     public function index()
     {
         abort_unless($this->chatEnabled(), 403, 'Le chat est désactivé par l\'administrateur.');
+        $me = Auth::user();
+        if ($me) {
+            $this->touchOnline((string) $me->id);
+        }
         return view('chat.index', [
             'chatScope' => $this->chatScope(),
         ]);
@@ -36,6 +58,7 @@ class ChatController extends Controller
     public function users(Request $request)
     {
         $me = Auth::user();
+        $this->touchOnline((string) $me->id);
         $scope = $this->chatScope();
 
         $q = User::where('id', '!=', $me->id)->orderBy('name');
@@ -49,11 +72,13 @@ class ChatController extends Controller
         }
 
         $users = $q->select('id', 'name', 'role', 'issuing_administration_id')->get()
+            ->filter(fn($u) => $this->isUserOnline((string) $u->id))
             ->map(fn($u) => [
                 'id'       => $u->id,
                 'name'     => $u->name,
                 'initials' => strtoupper(substr($u->name, 0, 2)),
                 'role'     => $u->role ?? 'user',
+                'online'   => true,
             ]);
 
         return response()->json($users);
@@ -64,6 +89,7 @@ class ChatController extends Controller
     {
         abort_unless($this->chatEnabled(), 403);
         $me = Auth::user();
+        $this->touchOnline((string) $me->id);
 
         $room  = $request->get('room', 'general');
         $since = $request->get('since'); // timestamp pour polling
@@ -105,6 +131,7 @@ class ChatController extends Controller
         ]);
 
         $user = Auth::user();
+        $this->touchOnline((string) $user->id);
         $room = $request->get('room', 'general');
         $type = $request->get('recipient_id') ? 'direct' : 'group';
 
@@ -134,6 +161,18 @@ class ChatController extends Controller
             'ts'       => now()->toISOString(),
             'mine'     => true,
         ], 201);
+    }
+
+    public function heartbeat()
+    {
+        abort_unless($this->chatEnabled(), 403);
+        $me = Auth::user();
+        $this->touchOnline((string) $me->id);
+
+        return response()->json([
+            'ok' => true,
+            'online_until' => now()->addSeconds(self::ONLINE_TTL_SECONDS)->toISOString(),
+        ]);
     }
 }
 
