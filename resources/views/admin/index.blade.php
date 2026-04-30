@@ -4103,6 +4103,7 @@ function toggleOoSecret() {
           <option value="{{ $p->id }}">{{ $p->name }}</option>
           @endforeach
         </select>
+      </div>
       <div class="grid grid-cols-2 gap-3">
         @if(isset($adminScope) && $adminScope && !$canManageAdministration)
         <input type="hidden" name="administration_type" value="{{ $adminScope['type'] }}">
