@@ -36,6 +36,7 @@ $allTabs = [
 ];
 $permSvcAdmin = app(\App\Services\UserPermissionsService::class);
 $permSetAdmin = $permSvcAdmin->permissionsSet(auth()->user());
+$canManageAdministration = ($permSetAdmin['isElevated'] ?? false) || ((auth()->user()->role ?? '') === 'admin');
 $tabs = array_filter($allTabs, function($v) use ($permSetAdmin) {
     $perm = $v[3];
     if ($perm === null) return true;
@@ -4056,7 +4057,7 @@ function toggleOoSecret() {
       </div>
 
       <div class="grid grid-cols-2 gap-3">
-        @if(isset($adminScope) && $adminScope && !($permSetAdmin['isElevated'] ?? false))
+        @if(isset($adminScope) && $adminScope && !$canManageAdministration)
         <input type="hidden" name="administration_type" value="{{ $adminScope['type'] }}">
         <input type="hidden" name="administration_id" value="{{ $adminScope['id'] }}">
         <div class="col-span-2 border border-blue-100 rounded-lg px-3 py-2.5 text-sm bg-blue-50 text-blue-800 flex items-center gap-2">
@@ -4193,7 +4194,7 @@ function toggleOoSecret() {
       </select>
 
       <div class="grid grid-cols-2 gap-3">
-        @if(isset($adminScope) && $adminScope && !($permSetAdmin['isElevated'] ?? false))
+        @if(isset($adminScope) && $adminScope && !$canManageAdministration)
         <input type="hidden" name="administration_type" value="{{ $adminScope['type'] }}">
         <input type="hidden" name="administration_id" value="{{ $adminScope['id'] }}">
         <div class="col-span-2 border border-blue-100 rounded-lg px-3 py-2.5 text-sm bg-blue-50 text-blue-800 flex items-center gap-2">
