@@ -39,16 +39,25 @@ class ReceptionController extends Controller
         }
 
         $recipientAdminIds = collect();
-        $adminCode = strtoupper(trim((string) ($user?->profile?->administration?->code ?? '')));
-        if ($adminCode !== '' && Schema::hasTable('recipient_administrations')) {
-            try {
-                $recipientAdminIds = RecipientAdministration::query()
-                    ->whereRaw('UPPER(code) = ?', [$adminCode])
-                    ->pluck('id');
-            } catch (\Throwable $e) {
-                Log::warning('Reception fallback: cannot query recipient_administrations', [
-                    'message' => $e->getMessage(),
-                ]);
+        $profile = $user?->profile;
+
+        // Si l'utilisateur appartient directement à une administration destinataire,
+        // son profil a administration_type='recipient' et administration_id = id de la RecipientAdministration
+        if ($profile && $profile->administration_type === 'recipient' && $profile->administration_id) {
+            $recipientAdminIds = collect([$profile->administration_id]);
+        } elseif (Schema::hasTable('recipient_administrations')) {
+            // Fallback : chercher par le code de l'administration émettrice (cas emetteur)
+            $adminCode = strtoupper(trim((string) ($profile?->administration?->code ?? '')));
+            if ($adminCode !== '') {
+                try {
+                    $recipientAdminIds = RecipientAdministration::query()
+                        ->whereRaw('UPPER(code) = ?', [$adminCode])
+                        ->pluck('id');
+                } catch (\Throwable $e) {
+                    Log::warning('Reception fallback: cannot query recipient_administrations', [
+                        'message' => $e->getMessage(),
+                    ]);
+                }
             }
         }
 

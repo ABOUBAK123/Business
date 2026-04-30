@@ -635,31 +635,30 @@ class DocumentController extends Controller
                 'recipient_administration_id' => $recipientAdministration->id,
             ]));
 
-            $adminCode = strtoupper(trim((string) ($recipientAdministration->code ?? '')));
-            if ($adminCode !== '') {
-                $targetUsers = User::query()
-                    ->where('status', 'active')
-                    ->whereHas('profile.administration', function ($q) use ($adminCode) {
-                        $q->whereRaw('UPPER(code) = ?', [$adminCode]);
-                    })
-                    ->get(['id', 'email']);
+            // Chercher les utilisateurs dont le profil appartient directement à cette administration destinataire
+            $targetUsers = User::query()
+                ->where('status', 'active')
+                ->whereHas('profile', function ($q) use ($recipientAdministrationId) {
+                    $q->where('administration_id', $recipientAdministrationId)
+                      ->where('administration_type', 'recipient');
+                })
+                ->get(['id', 'email']);
 
-                foreach ($targetUsers as $targetUser) {
-                    $createdShares->push(DocumentShare::create($basePayload + [
-                        'recipient_name' => 'user:' . $targetUser->id,
-                        'recipient_email' => $targetUser->email,
-                        'recipient_administration_id' => $recipientAdministration->id,
-                    ]));
+            foreach ($targetUsers as $targetUser) {
+                $createdShares->push(DocumentShare::create($basePayload + [
+                    'recipient_name' => 'user:' . $targetUser->id,
+                    'recipient_email' => $targetUser->email,
+                    'recipient_administration_id' => $recipientAdministration->id,
+                ]));
 
-                    Notification::create([
-                        'recipient_id' => $targetUser->id,
-                        'title' => 'Document recu (administration)',
-                        'message' => 'Le document "' . $document->title . '" a ete partage a votre administration.',
-                        'type' => 'info',
-                        'action_url' => route('reception.index'),
-                        'is_read' => false,
-                    ]);
-                }
+                Notification::create([
+                    'recipient_id' => $targetUser->id,
+                    'title' => 'Document recu (administration)',
+                    'message' => 'Le document "' . $document->title . '" a ete partage a votre administration.',
+                    'type' => 'info',
+                    'action_url' => route('reception.index'),
+                    'is_read' => false,
+                ]);
             }
 
             if ($trackingNumber !== '') {
