@@ -4065,8 +4065,6 @@ function toggleOoSecret() {
           <option value="{{ $p->id }}">{{ $p->name }}</option>
           @endforeach
         </select>
-      </div>
-
       <div class="grid grid-cols-2 gap-3">
         @if(isset($adminScope) && $adminScope && !$canManageAdministration)
         <input type="hidden" name="administration_type" value="{{ $adminScope['type'] }}">
@@ -5351,12 +5349,17 @@ if (request('edit_profile')) {
             @php
                 $perms = is_array($profile->permissions) ? ($profile->permissions['menuPermissions'] ?? $profile->permissions) : [];
                 $userCount = \App\Models\User::where('profile_id', $profile->id)->count();
+                $profileAdministrationLabel = $profile->administration_label;
+                $profileAdministrationTypeLabel = $profile->administration_type_label;
             @endphp
-            <tr data-search="{{ strtolower($profile->name . ' ' . ($profile->description ?? '') . ' ' . ($profile->administration?->name ?? '')) }}"
+            <tr data-search="{{ strtolower($profile->name . ' ' . ($profile->description ?? '') . ' ' . $profileAdministrationLabel . ' ' . $profileAdministrationTypeLabel) }}"
                 class="hover:bg-gray-50 transition">
                 <td class="px-4 py-3 font-semibold text-gray-800 truncate max-w-[150px]">{{ $profile->name }}</td>
                 <td class="px-4 py-3 text-gray-500 truncate max-w-[160px]">{{ $profile->description ?: '—' }}</td>
-                <td class="px-4 py-3 text-gray-500 truncate max-w-[150px] hidden md:table-cell">{{ $profile->administration?->name ?? '—' }}</td>
+                <td class="px-4 py-3 text-gray-500 max-w-[180px] hidden md:table-cell">
+                    <div class="truncate">{{ $profileAdministrationLabel }}</div>
+                    <div class="text-[11px] text-gray-400">{{ $profileAdministrationTypeLabel }}</div>
+                </td>
                 <td class="px-4 py-3 text-center hidden lg:table-cell">
                     <span class="inline-flex items-center gap-1 text-xs bg-purple-50 text-purple-700 border border-purple-100 px-2 py-0.5 rounded-full font-semibold">
                         <i class="fas fa-shield-alt"></i> {{ count($perms) }}
@@ -5374,7 +5377,7 @@ if (request('edit_profile')) {
                 <td class="px-4 py-3 text-right whitespace-nowrap">
                     <div class="inline-flex items-center gap-2">
                         <button type="button"
-                           onclick="openProfileEditModal({{ json_encode(['id'=>$profile->id,'name'=>$profile->name,'description'=>$profile->description ?? '','perms'=>is_array($profile->permissions) ? ($profile->permissions['menuPermissions'] ?? $profile->permissions) : []]) }})"
+                           onclick="openProfileEditModal({{ json_encode(['id'=>$profile->id,'name'=>$profile->name,'description'=>$profile->description ?? '','administration_type'=>$profile->effective_administration_type,'administration_id'=>$profile->administration_id,'perms'=>is_array($profile->permissions) ? ($profile->permissions['menuPermissions'] ?? $profile->permissions) : []]) }})"
                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition">
                             <i class="fas fa-pen"></i> Modifier
                         </button>
@@ -5414,6 +5417,11 @@ function profilesSearch(q) {
 </script>
 @endpush
 
+@php
+    $profileEmitterOptions = $emitters->map(fn($emitter) => ['id' => $emitter->id, 'name' => $emitter->name])->values();
+    $profileRecipientOptions = $recipients->map(fn($recipient) => ['id' => $recipient->id, 'name' => $recipient->name])->values();
+@endphp
+
 {{-- Modal: create profile --}}
 <div id="modal-profile-create" class="adm-modal">
     <div class="adm-modal-box max-w-xl">
@@ -5434,19 +5442,37 @@ function profilesSearch(q) {
                 </div>
                 <div class="col-span-2">
                     <label class="block text-sm font-semibold text-gray-700 mb-1">Administration associée</label>
-                    @if(isset($adminScope) && $adminScope && $adminScope['type'] === 'emitter')
+                    @if(isset($adminScope) && $adminScope)
+                    <input type="hidden" name="administration_type" value="{{ $adminScope['type'] }}">
                     <input type="hidden" name="administration_id" value="{{ $adminScope['id'] }}">
-                    <div class="w-full border border-gray-100 rounded-xl px-4 py-2.5 text-sm bg-gray-50 text-gray-700 flex items-center gap-2">
-                      <i class="fas fa-building text-gray-400"></i>
-                      {{ $emitters->first()?->name ?? '--' }}
+                    <div class="w-full border border-gray-100 rounded-xl px-4 py-2.5 text-sm bg-gray-50 text-gray-700 flex items-center justify-between gap-3">
+                      <span class="flex items-center gap-2 min-w-0">
+                        <i class="fas fa-building text-gray-400"></i>
+                        <span class="truncate">{{ $adminScope['type'] === 'recipient' ? ($recipients->first()?->name ?? '--') : ($emitters->first()?->name ?? '--') }}</span>
+                      </span>
+                      <span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                        {{ $adminScope['type'] === 'recipient' ? 'Destinataire' : 'Émettrice' }}
+                      </span>
                     </div>
                     @else
-                    <select name="administration_id" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400">
-                      <option value="">« Aucune (global) »</option>
-                      @foreach($emitters as $e)
-                      <option value="{{ $e->id }}">{{ $e->name }}</option>
-                      @endforeach
-                    </select>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600 mb-1">Type d'administration</label>
+                            <select id="create-profile-admin-type" name="administration_type" onchange="profileAdministrationTypeChange('create')"
+                                class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400">
+                                <option value="">« Aucune (globale) »</option>
+                                <option value="emitter">Émettrice</option>
+                                <option value="recipient">Destinataire</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600 mb-1">Administration</label>
+                            <select id="create-profile-administration-id" name="administration_id" disabled
+                                class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:bg-gray-50 disabled:text-gray-400">
+                                <option value="">Sélectionner une administration</option>
+                            </select>
+                        </div>
+                    </div>
                     @endif
                 </div>
             </div>
@@ -5500,6 +5526,41 @@ function profilesSearch(q) {
                     <label class="block text-sm font-semibold text-gray-700 mb-1">Description</label>
                     <input type="text" id="edit-profile-description" name="description" placeholder="Rôle ou usage"
                         class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400">
+                </div>
+                <div class="col-span-2">
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">Administration associée</label>
+                    @if(isset($adminScope) && $adminScope)
+                    <input type="hidden" name="administration_type" value="{{ $adminScope['type'] }}">
+                    <input type="hidden" name="administration_id" value="{{ $adminScope['id'] }}">
+                    <div class="w-full border border-gray-100 rounded-xl px-4 py-2.5 text-sm bg-gray-50 text-gray-700 flex items-center justify-between gap-3">
+                        <span class="flex items-center gap-2 min-w-0">
+                            <i class="fas fa-building text-gray-400"></i>
+                            <span class="truncate">{{ $adminScope['type'] === 'recipient' ? ($recipients->first()?->name ?? '--') : ($emitters->first()?->name ?? '--') }}</span>
+                        </span>
+                        <span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                            {{ $adminScope['type'] === 'recipient' ? 'Destinataire' : 'Émettrice' }}
+                        </span>
+                    </div>
+                    @else
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600 mb-1">Type d'administration</label>
+                            <select id="edit-profile-admin-type" name="administration_type" onchange="profileAdministrationTypeChange('edit')"
+                                class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400">
+                                <option value="">« Aucune (globale) »</option>
+                                <option value="emitter">Émettrice</option>
+                                <option value="recipient">Destinataire</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-gray-600 mb-1">Administration</label>
+                            <select id="edit-profile-administration-id" name="administration_id" disabled
+                                class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400 disabled:bg-gray-50 disabled:text-gray-400">
+                                <option value="">Sélectionner une administration</option>
+                            </select>
+                        </div>
+                    </div>
+                    @endif
                 </div>
             </div>
             <div>
@@ -5970,10 +6031,55 @@ function modalHandleChild(childCb) {
     const parentCb = document.querySelector(`#modal-profile-create .modal-parent-perm[data-group="${group}"]`);
     if (parentCb) parentCb.checked = allOk;
 }
+var profileAdministrationOptions = {
+    emitter: @json($profileEmitterOptions),
+    recipient: @json($profileRecipientOptions)
+};
+
+function fillProfileAdministrationOptions(prefix, selectedValue) {
+    var typeEl = document.getElementById(prefix + '-profile-admin-type');
+    var adminEl = document.getElementById(prefix + '-profile-administration-id');
+    if (!typeEl || !adminEl) return;
+
+    var type = typeEl.value || '';
+    var options = profileAdministrationOptions[type] || [];
+    adminEl.innerHTML = '<option value="">Sélectionner une administration</option>';
+
+    if (!type) {
+        adminEl.disabled = true;
+        return;
+    }
+
+    options.forEach(function(option) {
+        var opt = document.createElement('option');
+        opt.value = option.id;
+        opt.textContent = option.name;
+        if (selectedValue && selectedValue === option.id) {
+            opt.selected = true;
+        }
+        adminEl.appendChild(opt);
+    });
+
+    adminEl.disabled = false;
+}
+
+function profileAdministrationTypeChange(prefix, selectedValue) {
+    fillProfileAdministrationOptions(prefix, selectedValue || '');
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    profileAdministrationTypeChange('create');
+});
+
 // modal permission helpers (edit)
 function openProfileEditModal(data) {
     document.getElementById('edit-profile-name').value        = data.name        || '';
     document.getElementById('edit-profile-description').value = data.description || '';
+    var adminTypeEl = document.getElementById('edit-profile-admin-type');
+    if (adminTypeEl) {
+        adminTypeEl.value = data.administration_type || '';
+        profileAdministrationTypeChange('edit', data.administration_id || '');
+    }
     // set form action
     document.getElementById('form-profile-edit').action = _adminBase + '/profiles/' + data.id + '?tab=user-profiles';
     // reset all checkboxes then check the active ones

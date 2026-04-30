@@ -28,6 +28,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Database\QueryException;
+use Illuminate\Validation\ValidationException;
 
 class AdminController extends Controller
 {
@@ -128,14 +129,54 @@ class AdminController extends Controller
             ];
         }
 
-        // Fallback : profil applicatif → administration émettrice
-        if ($profile) {
-            if ($profile && $profile->administration_id) {
-                return ['type' => 'emitter', 'id' => $profile->administration_id];
-            }
+        // Fallback : profil applicatif → administration associée au profil.
+        if ($profile && $profile->administration_id) {
+            return [
+                'type' => $profile->effective_administration_type ?? 'emitter',
+                'id' => $profile->administration_id,
+            ];
         }
 
         return null;
+    }
+
+    private function normalizeAdministrationType(?string $type): string
+    {
+        return $type === 'recipient' ? 'recipient' : 'emitter';
+    }
+
+    private function resolveProfileAdministrationSelection(array $data, ?array $adminScope): array
+    {
+        if ($adminScope && !empty($adminScope['id'])) {
+            return [
+                'administration_type' => $this->normalizeAdministrationType($adminScope['type'] ?? null),
+                'administration_id' => $adminScope['id'],
+            ];
+        }
+
+        $administrationId = trim((string) ($data['administration_id'] ?? ''));
+        if ($administrationId === '') {
+            return [
+                'administration_type' => null,
+                'administration_id' => null,
+            ];
+        }
+
+        $administrationType = $this->normalizeAdministrationType($data['administration_type'] ?? null);
+        $administrationExists = $administrationType === 'recipient'
+            ? RecipientAdministration::whereKey($administrationId)->exists()
+            : IssuingAdministration::whereKey($administrationId)->exists();
+
+        if (!$administrationExists) {
+            throw ValidationException::withMessages([
+                'administration_id' => 'Administration sélectionnée introuvable pour ce type.',
+            ]);
+        }
+
+        return [
+            'administration_type' => $administrationType,
+            'administration_id' => $administrationId,
+        ];
     }
 
     public function index(Request $request)
@@ -254,14 +295,24 @@ class AdminController extends Controller
             $routingRules = $routingQuery->paginate(15, ['*'], 'routing_page');
 
             // ── Profils ───────────────────────────────────────────────────────
-            $profilesQuery = AdministrationProfile::with('administration')->latest();
-            $profilesListQuery = AdministrationProfile::select('id','name','administration_id')->orderBy('name');
+            $profilesQuery = AdministrationProfile::with(['emitterAdministration', 'recipientAdministration'])->latest();
+            $profilesListQuery = AdministrationProfile::select('id', 'name', 'administration_id', 'administration_type')->orderBy('name');
             if ($adminScope && $adminScope['type'] === 'emitter') {
-                $profilesQuery->where('administration_id', $adminScope['id']);
-                $profilesListQuery->where('administration_id', $adminScope['id']);
+                $profilesQuery->where('administration_id', $adminScope['id'])
+                    ->where(function ($query) {
+                        $query->whereNull('administration_type')
+                            ->orWhere('administration_type', 'emitter');
+                    });
+                $profilesListQuery->where('administration_id', $adminScope['id'])
+                    ->where(function ($query) {
+                        $query->whereNull('administration_type')
+                            ->orWhere('administration_type', 'emitter');
+                    });
             } elseif ($adminScope && $adminScope['type'] === 'recipient') {
-                $profilesQuery->whereNull('id');
-                $profilesListQuery->whereNull('id');
+                $profilesQuery->where('administration_type', 'recipient')
+                    ->where('administration_id', $adminScope['id']);
+                $profilesListQuery->where('administration_type', 'recipient')
+                    ->where('administration_id', $adminScope['id']);
             }
             $profiles     = $profilesQuery->paginate(15, ['*'], 'profiles_page');
             $profilesList = $profilesListQuery->get();
@@ -2166,25 +2217,25 @@ class AdminController extends Controller
     public function storeProfile(Request $request)
     {
         $data = $request->validate([
-            'name'              => 'required|string|max:255',
-            'description'       => 'nullable|string|max:500',
-            'administration_id' => 'nullable|exists:issuing_administrations,id',
-            'permissions'       => 'nullable|array',
+            'name'                => 'required|string|max:255',
+            'description'         => 'nullable|string|max:500',
+            'administration_type' => 'nullable|in:emitter,recipient',
+            'administration_id'   => 'nullable|string|max:36',
+            'permissions'         => 'nullable|array',
         ]);
         $menuPermissions = $data['permissions'] ?? [];
-        // Forcer l'administration si l'utilisateur est scoped
         $adminScope = $this->resolveAdminScope();
-        $administrationId = ($adminScope && $adminScope['type'] === 'emitter')
-            ? $adminScope['id']
-            : ($data['administration_id'] ?? null);
+        $administrationSelection = $this->resolveProfileAdministrationSelection($data, $adminScope);
+
         AdministrationProfile::create([
-            'id'                => Str::uuid(),
-            'name'              => $data['name'],
-            'description'       => $data['description'] ?? '',
-            'administration_id' => $administrationId,
-            'permissions'       => [
-                'description'       => $data['description'] ?? '',
-                'menuPermissions'   => $menuPermissions,
+            'id'                  => Str::uuid(),
+            'name'                => $data['name'],
+            'description'         => $data['description'] ?? '',
+            'administration_type' => $administrationSelection['administration_type'],
+            'administration_id'   => $administrationSelection['administration_id'],
+            'permissions'         => [
+                'description'     => $data['description'] ?? '',
+                'menuPermissions' => $menuPermissions,
             ],
         ]);
         return back()->with('success', 'Profil créé.')->withInput(['tab' => 'user-profiles']);
@@ -2193,15 +2244,22 @@ class AdminController extends Controller
     public function updateProfile(Request $request, AdministrationProfile $profile)
     {
         $data = $request->validate([
-            'name'        => 'required|string|max:255',
-            'description' => 'nullable|string|max:500',
-            'permissions' => 'nullable|array',
+            'name'                => 'required|string|max:255',
+            'description'         => 'nullable|string|max:500',
+            'administration_type' => 'nullable|in:emitter,recipient',
+            'administration_id'   => 'nullable|string|max:36',
+            'permissions'         => 'nullable|array',
         ]);
         $menuPermissions = $data['permissions'] ?? [];
+        $adminScope = $this->resolveAdminScope();
+        $administrationSelection = $this->resolveProfileAdministrationSelection($data, $adminScope);
+
         $profile->update([
-            'name'        => $data['name'],
-            'description' => $data['description'] ?? '',
-            'permissions' => [
+            'name'                => $data['name'],
+            'description'         => $data['description'] ?? '',
+            'administration_type' => $administrationSelection['administration_type'],
+            'administration_id'   => $administrationSelection['administration_id'],
+            'permissions'         => [
                 'description'     => $data['description'] ?? '',
                 'menuPermissions' => $menuPermissions,
             ],
