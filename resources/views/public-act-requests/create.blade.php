@@ -244,7 +244,7 @@
                     @error('attachments_files')
                         <p class="text-xs text-red-600 mt-1">{{ $message }}</p>
                     @enderror
-                    <p class="text-[11px] text-gray-500 mt-1">PDF uniquement · 10 Mo max par fichier.</p>
+                    <p class="text-[11px] text-gray-500 mt-1">PDF uniquement · 20 Mo max par fichier.</p>
                 </div>
 
                 <div class="pt-1">

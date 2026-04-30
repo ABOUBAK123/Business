@@ -180,12 +180,12 @@ class PublicActRequestController extends Controller
             'note'                       => 'nullable|string|max:2000',
             'extra'                      => 'nullable|array',
             'attachments_files'          => 'nullable|array',
-            'attachments_files.*'        => 'nullable|file|max:10240',
+            'attachments_files.*'        => 'nullable|file|max:20480',
             'attachment_labels'          => 'nullable|array',
             'attachment_labels.*'        => 'nullable|string|max:255',
         ], [
-            'attachments_files.*.uploaded' => 'Echec du televersement du fichier. Verifiez la taille (max 10 Mo par fichier) puis reessayez.',
-            'attachments_files.*.max' => 'Chaque fichier ne doit pas depasser 10 Mo.',
+            'attachments_files.*.uploaded' => 'Echec du televersement du fichier. Verifiez la taille (max 20 Mo par fichier) puis reessayez.',
+            'attachments_files.*.max' => 'Chaque fichier ne doit pas depasser 20 Mo.',
             'attachments_files.*.file' => 'Le fichier joint est invalide.',
         ]);
 
