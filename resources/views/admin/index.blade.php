@@ -4056,6 +4056,17 @@ function toggleOoSecret() {
           class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
       </div>
 
+      <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Profil applicatif</label>
+        <select id="c-profile" name="profile_id"
+          class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
+          <option value="">« Aucun profil applicatif (super-admin si rôle admin) »</option>
+          @foreach($profiles as $p)
+          <option value="{{ $p->id }}">{{ $p->name }}</option>
+          @endforeach
+        </select>
+      </div>
+
       <div class="grid grid-cols-2 gap-3">
         @if(isset($adminScope) && $adminScope && !$canManageAdministration)
         <input type="hidden" name="administration_type" value="{{ $adminScope['type'] }}">
