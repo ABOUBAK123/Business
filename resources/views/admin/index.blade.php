@@ -3976,8 +3976,25 @@ function toggleOoSecret() {
           <td class="px-4 py-3">
             <div class="flex items-center gap-1">
               {{-- Modifier --}}
+              @php
+                $editUserPayload = base64_encode(json_encode([
+                  'id' => $u->id,
+                  'nom' => $nom,
+                  'prenoms' => $prenoms,
+                  'name' => $u->name,
+                  'email' => $u->email,
+                  'role' => $u->role,
+                  'profile_id' => $u->profile_id ?? '',
+                  'status' => $u->status,
+                  'quota' => $u->quota ?? '',
+                  'scope_type' => $dir?->direction_scope_type ?? '',
+                  'scope_id' => $dir?->direction_scope_id ?? '',
+                  'sub_code' => $dir?->sub_entity_code ?? '',
+                ], JSON_UNESCAPED_UNICODE));
+              @endphp
               <button type="button"
-                onclick="openUserEditModal({{ json_encode(['id'=>$u->id,'nom'=>$nom,'prenoms'=>$prenoms,'name'=>$u->name,'email'=>$u->email,'role'=>$u->role,'profile_id'=>$u->profile_id ?? '','status'=>$u->status,'quota'=>$u->quota ?? '','scope_type'=>$dir?->direction_scope_type ?? '','scope_id'=>$dir?->direction_scope_id ?? '','sub_code'=>$dir?->sub_entity_code ?? '']) }})"
+                data-user="{{ $editUserPayload }}"
+                onclick="openUserEditModalFromButton(this)"
                 class="text-blue-600 hover:bg-blue-50 rounded p-1.5 transition" title="Modifier">
                 <i class="fas fa-pen text-xs"></i>
               </button>
@@ -4394,6 +4411,18 @@ function openUserEditModal(data) {
     }
   }, 50);
   openUserModal('edit');
+}
+
+function openUserEditModalFromButton(buttonEl) {
+  try {
+    var encoded = buttonEl ? buttonEl.getAttribute('data-user') : '';
+    if (!encoded) return;
+    var data = JSON.parse(atob(encoded));
+    openUserEditModal(data);
+  } catch (e) {
+    console.error('Impossible d\'ouvrir le modal de modification utilisateur:', e);
+    alert('Impossible d\'ouvrir la fiche utilisateur. Rechargez la page puis réessayez.');
+  }
 }
 
 function togglePwd(inputId, eyeId) {
