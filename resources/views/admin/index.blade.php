@@ -3881,7 +3881,10 @@ function toggleOoSecret() {
     $usersSearch    = request('u_search', '');
     $editUserId     = request('u_edit');
     $editUser       = $editUserId ? $users->getCollection()->firstWhere('id', $editUserId) : null;
-  $editDir        = $editUser ? $dirAssignments->get($editUser->id) : null;
+  if (!$editUser && $editUserId) {
+    $editUser = \App\Models\User::query()->whereKey($editUserId)->first();
+  }
+  $editDir        = $editUser ? ($dirAssignments->get($editUser->id) ?: \App\Models\UserDirectionAssignment::query()->where('user_id', $editUser->id)->first()) : null;
   $editParts      = preg_split('/\s+/', trim($editUser->full_name ?? $editUser->name ?? ''));
   $editNom        = $editUser ? (count($editParts) > 1 ? end($editParts) : ($editUser->name ?? '')) : '';
   $editPrenoms    = $editUser ? (count($editParts) > 1 ? implode(' ', array_slice($editParts, 0, -1)) : '') : '';
@@ -4000,7 +4003,7 @@ function toggleOoSecret() {
                 ], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
                 $editUserPayload = base64_encode($editUserJson !== false ? $editUserJson : '{}');
               @endphp
-              <a href="{{ route('admin.index', ['tab' => 'users', 'u_search' => $usersSearch, 'u_edit' => $u->id]) }}"
+              <a href="{{ route('admin.index', ['tab' => 'users', 'u_search' => $usersSearch, 'u_edit' => $u->id, 'page' => request('page')]) }}"
                 data-user="{{ $editUserPayload }}"
                 class="js-user-edit-link text-blue-600 hover:bg-blue-50 rounded p-1.5 transition" title="Modifier">
                 <i class="fas fa-pen text-xs"></i>
