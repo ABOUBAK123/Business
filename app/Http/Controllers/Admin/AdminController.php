@@ -1080,17 +1080,22 @@ class AdminController extends Controller
             $logoPath = 'images/logos/' . $filename;
         }
 
-        RecipientAdministration::create([
+        $payload = [
             'id'            => Str::uuid(),
             'name'          => $request->input('name'),
-            'code'          => strtoupper($request->input('code', '')),
             'channel'       => $request->input('channel'),
             'email_address' => $request->input('email_address_meta'),
             'api_endpoint'  => $request->input('api_endpoint_meta'),
             'is_active'     => $request->boolean('is_active', true),
             'logo'          => $logoPath,
             'metadata'      => $this->extractRecipientMetadata($request),
-        ]);
+        ];
+
+        if (Schema::hasColumn('recipient_administrations', 'code')) {
+            $payload['code'] = strtoupper((string) $request->input('code', ''));
+        }
+
+        RecipientAdministration::create($payload);
         return redirect()->route('admin.index', ['tab' => 'recipients'])
             ->with('success', 'Administration destinataire créée.');
     }
@@ -1110,16 +1115,21 @@ class AdminController extends Controller
             $logoPath = 'images/logos/' . $filename;
         }
 
-        $recipient->update([
+        $payload = [
             'name'          => $request->input('name'),
-            'code'          => strtoupper($request->input('code', '')),
             'channel'       => $request->input('channel'),
             'email_address' => $request->input('email_address_meta'),
             'api_endpoint'  => $request->input('api_endpoint_meta'),
             'is_active'     => $request->boolean('is_active', true),
             'logo'          => $logoPath,
             'metadata'      => $this->extractRecipientMetadata($request),
-        ]);
+        ];
+
+        if (Schema::hasColumn('recipient_administrations', 'code')) {
+            $payload['code'] = strtoupper((string) $request->input('code', ''));
+        }
+
+        $recipient->update($payload);
         return redirect()->route('admin.index', ['tab' => 'recipients'])
             ->with('success', 'Administration destinataire mise à jour.');
     }
