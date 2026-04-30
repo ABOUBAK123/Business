@@ -209,6 +209,8 @@ Route::middleware('auth')->group(function () {
 
     // Demandes d'actes
     Route::get('/act-requests', [ActRequestController::class, 'index'])->name('act-requests.index');
+    Route::get('/act-requests/{submission}/attachments.zip', [ActRequestController::class, 'downloadAttachmentsZip'])
+        ->name('act-requests.attachments.zip');
 
     // Reunions
     Route::get('/meetings', [MeetingController::class, 'index'])->name('meetings.index');

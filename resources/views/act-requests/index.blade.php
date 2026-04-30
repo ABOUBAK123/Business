@@ -107,12 +107,21 @@
                             $attachments = is_array($req->attachments) ? $req->attachments : [];
                             $firstAttachment = $attachments[0] ?? null;
                             $firstPath = $firstAttachment['path'] ?? null;
+                            $attachmentCount = count($attachments);
                         @endphp
-                        @if($firstPath)
-                            <a href="{{ asset('storage/' . ltrim($firstPath, '/')) }}" target="_blank"
-                                class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-700 text-xs font-medium rounded-lg transition">
-                                <i class="fas fa-eye text-xs"></i> Voir PJ
-                            </a>
+                        @if($attachmentCount > 0)
+                            <div class="inline-flex items-center gap-2">
+                                @if($firstPath)
+                                <a href="{{ asset('storage/' . ltrim($firstPath, '/')) }}" target="_blank"
+                                    class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-700 text-xs font-medium rounded-lg transition">
+                                    <i class="fas fa-eye text-xs"></i> Voir PJ
+                                </a>
+                                @endif
+                                <a href="{{ route('act-requests.attachments.zip', $req) }}"
+                                    class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-medium rounded-lg transition">
+                                    <i class="fas fa-file-archive text-xs"></i> ZIP ({{ $attachmentCount }})
+                                </a>
+                            </div>
                         @else
                             <span class="text-xs text-gray-400">Aucune PJ</span>
                         @endif
