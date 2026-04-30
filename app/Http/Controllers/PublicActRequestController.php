@@ -12,6 +12,40 @@ use Illuminate\Support\Str;
 
 class PublicActRequestController extends Controller
 {
+    private function generateTrackingNumber(): string
+    {
+        $prefix = 'DACT-' . now()->format('Ym') . '-';
+
+        for ($i = 0; $i < 25; $i++) {
+            $candidate = $prefix . random_int(100000, 999999);
+            $exists = ActRequestSubmission::query()
+                ->where('tracking_number', $candidate)
+                ->exists();
+
+            if (!$exists) {
+                return $candidate;
+            }
+        }
+
+        return $prefix . strtoupper(Str::random(8));
+    }
+
+    private function generateTrackingToken(): string
+    {
+        for ($i = 0; $i < 25; $i++) {
+            $candidate = strtolower(Str::random(48));
+            $exists = ActRequestSubmission::query()
+                ->where('tracking_token', $candidate)
+                ->exists();
+
+            if (!$exists) {
+                return $candidate;
+            }
+        }
+
+        return strtolower((string) Str::uuid());
+    }
+
     private function buildDocKey(string $label): string
     {
         return (string) Str::of($label)
@@ -204,8 +238,12 @@ class PublicActRequestController extends Controller
         }
 
         $directionCode = trim((string) ($requestedAct->direction_code ?: $request->input('direction_code', '')));
+        $trackingNumber = $this->generateTrackingNumber();
+        $trackingToken = $this->generateTrackingToken();
 
-        ActRequestSubmission::create([
+        $submission = ActRequestSubmission::create([
+            'tracking_number'             => $trackingNumber,
+            'tracking_token'              => $trackingToken,
             'requested_act_id'            => $requestedAct->id,
             'emitter_administration_id'   => $administration->id,
             'direction_code'              => $directionCode,
@@ -224,6 +262,18 @@ class PublicActRequestController extends Controller
 
         return redirect()
             ->route('public.act-requests.create', [$administration->id, $requestedAct->id])
-            ->with('success', 'Votre demande a ete enregistree avec succes.');
+            ->with('success', 'Votre demande a ete enregistree avec succes.')
+            ->with('tracking_number', $submission->tracking_number)
+            ->with('tracking_url', route('public.act-requests.track', $submission->tracking_token));
+    }
+
+    public function track(string $tracking_token)
+    {
+        $submission = ActRequestSubmission::query()
+            ->with(['administration'])
+            ->where('tracking_token', $tracking_token)
+            ->firstOrFail();
+
+        return view('public-act-requests.track', compact('submission'));
     }
 }

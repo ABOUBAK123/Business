@@ -36,6 +36,18 @@
             @if(session('success'))
                 <div class="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
                     {{ session('success') }}
+                    @if(session('tracking_number'))
+                        <div class="mt-2 text-xs text-emerald-800">
+                            <p><strong>Numero de traitement:</strong> {{ session('tracking_number') }}</p>
+                            @if(session('tracking_url'))
+                                <p class="mt-1">
+                                    <a href="{{ session('tracking_url') }}" class="font-semibold underline hover:no-underline">
+                                        Suivre ma demande en ligne
+                                    </a>
+                                </p>
+                            @endif
+                        </div>
+                    @endif
                 </div>
             @endif
 

@@ -10,6 +10,8 @@ class ActRequestSubmission extends Model
     use HasUuids;
 
     protected $fillable = [
+        'tracking_number',
+        'tracking_token',
         'requested_act_id',
         'emitter_administration_id',
         'direction_code',

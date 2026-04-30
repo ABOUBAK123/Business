@@ -68,6 +68,7 @@
                             <div>
                                 <p class="font-semibold text-gray-800 truncate max-w-xs">{{ $req->applicant_full_name }}</p>
                                 <p class="text-xs text-gray-400">{{ $req->applicant_email ?: 'Email non renseigne' }}</p>
+                                <p class="text-[11px] text-blue-700 mt-0.5">N° {{ $req->tracking_number ?: '—' }}</p>
                             </div>
                         </div>
                     </td>

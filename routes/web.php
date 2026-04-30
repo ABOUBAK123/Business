@@ -104,6 +104,7 @@ Route::get('/public/api/oo-file/template/{templateId}', [AdminController::class,
 
 // Demande d'acte publique (sans authentification)
 Route::get('/demande-acte', [PublicActRequestController::class, 'index'])->name('public.act-requests.index');
+Route::get('/demande-acte/suivi/{tracking_token}', [PublicActRequestController::class, 'track'])->name('public.act-requests.track');
 Route::get('/demande-acte/{administration_id}', [PublicActRequestController::class, 'showActsByAdministration'])->name('public.act-requests.by-admin');
 Route::get('/demande-acte/{administration_id}/{requested_act_id}', [PublicActRequestController::class, 'create'])->name('public.act-requests.create');
 Route::post('/demande-acte/{administration_id}/{requested_act_id}', [PublicActRequestController::class, 'store'])->name('public.act-requests.store');
