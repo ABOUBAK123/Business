@@ -14,7 +14,7 @@ class ActRequestController extends Controller
 {
     private function scopedRequestsQuery($user)
     {
-        $query = ActRequestSubmission::query()->with(['requestedAct', 'administration']);
+        $query = ActRequestSubmission::query()->with(['requestedAct', 'administration', 'recipientAdministration']);
 
         $administrationId = null;
         if ($user && $user->profile) {

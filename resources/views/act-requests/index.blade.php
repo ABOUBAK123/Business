@@ -52,6 +52,7 @@
                 <tr>
                     <th class="text-left px-5 py-3 font-semibold text-gray-600">Demande</th>
                     <th class="text-left px-5 py-3 font-semibold text-gray-600">Acte</th>
+                    <th class="text-left px-5 py-3 font-semibold text-gray-600">Destinataire</th>
                     <th class="text-left px-5 py-3 font-semibold text-gray-600">Statut</th>
                     <th class="text-left px-5 py-3 font-semibold text-gray-600">Reçue le</th>
                     <th class="px-5 py-3"></th>
@@ -75,11 +76,15 @@
                     <td class="px-5 py-4 text-gray-600">
                         <p class="font-medium text-gray-700">{{ $req->requested_document_name }}</p>
                         <p class="text-xs text-gray-400 mt-0.5">
-                            {{ $req->administration?->name ?? 'Administration inconnue' }}
+                            Code admin: {{ $req->administration?->code ?: '—' }}
                             @if($req->direction_code)
                                 · {{ $req->direction_code }}
                             @endif
                         </p>
+                    </td>
+                    <td class="px-5 py-4 text-gray-600">
+                        <p class="text-xs text-gray-500">Code destinataire</p>
+                        <p class="font-medium text-gray-700">{{ $req->recipientAdministration?->code ?: '—' }}</p>
                     </td>
                     <td class="px-5 py-4">
                         @php
