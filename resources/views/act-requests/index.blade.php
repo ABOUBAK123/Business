@@ -106,23 +106,25 @@
                     <td class="px-5 py-4 text-right">
                         @php
                             $attachments = is_array($req->attachments) ? $req->attachments : [];
-                            $firstAttachment = $attachments[0] ?? null;
-                            $firstPath = $firstAttachment['path'] ?? null;
                             $attachmentCount = count($attachments);
+                            $zipAlreadyDownloaded = in_array($req->status, ['in_progress', 'treated'], true);
+                            $zipBtnClasses = $zipAlreadyDownloaded
+                                ? 'bg-green-50 hover:bg-green-100 text-green-700 border-green-200'
+                                : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200';
                         @endphp
                         @if($attachmentCount > 0)
-                            <div class="inline-flex items-center gap-2">
-                                @if($firstPath)
-                                <a href="{{ asset('storage/' . ltrim($firstPath, '/')) }}" target="_blank"
-                                    class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-orange-50 hover:bg-orange-100 text-orange-700 text-xs font-medium rounded-lg transition">
-                                    <i class="fas fa-eye text-xs"></i> Voir PJ
-                                </a>
-                                @endif
-                                <a href="{{ route('act-requests.attachments.zip', $req) }}"
-                                    class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-medium rounded-lg transition">
-                                    <i class="fas fa-file-archive text-xs"></i> ZIP ({{ $attachmentCount }})
-                                </a>
-                            </div>
+                            <form method="POST" action="{{ route('act-requests.attachments.zip', $req) }}" class="inline-block">
+                                @csrf
+                                <button type="submit"
+                                    class="inline-flex items-center gap-1.5 px-3 py-1.5 border text-xs font-medium rounded-lg transition {{ $zipBtnClasses }}">
+                                    <i class="fas fa-file-archive text-xs"></i>
+                                    @if($zipAlreadyDownloaded)
+                                        ZIP deja telecharge ({{ $attachmentCount }})
+                                    @else
+                                        ZIP ({{ $attachmentCount }})
+                                    @endif
+                                </button>
+                            </form>
                         @else
                             <span class="text-xs text-gray-400">Aucune PJ</span>
                         @endif

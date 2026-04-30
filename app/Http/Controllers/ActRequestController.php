@@ -151,6 +151,11 @@ class ActRequestController extends Controller
             return back()->with('error', 'Aucun fichier disponible pour cette demande.');
         }
 
+        if ($requestSubmission->status === 'pending') {
+            $requestSubmission->status = 'in_progress';
+            $requestSubmission->save();
+        }
+
         $zipName = 'pieces-jointes-demande-' . $requestSubmission->id . '-' . now()->format('Ymd-His') . '.zip';
 
         return response()->download($zipPath, $zipName, [
