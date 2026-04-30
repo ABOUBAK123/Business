@@ -1305,11 +1305,20 @@ async function submitShare() {
     }
 
     await post(ROUTES.share(shareDocId), payload).then(data => {
+        if (!data || data.ok !== true) {
+            show(data?.message || 'Erreur lors du partage.', false);
+            return;
+        }
+
         const doc = allDocs.find(d => d.id === shareDocId);
-        if (data.shares_count !== undefined && doc) doc.shares_count = data.shares_count;
+        if (doc && data.shares_count !== undefined) {
+            const parsedShares = Number.parseInt(data.shares_count, 10);
+            doc.shares_count = Number.isNaN(parsedShares) ? doc.shares_count : parsedShares;
+        }
         if (data.document_status && doc) doc.status = data.document_status;
+
         const suffix = data.created_shares ? ` (${data.created_shares} destinataire(s))` : '';
-        show(`« ${doc?.title} » a été partagé avec succès${suffix}.`, true);
+        show(data.message || `« ${doc?.title} » a été partagé avec succès${suffix}.`, true);
         renderTable();
     }).catch(() => show('Erreur lors du partage.', false));
 }
