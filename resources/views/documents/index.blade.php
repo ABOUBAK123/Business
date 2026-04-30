@@ -375,11 +375,12 @@
                         </select>
                     </div>
                     <div>
-                        <label class="block text-xs font-semibold text-gray-700 mb-1">Recherche administration</label>
-                        <input type="text" id="shareAdminSearch" oninput="filterRecipientAdministrations()" placeholder="Nom de l'administration"
+                        <label class="block text-xs font-semibold text-gray-700 mb-1">Numero de suivi de traitement</label>
+                        <input type="text" id="shareTrackingNumber" onblur="lookupShareByTrackingNumber()" placeholder="Ex: DACT-202604-123456"
                                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                     </div>
                 </div>
+                <div id="shareTrackingStatus" class="hidden rounded-lg px-3 py-2 text-xs"></div>
                 <div>
                     <label class="block text-xs font-semibold text-gray-700 mb-1">Administration destinataire</label>
                     <select id="shareAdminId" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
@@ -445,6 +446,7 @@ const ROUTES = {
     status:           (id) => `${_BASE}/${id}/status`,
     createNew:        '{{ url("documents/new") }}',
     uploadAjax:       '{{ url("documents/upload-ajax") }}',
+    shareLookupTracking: '{{ route("documents.share.lookupTracking") }}',
     download:         (id) => `${_BASE}/${id}/download`,
     onlyofficeConfig: '{{ url("documents/onlyoffice-config") }}',
 };
@@ -521,13 +523,12 @@ function resetRecipientSectorFilter() {
 
 function filterRecipientAdministrations() {
     const sector = (document.getElementById('shareAdminSector').value || '').trim().toLowerCase();
-    const term = (document.getElementById('shareAdminSearch').value || '').trim().toLowerCase();
     const select = document.getElementById('shareAdminId');
     const previousValue = select.value;
 
     const options = ['<option value="">Sélectionner une administration</option>'];
     RECIPIENT_ADMINS
-        .filter((a) => (!sector || (a.sector || '') === sector) && (!term || (a.name || '').toLowerCase().includes(term)))
+        .filter((a) => (!sector || (a.sector || '') === sector))
         .forEach((a) => {
             options.push(`<option value="${a.id}" data-sector="${a.sector || ''}">${a.name}</option>`);
         });
@@ -538,6 +539,47 @@ function filterRecipientAdministrations() {
         if (select.value !== previousValue) {
             select.value = '';
         }
+    }
+}
+
+async function lookupShareByTrackingNumber() {
+    const input = document.getElementById('shareTrackingNumber');
+    const statusEl = document.getElementById('shareTrackingStatus');
+    const trackingNumber = (input.value || '').trim();
+
+    const showStatus = (message, ok) => {
+        statusEl.textContent = message;
+        statusEl.className = `rounded-lg px-3 py-2 text-xs ${ok ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`;
+        statusEl.classList.remove('hidden');
+    };
+
+    if (!trackingNumber) {
+        statusEl.classList.add('hidden');
+        return;
+    }
+
+    try {
+        const resp = await fetch(ROUTES.shareLookupTracking, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF, Accept: 'application/json' },
+            body: JSON.stringify({ tracking_number: trackingNumber }),
+        });
+
+        const data = await resp.json();
+        if (!resp.ok || !data.ok || !data.data) {
+            throw new Error(data.message || 'Numero de suivi introuvable.');
+        }
+
+        const result = data.data;
+        filterRecipientAdministrations();
+        document.getElementById('shareAdminId').value = result.recipient_administration_id || '';
+        document.getElementById('shareFullName').value = result.applicant_full_name || '';
+        document.getElementById('shareApplicantEmail').value = result.applicant_email || '';
+
+        const adminLabel = result.recipient_administration_name || 'Administration trouvee';
+        showStatus(`Informations chargees (${adminLabel}).`, true);
+    } catch (err) {
+        showStatus(err.message || 'Impossible de recuperer les informations de suivi.', false);
     }
 }
 
@@ -1170,7 +1212,8 @@ function openShareModal(id) {
     document.getElementById('shareFullName').value = '';
     document.getElementById('shareMatricule').value = '';
     document.getElementById('shareApplicantEmail').value = '';
-    document.getElementById('shareAdminSearch').value = '';
+    document.getElementById('shareTrackingNumber').value = '';
+    document.getElementById('shareTrackingStatus').classList.add('hidden');
     document.getElementById('shareHasDelay').checked = false;
     document.getElementById('delayFields').classList.add('hidden');
     resetInternalShareOptions();

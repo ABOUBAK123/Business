@@ -6,6 +6,7 @@ use App\Models\Document;
 use App\Models\DocumentShare;
 use App\Models\DocumentVersion;
 use App\Models\DocumentUserPreference;
+use App\Models\ActRequestSubmission;
 use App\Models\Notification;
 use App\Models\RecipientAdministration;
 use App\Models\User;
@@ -606,6 +607,46 @@ class DocumentController extends Controller
             'message'      => 'Document partagé avec succès.',
             'shares_count' => $sharesTotal,
             'created_shares' => $createdShares->count(),
+        ]);
+    }
+
+    public function lookupActRequestByTracking(Request $request)
+    {
+        $request->validate([
+            'tracking_number' => 'required|string|max:60',
+        ]);
+
+        $trackingNumber = strtoupper(trim((string) $request->input('tracking_number', '')));
+
+        $submission = ActRequestSubmission::query()
+            ->with(['recipientAdministration:id,name,code'])
+            ->whereRaw('UPPER(tracking_number) = ?', [$trackingNumber])
+            ->first();
+
+        if (!$submission) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Numero de suivi introuvable.',
+            ], 404);
+        }
+
+        if (empty($submission->recipient_administration_id)) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Aucune administration destinataire associee a ce numero de suivi.',
+            ], 422);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'data' => [
+                'tracking_number' => (string) $submission->tracking_number,
+                'recipient_administration_id' => (string) $submission->recipient_administration_id,
+                'recipient_administration_name' => (string) ($submission->recipientAdministration?->name ?? ''),
+                'recipient_administration_code' => (string) ($submission->recipientAdministration?->code ?? ''),
+                'applicant_full_name' => (string) ($submission->applicant_full_name ?? ''),
+                'applicant_email' => (string) ($submission->applicant_email ?? ''),
+            ],
         ]);
     }
 
