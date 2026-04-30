@@ -1087,12 +1087,15 @@ class AdminController extends Controller
             'email_address' => $request->input('email_address_meta'),
             'api_endpoint'  => $request->input('api_endpoint_meta'),
             'is_active'     => $request->boolean('is_active', true),
-            'logo'          => $logoPath,
             'metadata'      => $this->extractRecipientMetadata($request),
         ];
 
         if (Schema::hasColumn('recipient_administrations', 'code')) {
             $payload['code'] = strtoupper((string) $request->input('code', ''));
+        }
+
+        if (Schema::hasColumn('recipient_administrations', 'logo')) {
+            $payload['logo'] = $logoPath;
         }
 
         RecipientAdministration::create($payload);
@@ -1121,12 +1124,15 @@ class AdminController extends Controller
             'email_address' => $request->input('email_address_meta'),
             'api_endpoint'  => $request->input('api_endpoint_meta'),
             'is_active'     => $request->boolean('is_active', true),
-            'logo'          => $logoPath,
             'metadata'      => $this->extractRecipientMetadata($request),
         ];
 
         if (Schema::hasColumn('recipient_administrations', 'code')) {
             $payload['code'] = strtoupper((string) $request->input('code', ''));
+        }
+
+        if (Schema::hasColumn('recipient_administrations', 'logo')) {
+            $payload['logo'] = $logoPath;
         }
 
         $recipient->update($payload);

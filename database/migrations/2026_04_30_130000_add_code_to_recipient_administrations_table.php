@@ -17,6 +17,12 @@ return new class extends Migration
                 $table->string('code', 100)->nullable()->after('name');
             });
         }
+
+        if (!Schema::hasColumn('recipient_administrations', 'logo')) {
+            Schema::table('recipient_administrations', function (Blueprint $table) {
+                $table->string('logo', 500)->nullable()->after('email_address');
+            });
+        }
     }
 
     public function down(): void
@@ -28,6 +34,12 @@ return new class extends Migration
         if (Schema::hasColumn('recipient_administrations', 'code')) {
             Schema::table('recipient_administrations', function (Blueprint $table) {
                 $table->dropColumn('code');
+            });
+        }
+
+        if (Schema::hasColumn('recipient_administrations', 'logo')) {
+            Schema::table('recipient_administrations', function (Blueprint $table) {
+                $table->dropColumn('logo');
             });
         }
     }
