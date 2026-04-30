@@ -18,6 +18,7 @@
         $colors = [
             'pending' => 'bg-yellow-100 text-yellow-700 border-yellow-200',
             'in_progress' => 'bg-blue-100 text-blue-700 border-blue-200',
+            'sent' => 'bg-indigo-100 text-indigo-700 border-indigo-200',
             'treated' => 'bg-green-100 text-green-700 border-green-200',
             'rejected' => 'bg-red-100 text-red-700 border-red-200',
         ];
@@ -25,6 +26,7 @@
         $labels = [
             'pending' => 'En attente',
             'in_progress' => 'En cours de traitement',
+            'sent' => 'Envoyee a l\'administration destinataire',
             'treated' => 'Traitee',
             'rejected' => 'Refusee',
         ];

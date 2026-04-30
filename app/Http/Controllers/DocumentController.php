@@ -417,6 +417,7 @@ class DocumentController extends Controller
         $request->validate([
             'mode'       => 'required|in:internal,external,admin,recipient_administration',
             'permission' => 'nullable|in:lecture,modification',
+            'trackingNumber' => 'nullable|string|max:60',
         ]);
 
         $mode = $request->input('mode') === 'recipient_administration' ? 'admin' : $request->input('mode');
@@ -447,6 +448,7 @@ class DocumentController extends Controller
         ];
 
         $createdShares = collect();
+        $updatedTrackingStatus = false;
 
         if ($mode === 'internal') {
             $targetType = (string) $request->input('internalTargetType', 'user');
@@ -556,6 +558,8 @@ class DocumentController extends Controller
                 return response()->json(['ok' => false, 'message' => 'Veuillez sélectionner une administration destinataire.'], 422);
             }
 
+            $trackingNumber = strtoupper(trim((string) $request->input('trackingNumber', '')));
+
             $recipientAdministration = RecipientAdministration::find($recipientAdministrationId);
             if (!$recipientAdministration) {
                 return response()->json(['ok' => false, 'message' => 'Administration destinataire introuvable.'], 422);
@@ -595,6 +599,18 @@ class DocumentController extends Controller
                 }
             }
 
+            if ($trackingNumber !== '') {
+                $submission = ActRequestSubmission::query()
+                    ->whereRaw('UPPER(tracking_number) = ?', [$trackingNumber])
+                    ->first();
+
+                if ($submission) {
+                    $submission->status = 'sent';
+                    $submission->save();
+                    $updatedTrackingStatus = true;
+                }
+            }
+
             // Le document est considere comme envoye a l'administration destinataire.
             if ($document->status !== 'sent') {
                 $document->update(['status' => 'sent']);
@@ -613,6 +629,7 @@ class DocumentController extends Controller
             'shares_count' => $sharesTotal,
             'created_shares' => $createdShares->count(),
             'document_status' => $document->status,
+            'tracking_status_updated' => $updatedTrackingStatus,
         ]);
     }
 

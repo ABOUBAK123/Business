@@ -1291,11 +1291,13 @@ async function submitShare() {
         payload.recipientEmail = email;
     } else {
         const adminId = document.getElementById('shareAdminId').value;
+        const trackingNumber = document.getElementById('shareTrackingNumber').value.trim();
         const fullName = document.getElementById('shareFullName').value.trim();
         const mat = document.getElementById('shareMatricule').value.trim();
         const email = document.getElementById('shareApplicantEmail').value.trim();
-        if (!adminId || !fullName || !mat || !email) { show('Tous les champs sont obligatoires.', false); return; }
+        if (!trackingNumber || !adminId || !fullName || !mat || !email) { show('Tous les champs sont obligatoires.', false); return; }
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { show('Adresse email invalide.', false); return; }
+        payload.trackingNumber = trackingNumber;
         payload.recipientAdministrationId = adminId;
         payload.applicantFullName = fullName;
         payload.applicantMatricule = mat;
