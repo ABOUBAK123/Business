@@ -100,12 +100,16 @@ DEPLOY_DB_PORT="$DB_PORT" \
 DEPLOY_DB_DATABASE="$DB_DATABASE" \
 DEPLOY_DB_USERNAME="$DB_USERNAME" \
 DEPLOY_DB_PASSWORD="$DB_PASSWORD" \
+DEPLOY_APP_LOCALE="fr" \
+DEPLOY_APP_FALLBACK_LOCALE="fr" \
 php -r '
 $envPath = ".env";
 $vars = [
   "APP_ENV" => "production",
   "APP_DEBUG" => "false",
   "APP_URL" => getenv("DEPLOY_APP_URL"),
+  "APP_LOCALE" => getenv("DEPLOY_APP_LOCALE"),
+  "APP_FALLBACK_LOCALE" => getenv("DEPLOY_APP_FALLBACK_LOCALE"),
   "DB_CONNECTION" => getenv("DEPLOY_DB_CONNECTION"),
   "DB_HOST" => getenv("DEPLOY_DB_HOST"),
   "DB_PORT" => getenv("DEPLOY_DB_PORT"),
@@ -179,6 +183,7 @@ a2enconf php8.2-fpm || true
 a2ensite "${APP_NAME}.conf"
 a2dissite 000-default.conf || true
 apache2ctl -t
+systemctl restart php8.2-fpm
 systemctl reload apache2
 
 echo "[9/11] Configuring scheduler cron..."
