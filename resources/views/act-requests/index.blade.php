@@ -114,7 +114,7 @@
                         @php
                             $attachments = is_array($req->attachments) ? $req->attachments : [];
                             $attachmentCount = count($attachments);
-                            $zipAlreadyDownloaded = in_array($req->status, ['in_progress', 'treated'], true);
+                            $zipAlreadyDownloaded = in_array($req->status, ['in_progress', 'sent', 'treated'], true);
                             $zipBtnClasses = $zipAlreadyDownloaded
                                 ? 'bg-green-50 hover:bg-green-100 text-green-700 border-green-200'
                                 : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200';

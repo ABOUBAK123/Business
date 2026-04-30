@@ -667,10 +667,17 @@ class DocumentController extends Controller
                     ->whereRaw('UPPER(tracking_number) = ?', [$trackingNumber])
                     ->first();
 
+                Log::info('DocumentController@share tracking lookup', [
+                    'tracking_number_searched' => $trackingNumber,
+                    'submission_found' => $submission ? $submission->id : null,
+                    'document_id' => (string) $document->id,
+                ]);
+
                 if ($submission) {
                     $submission->status = 'sent';
                     $submission->save();
                     $updatedTrackingStatus = true;
+                    Log::info('DocumentController@share submission status set to sent', ['submission_id' => $submission->id]);
                 }
             }
 
@@ -686,9 +693,14 @@ class DocumentController extends Controller
         // TODO: Implement NotificationService::documentShared() when available
         // NotificationService::documentShared($document, $share, Auth::user()->name);
 
+        $message = 'Document partagé avec succès.';
+        if ($mode === 'admin' && !$updatedTrackingStatus) {
+            $message .= ' (Statut de la demande non mis à jour — numéro de suivi introuvable)';
+        }
+
         return response()->json([
             'ok'           => true,
-            'message'      => 'Document partagé avec succès.',
+            'message'      => $message,
             'shares_count' => $sharesTotal,
             'created_shares' => $createdShares->count(),
             'document_status' => $document->status,
