@@ -2407,10 +2407,14 @@ if (!array_key_exists($tab, $tabs)) {
     </form>
 
     {{-- -- Liste des émetteurs -- --}}
-    <div class="space-y-2 max-h-96 overflow-auto mt-2">
+    <input type="text" id="emit-search" placeholder="Rechercher une administration émettrice…"
+           oninput="emitSearch(this.value)"
+           class="w-full border border-gray-300 rounded-xl px-3 py-2 text-xs placeholder:text-gray-400 focus:ring-2 focus:ring-violet-300 focus:border-violet-400 outline-none">
+    <div class="space-y-2 max-h-96 overflow-auto mt-2" id="emit-list">
       @forelse($emitters as $item)
       @php $iMeta = $item->metadata ?? []; @endphp
-      <div class="border rounded-lg p-3 {{ $selEmitId === $item->id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-gray-50' }}">
+      <div data-search="{{ strtolower($item->name . ' ' . $item->code) }}"
+           class="border rounded-lg p-3 {{ $selEmitId === $item->id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-gray-50' }}">
         <div class="flex items-start justify-between gap-2">
           <div class="min-w-0">
             <p class="text-xs font-semibold text-gray-800 truncate">{{ $item->name }}</p>
@@ -2456,6 +2460,12 @@ function emitLogoPreview(input) {
         };
         reader.readAsDataURL(input.files[0]);
     }
+}
+function emitSearch(q) {
+    q = q.toLowerCase().trim();
+    document.querySelectorAll('#emit-list [data-search]').forEach(function(card) {
+        card.style.display = (!q || card.dataset.search.includes(q)) ? '' : 'none';
+    });
 }
 </script>
 @endpush
@@ -3367,8 +3377,12 @@ document.addEventListener('DOMContentLoaded', function() {
   <section class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
     <div class="flex items-center justify-between">
       <h3 class="text-base font-semibold text-gray-800">Liste des types</h3>
-      <span class="text-xs text-gray-400">{{ $directionTypes->count() }} type{{ $directionTypes->count() > 1 ? 's' : '' }}</span>
+      <span class="text-xs text-gray-400" id="dt-count">{{ $directionTypes->count() }} type{{ $directionTypes->count() > 1 ? 's' : '' }}</span>
     </div>
+
+    <input type="text" id="dt-search" placeholder="Rechercher un type de direction…"
+           oninput="dtSearch(this.value)"
+           class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400 outline-none">
 
     <div class="overflow-auto rounded-xl border border-gray-200">
       <table class="w-full min-w-[520px] text-left">
@@ -3379,9 +3393,10 @@ document.addEventListener('DOMContentLoaded', function() {
             <th class="px-4 py-3 font-semibold">Actions</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-gray-100 text-xs bg-white">
+        <tbody class="divide-y divide-gray-100 text-xs bg-white" id="dt-tbody">
           @forelse($directionTypes as $dt)
-          <tr class="{{ $editDt && $editDt->id === $dt->id ? 'bg-blue-50' : '' }}">
+          <tr data-search="{{ strtolower($dt->name . ' ' . ($dt->description ?? '')) }}"
+              class="{{ $editDt && $editDt->id === $dt->id ? 'bg-blue-50' : '' }}">
             <td class="px-4 py-3 font-medium text-gray-800">{{ $dt->name }}</td>
             <td class="px-4 py-3 text-gray-600">{{ $dt->description ?? '�' }}</td>
             <td class="px-4 py-3">
@@ -3410,6 +3425,22 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
   </section>
 </div>
+@push('scripts')
+<script>
+function dtSearch(q) {
+    q = q.toLowerCase().trim();
+    var rows = document.querySelectorAll('#dt-tbody [data-search]');
+    var visible = 0;
+    rows.forEach(function(row) {
+        var m = !q || row.dataset.search.includes(q);
+        row.style.display = m ? '' : 'none';
+        if (m) visible++;
+    });
+    var cnt = document.getElementById('dt-count');
+    if (cnt) cnt.textContent = visible + ' / ' + rows.length + ' type' + (rows.length > 1 ? 's' : '');
+}
+</script>
+@endpush
 @elseif($tab === 'routing')
 <div class="flex items-center justify-between mb-5">
     <h2 class="text-lg font-bold text-gray-800">R�gles de routage</h2>
@@ -3417,6 +3448,11 @@ document.addEventListener('DOMContentLoaded', function() {
         class="px-4 py-2.5 bg-orange-500 text-white rounded-xl text-sm font-semibold hover:bg-orange-600 transition flex items-center gap-2">
         <i class="fas fa-plus"></i> Nouvelle r�gle
     </button>
+</div>
+<div class="mb-3">
+    <input type="text" id="routing-search" placeholder="Rechercher (template, destinataire, condition…)"
+           oninput="routingSearch(this.value)"
+           class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-orange-300 focus:border-orange-400 outline-none">
 </div>
 <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
     <table class="w-full text-sm">
@@ -3430,9 +3466,10 @@ document.addEventListener('DOMContentLoaded', function() {
                 <th class="px-5 py-3"></th>
             </tr>
         </thead>
-        <tbody class="divide-y divide-gray-50">
+        <tbody class="divide-y divide-gray-50" id="routing-tbody">
             @forelse($routingRules as $rule)
-            <tr class="hover:bg-gray-50/50 transition">
+            <tr data-search="{{ strtolower(($rule->template?->name ?? '') . ' ' . ($rule->recipient?->name ?? '') . ' ' . ($rule->condition_field ?? '') . ' ' . ($rule->condition_value ?? '')) }}"
+                class="hover:bg-gray-50/50 transition">
                 <td class="px-5 py-3.5 font-medium text-gray-800">{{ $rule->template?->name ?? '—' }}</td>
                 <td class="px-5 py-3.5 text-gray-600">{{ $rule->recipient?->name ?? '—' }}</td>
                 <td class="px-5 py-3.5 text-xs text-gray-500">
@@ -3469,6 +3506,16 @@ document.addEventListener('DOMContentLoaded', function() {
     <div class="px-5 py-4 border-t border-gray-100">{{ $routingRules->appends(['tab'=>'routing'])->links() }}</div>
     @endif
 </div>
+@push('scripts')
+<script>
+function routingSearch(q) {
+    q = q.toLowerCase().trim();
+    document.querySelectorAll('#routing-tbody [data-search]').forEach(function(row) {
+        row.style.display = (!q || row.dataset.search.includes(q)) ? '' : 'none';
+    });
+}
+</script>
+@endpush
 <div id="modal-routing-create" class="adm-modal">
     <div class="adm-modal-box">
         <button onclick="closeModal('modal-routing-create')" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl"><i class="fas fa-times"></i></button>
@@ -5236,6 +5283,11 @@ if (request('edit_profile')) {
 </div>
 
 {{-- Tableau des rôles --}}
+<div class="mb-3">
+    <input type="text" id="profiles-search" placeholder="Rechercher un profil ou rôle…"
+           oninput="profilesSearch(this.value)"
+           class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-slate-300 focus:border-slate-400 outline-none">
+</div>
 <div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden mb-6">
     <div class="overflow-x-auto">
     <table class="w-full min-w-[600px] text-sm">
@@ -5249,13 +5301,14 @@ if (request('edit_profile')) {
                 <th class="text-right px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
             </tr>
         </thead>
-        <tbody class="divide-y divide-gray-100">
+        <tbody class="divide-y divide-gray-100" id="profiles-tbody">
             @forelse($profiles as $profile)
             @php
                 $perms = is_array($profile->permissions) ? ($profile->permissions['menuPermissions'] ?? $profile->permissions) : [];
                 $userCount = \App\Models\User::where('profile_id', $profile->id)->count();
             @endphp
-            <tr class="hover:bg-gray-50 transition">
+            <tr data-search="{{ strtolower($profile->name . ' ' . ($profile->description ?? '') . ' ' . ($profile->administration?->name ?? '')) }}"
+                class="hover:bg-gray-50 transition">
                 <td class="px-4 py-3 font-semibold text-gray-800 truncate max-w-[150px]">{{ $profile->name }}</td>
                 <td class="px-4 py-3 text-gray-500 truncate max-w-[160px]">{{ $profile->description ?: '—' }}</td>
                 <td class="px-4 py-3 text-gray-500 truncate max-w-[150px] hidden md:table-cell">{{ $profile->administration?->name ?? '—' }}</td>
@@ -5305,6 +5358,16 @@ if (request('edit_profile')) {
     <div class="px-5 py-3 border-t border-gray-100">{{ $profiles->appends(['tab'=>'user-profiles'])->links() }}</div>
     @endif
 </div>
+@push('scripts')
+<script>
+function profilesSearch(q) {
+    q = q.toLowerCase().trim();
+    document.querySelectorAll('#profiles-tbody [data-search]').forEach(function(row) {
+        row.style.display = (!q || row.dataset.search.includes(q)) ? '' : 'none';
+    });
+}
+</script>
+@endpush
 
 {{-- Modal: create profile --}}
 <div id="modal-profile-create" class="adm-modal">
@@ -5525,6 +5588,11 @@ if (request('edit_profile')) {
                     {{ $instructions->count() }} instruction{{ $instructions->count() !== 1 ? 's' : '' }}
                 </span>
             </div>
+            <div class="px-5 py-3 border-b border-gray-100">
+                <input type="text" id="instr-search" placeholder="Rechercher une instruction…"
+                       oninput="instrSearch(this.value)"
+                       class="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-cyan-300 focus:border-cyan-400 outline-none">
+            </div>
             <table class="w-full text-sm">
                 <thead>
                     <tr class="border-b border-gray-100 bg-gray-50">
@@ -5533,9 +5601,10 @@ if (request('edit_profile')) {
                         <th class="px-5 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-right">Actions</th>
                     </tr>
                 </thead>
-                <tbody class="divide-y divide-gray-100">
+                <tbody class="divide-y divide-gray-100" id="instr-tbody">
                     @forelse($instructions as $instr)
-                    <tr class="hover:bg-gray-50 transition {{ request('edit_instr') == $instr->id ? 'bg-cyan-50' : '' }}">
+                    <tr data-search="{{ strtolower($instr->nom . ' ' . ($instr->description ?? '')) }}"
+                        class="hover:bg-gray-50 transition {{ request('edit_instr') == $instr->id ? 'bg-cyan-50' : '' }}">
                         <td class="px-5 py-3.5 font-semibold text-gray-800">{{ $instr->nom }}</td>
                         <td class="px-5 py-3.5 text-gray-500 text-xs">{{ $instr->description ?: '—' }}</td>
                         <td class="px-5 py-3.5 text-right">
@@ -5570,6 +5639,16 @@ if (request('edit_profile')) {
     </div>
 </div>
 
+@push('scripts')
+<script>
+function instrSearch(q) {
+    q = q.toLowerCase().trim();
+    document.querySelectorAll('#instr-tbody [data-search]').forEach(function(row) {
+        row.style.display = (!q || row.dataset.search.includes(q)) ? '' : 'none';
+    });
+}
+</script>
+@endpush
 {{-- ══════════════════ ARCHIVAGE COURRIER ══════════════════ --}}
 @elseif($tab === 'courrier-archiving')
 @php
