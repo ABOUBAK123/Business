@@ -6032,8 +6032,8 @@ function modalHandleChild(childCb) {
     if (parentCb) parentCb.checked = allOk;
 }
 var profileAdministrationOptions = {
-    emitter: @json($profileEmitterOptions),
-    recipient: @json($profileRecipientOptions)
+  emitter: @json($profileEmitterOptions ?? []),
+  recipient: @json($profileRecipientOptions ?? [])
 };
 
 function fillProfileAdministrationOptions(prefix, selectedValue) {
