@@ -504,6 +504,7 @@ class DocumentController extends Controller
             'applicant_full_name'          => $request->input('applicantFullName'),
             'applicant_matricule'          => $request->input('applicantMatricule'),
             'applicant_email'              => $request->input('applicantEmail'),
+            'applicant_phone'              => $request->input('applicantPhone'),
             'tracking_number'              => strtoupper(trim((string) $request->input('trackingNumber', ''))),
         ];
 

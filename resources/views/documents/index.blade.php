@@ -405,6 +405,11 @@
                     <input type="email" id="shareApplicantEmail" placeholder="exemple@domaine.com"
                            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                 </div>
+                <div>
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Téléphone</label>
+                    <input type="tel" id="shareApplicantPhone" placeholder="Ex: 0700000000"
+                           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                </div>
             </div>
 
             <!-- Délai de validité -->
@@ -575,6 +580,7 @@ async function lookupShareByTrackingNumber() {
         document.getElementById('shareAdminId').value = result.recipient_administration_id || '';
         document.getElementById('shareFullName').value = result.applicant_full_name || '';
         document.getElementById('shareApplicantEmail').value = result.applicant_email || '';
+        document.getElementById('shareApplicantPhone').value = result.applicant_phone || '';
 
         const adminLabel = result.recipient_administration_name || 'Administration trouvee';
         showStatus(`Informations chargees (${adminLabel}).`, true);
@@ -1212,6 +1218,7 @@ function openShareModal(id) {
     document.getElementById('shareFullName').value = '';
     document.getElementById('shareMatricule').value = '';
     document.getElementById('shareApplicantEmail').value = '';
+    document.getElementById('shareApplicantPhone').value = '';
     document.getElementById('shareTrackingNumber').value = '';
     document.getElementById('shareTrackingStatus').classList.add('hidden');
     document.getElementById('shareHasDelay').checked = false;
@@ -1295,6 +1302,7 @@ async function submitShare() {
         const fullName = document.getElementById('shareFullName').value.trim();
         const mat = document.getElementById('shareMatricule').value.trim();
         const email = document.getElementById('shareApplicantEmail').value.trim();
+        const phone = document.getElementById('shareApplicantPhone').value.trim();
         if (!trackingNumber || !adminId || !fullName || !mat || !email) { show('Tous les champs sont obligatoires.', false); return; }
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { show('Adresse email invalide.', false); return; }
         payload.trackingNumber = trackingNumber;
@@ -1302,6 +1310,7 @@ async function submitShare() {
         payload.applicantFullName = fullName;
         payload.applicantMatricule = mat;
         payload.applicantEmail = email;
+        if (phone) payload.applicantPhone = phone;
     }
 
     await post(ROUTES.share(shareDocId), payload).then(data => {

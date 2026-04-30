@@ -122,6 +122,21 @@ class ReceptionController extends Controller
 
         $documents = $query->latest()->paginate(20);
 
-        return view('reception.index', compact('documents', 'search'));
+        // Récupérer les infos du demandeur pour chaque document (le share le plus récent par document)
+        $sharesInfo = collect();
+        if ($sharedDocIds->isNotEmpty()) {
+            try {
+                $sharesInfo = DocumentShare::query()
+                    ->whereIn('document_id', $sharedDocIds)
+                    ->whereNotNull('applicant_full_name')
+                    ->orderByDesc('created_at')
+                    ->get(['document_id', 'applicant_full_name', 'applicant_phone', 'applicant_email', 'tracking_number'])
+                    ->keyBy('document_id');
+            } catch (\Throwable $e) {
+                Log::warning('Reception: cannot load applicant info', ['message' => $e->getMessage()]);
+            }
+        }
+
+        return view('reception.index', compact('documents', 'search', 'sharesInfo'));
     }
 }

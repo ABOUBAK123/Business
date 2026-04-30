@@ -47,6 +47,8 @@
                 <tr>
                     <th class="text-left px-5 py-3 font-semibold text-gray-600">Document</th>
                     <th class="text-left px-5 py-3 font-semibold text-gray-600">Expéditeur</th>
+                    <th class="text-left px-5 py-3 font-semibold text-gray-600">Demandeur</th>
+                    <th class="text-left px-5 py-3 font-semibold text-gray-600">Téléphone</th>
                     <th class="text-left px-5 py-3 font-semibold text-gray-600">Statut</th>
                     <th class="text-left px-5 py-3 font-semibold text-gray-600">Reçu le</th>
                     <th class="px-5 py-3"></th>
@@ -54,6 +56,7 @@
             </thead>
             <tbody class="divide-y divide-gray-50">
                 @foreach($documents as $doc)
+                @php $shareInfo = $sharesInfo[$doc->id] ?? null; @endphp
                 <tr class="hover:bg-gray-50/50 transition">
                     <td class="px-5 py-4">
                         <div class="flex items-center gap-3">
@@ -67,6 +70,22 @@
                         </div>
                     </td>
                     <td class="px-5 py-4 text-gray-600">{{ $doc->owner?->name ?? '—' }}</td>
+                    <td class="px-5 py-4">
+                        @if($shareInfo?->applicant_full_name)
+                            <div class="font-medium text-gray-800 text-xs">{{ $shareInfo->applicant_full_name }}</div>
+                            @if($shareInfo->applicant_email)
+                                <div class="text-xs text-gray-400">{{ $shareInfo->applicant_email }}</div>
+                            @endif
+                            @if($shareInfo->tracking_number)
+                                <div class="text-xs text-indigo-500 font-mono">{{ $shareInfo->tracking_number }}</div>
+                            @endif
+                        @else
+                            <span class="text-gray-400">—</span>
+                        @endif
+                    </td>
+                    <td class="px-5 py-4 text-gray-600 text-xs">
+                        {{ $shareInfo?->applicant_phone ?? '—' }}
+                    </td>
                     <td class="px-5 py-4">
                         <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold
                             {{ $doc->status === 'signed' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700' }}">
