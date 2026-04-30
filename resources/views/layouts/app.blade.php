@@ -23,10 +23,12 @@
         $themHeaderLogo = null;     // logo onglet navigateur
 
         if ($themUser && $themUser->profile_id) {
-            $themProfile = \App\Models\AdministrationProfile::find($themUser->profile_id);
+            $themProfile = \App\Models\AdministrationProfile::with(['emitterAdministration', 'recipientAdministration'])
+                ->find($themUser->profile_id);
             if ($themProfile && $themProfile->administration_id) {
                 $themAdminId = $themProfile->administration_id;
-                $themPrefix  = 'theme_emitter_' . $themAdminId . '_';
+                $themAdminType = $themProfile->effective_administration_type ?? 'emitter';
+                $themPrefix  = 'theme_' . $themAdminType . '_' . $themAdminId . '_';
                 $themSettings = \App\Models\AppSetting::whereIn('key', [
                     $themPrefix . 'menu_color',
                     $themPrefix . 'bg_color',
@@ -143,13 +145,14 @@
         $sidebarDisplayName = 'E-Parapheur';
         $sidebarUser        = auth()->user();
         if ($sidebarUser && $sidebarUser->profile_id) {
-            $sidebarProfile = \App\Models\AdministrationProfile::with('administration')
+            $sidebarProfile = \App\Models\AdministrationProfile::with(['emitterAdministration', 'recipientAdministration'])
                                 ->find($sidebarUser->profile_id);
-            if ($sidebarProfile && $sidebarProfile->administration) {
-                $sidebarAdmin     = $sidebarProfile->administration;
+            if ($sidebarProfile && $sidebarProfile->resolved_administration) {
+                $sidebarAdmin     = $sidebarProfile->resolved_administration;
                 $sidebarAdminName = $sidebarAdmin->name;
                 $sidebarAdminCode = $sidebarAdmin->code ?? null;
-                $sidebarThemPfx   = 'theme_emitter_' . $sidebarAdmin->id . '_';
+                $sidebarAdminType = $sidebarProfile->effective_administration_type ?? 'emitter';
+                $sidebarThemPfx   = 'theme_' . $sidebarAdminType . '_' . $sidebarAdmin->id . '_';
 
                 // Charger les clés theming utiles en une seule requête
                 $sidebarSettings = \App\Models\AppSetting::whereIn('key', [
