@@ -172,9 +172,13 @@
                         ? asset('storage/' . $themingPath)
                         : null;
                 }
-                // 3) Fallback sur le champ logo direct de l'administration
-                if (!$sidebarLogo && $sidebarAdmin->logo) {
-                    $rawLogo = ltrim($sidebarAdmin->logo, '/');
+                // 3) Fallback sur le champ logo direct de l'administration (colonne logo ou metadata.logoPath)
+                $rawLogoField = $sidebarAdmin->logo ?? null;
+                if (!$rawLogoField && isset($sidebarAdmin->metadata['logoPath'])) {
+                    $rawLogoField = $sidebarAdmin->metadata['logoPath'];
+                }
+                if (!$sidebarLogo && $rawLogoField) {
+                    $rawLogo = ltrim($rawLogoField, '/');
                     if (str_starts_with($rawLogo, 'storage/')) {
                         $storageRel = ltrim(substr($rawLogo, strlen('storage/')), '/');
                         if ($storageRel !== '' && \Illuminate\Support\Facades\Storage::disk('public')->exists($storageRel)) {
