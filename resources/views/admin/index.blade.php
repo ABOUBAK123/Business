@@ -3880,17 +3880,28 @@ function toggleOoSecret() {
 @php
     $usersSearch    = request('u_search', '');
     $editUserId     = request('u_edit');
+  $editUserData   = null;
+  if (request('u_data')) {
+    $decoded = base64_decode((string) request('u_data'), true);
+    if ($decoded !== false) {
+      $parsed = json_decode($decoded, true);
+      if (is_array($parsed)) {
+        $editUserData = $parsed;
+      }
+    }
+  }
     $editUser       = $editUserId ? $users->getCollection()->firstWhere('id', $editUserId) : null;
   if (!$editUser && $editUserId) {
     $editUser = \App\Models\User::query()->whereKey($editUserId)->first();
   }
   $editDir        = $editUser ? ($dirAssignments->get($editUser->id) ?: \App\Models\UserDirectionAssignment::query()->where('user_id', $editUser->id)->first()) : null;
   $editParts      = preg_split('/\s+/', trim($editUser->full_name ?? $editUser->name ?? ''));
-  $editNom        = $editUser ? (count($editParts) > 1 ? end($editParts) : ($editUser->name ?? '')) : '';
-  $editPrenoms    = $editUser ? (count($editParts) > 1 ? implode(' ', array_slice($editParts, 0, -1)) : '') : '';
-  $editScopeType  = old('administration_type', $editDir?->direction_scope_type ?? '');
-  $editScopeId    = old('administration_id', $editDir?->direction_scope_id ?? '');
-  $editSubCode    = old('sub_entity_id', $editDir?->sub_entity_code ?? '');
+  $editNom        = $editUser ? (count($editParts) > 1 ? end($editParts) : ($editUser->name ?? '')) : ($editUserData['nom'] ?? '');
+  $editPrenoms    = $editUser ? (count($editParts) > 1 ? implode(' ', array_slice($editParts, 0, -1)) : '') : ($editUserData['prenoms'] ?? '');
+  $editScopeType  = old('administration_type', $editDir?->direction_scope_type ?? ($editUserData['scope_type'] ?? ''));
+  $editScopeId    = old('administration_id', $editDir?->direction_scope_id ?? ($editUserData['scope_id'] ?? ''));
+  $editSubCode    = old('sub_entity_id', $editDir?->sub_entity_code ?? ($editUserData['sub_code'] ?? ''));
+  $editUserActionId = $editUser?->id ?? ($editUserData['id'] ?? $editUserId);
     $allRoles       = collect(['admin','user','signer','manager']);
     $emittersJson   = $emitters->map(fn($e) => ['id'=>$e->id,'name'=>$e->name])->values();
     $recipientsJson = $recipients->map(fn($r) => ['id'=>$r->id,'name'=>$r->name])->values();
@@ -4003,7 +4014,7 @@ function toggleOoSecret() {
                 ], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
                 $editUserPayload = base64_encode($editUserJson !== false ? $editUserJson : '{}');
               @endphp
-              <a href="{{ route('admin.index', ['tab' => 'users', 'u_search' => $usersSearch, 'u_edit' => $u->id, 'page' => request('page')]) }}"
+              <a href="{{ route('admin.index', ['tab' => 'users', 'u_search' => $usersSearch, 'u_edit' => $u->id, 'u_data' => $editUserPayload, 'page' => request('page')]) }}"
                 data-user="{{ $editUserPayload }}"
                 class="js-user-edit-link text-blue-600 hover:bg-blue-50 rounded p-1.5 transition" title="Modifier">
                 <i class="fas fa-pen text-xs"></i>
@@ -4199,7 +4210,7 @@ function toggleOoSecret() {
   </div>
 </div>
 {{-- ══ MODAL MODIFIER UTILISATEUR ══════════════════════════════════════════ --}}
-<div id="modal-user-edit" class="fixed inset-0 z-50 {{ $editUser ? 'flex' : 'hidden' }} items-center justify-center bg-black/40">
+<div id="modal-user-edit" class="fixed inset-0 z-50 {{ $editUserActionId ? 'flex' : 'hidden' }} items-center justify-center bg-black/40">
   <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 flex flex-col max-h-[90vh]">
     <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
       <h3 class="text-base font-semibold text-gray-800">Modifier l'utilisateur</h3>
@@ -4207,7 +4218,7 @@ function toggleOoSecret() {
         <i class="fas fa-times"></i>
       </button>
     </div>
-    <form id="form-user-edit" method="POST" action="{{ $editUser ? route('admin.users-tab.update', $editUser) : '' }}" enctype="multipart/form-data"
+    <form id="form-user-edit" method="POST" action="{{ $editUserActionId ? route('admin.users-tab.update', $editUserActionId) : '' }}" enctype="multipart/form-data"
       class="flex flex-col flex-1 overflow-y-auto px-6 py-4 space-y-4">
       @csrf @method('PUT')
 
@@ -4218,22 +4229,22 @@ function toggleOoSecret() {
           class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
       </div>
 
-      <input type="text" id="e-name" name="name" placeholder="Nom à afficher" required value="{{ old('name', $editUser->name ?? '') }}"
+      <input type="text" id="e-name" name="name" placeholder="Nom à afficher" required value="{{ old('name', $editUser->name ?? ($editUserData['name'] ?? '')) }}"
         class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
 
       <select id="e-role" name="role" required
         class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
         <option value="">Rôle système</option>
-        <option value="admin" {{ old('role', $editUser->role ?? '') === 'admin' ? 'selected' : '' }}>Administrateur</option>
-        <option value="manager" {{ old('role', $editUser->role ?? '') === 'manager' ? 'selected' : '' }}>Manager</option>
-        <option value="signer" {{ old('role', $editUser->role ?? '') === 'signer' ? 'selected' : '' }}>Signataire</option>
-        <option value="user" {{ old('role', $editUser->role ?? '') === 'user' ? 'selected' : '' }}>Utilisateur</option>
+        <option value="admin" {{ old('role', $editUser->role ?? ($editUserData['role'] ?? '')) === 'admin' ? 'selected' : '' }}>Administrateur</option>
+        <option value="manager" {{ old('role', $editUser->role ?? ($editUserData['role'] ?? '')) === 'manager' ? 'selected' : '' }}>Manager</option>
+        <option value="signer" {{ old('role', $editUser->role ?? ($editUserData['role'] ?? '')) === 'signer' ? 'selected' : '' }}>Signataire</option>
+        <option value="user" {{ old('role', $editUser->role ?? ($editUserData['role'] ?? '')) === 'user' ? 'selected' : '' }}>Utilisateur</option>
       </select>
       <select id="e-profile" name="profile_id"
         class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
         <option value="">« Aucun profil applicatif (super-admin si rôle admin) »</option>
         @foreach($profiles as $p)
-        <option value="{{ $p->id }}" {{ (string) old('profile_id', $editUser->profile_id ?? '') === (string) $p->id ? 'selected' : '' }}>{{ $p->name }}</option>
+        <option value="{{ $p->id }}" {{ (string) old('profile_id', $editUser->profile_id ?? ($editUserData['profile_id'] ?? '')) === (string) $p->id ? 'selected' : '' }}>{{ $p->name }}</option>
         @endforeach
       </select>
 
@@ -4278,16 +4289,16 @@ function toggleOoSecret() {
         @endif
       </select>
 
-      <input type="email" id="e-email" name="email" placeholder="E-mail" required value="{{ old('email', $editUser->email ?? '') }}"
+      <input type="email" id="e-email" name="email" placeholder="E-mail" required value="{{ old('email', $editUser->email ?? ($editUserData['email'] ?? '')) }}"
         class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
 
       <select id="e-quota" name="quota"
         class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
         <option value="">Quota par défaut</option>
-        <option value="1 Go" {{ old('quota', $editUser->quota ?? '') === '1 Go' ? 'selected' : '' }}>1 Go</option>
-        <option value="5 Go" {{ old('quota', $editUser->quota ?? '') === '5 Go' ? 'selected' : '' }}>5 Go</option>
-        <option value="10 Go" {{ old('quota', $editUser->quota ?? '') === '10 Go' ? 'selected' : '' }}>10 Go</option>
-        <option value="Illimité" {{ old('quota', $editUser->quota ?? '') === 'Illimité' ? 'selected' : '' }}>Illimité</option>
+        <option value="1 Go" {{ old('quota', $editUser->quota ?? ($editUserData['quota'] ?? '')) === '1 Go' ? 'selected' : '' }}>1 Go</option>
+        <option value="5 Go" {{ old('quota', $editUser->quota ?? ($editUserData['quota'] ?? '')) === '5 Go' ? 'selected' : '' }}>5 Go</option>
+        <option value="10 Go" {{ old('quota', $editUser->quota ?? ($editUserData['quota'] ?? '')) === '10 Go' ? 'selected' : '' }}>10 Go</option>
+        <option value="Illimité" {{ old('quota', $editUser->quota ?? ($editUserData['quota'] ?? '')) === 'Illimité' ? 'selected' : '' }}>Illimité</option>
       </select>
 
       <div class="relative">
@@ -4315,7 +4326,7 @@ function toggleOoSecret() {
       </div>
 
       <label class="flex items-center gap-2 text-sm text-gray-700">
-        <input type="checkbox" id="e-status" name="status" value="active" class="h-4 w-4 rounded border-gray-300" {{ old('status', ($editUser->status ?? '') === 'active' ? 'active' : '') === 'active' ? 'checked' : '' }}> Actif
+        <input type="checkbox" id="e-status" name="status" value="active" class="h-4 w-4 rounded border-gray-300" {{ old('status', (($editUser->status ?? ($editUserData['status'] ?? '')) === 'active' ? 'active' : '')) === 'active' ? 'checked' : '' }}> Actif
       </label>
 
       <div class="grid grid-cols-2 gap-2 pt-1">
