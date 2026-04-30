@@ -75,7 +75,8 @@
                     $selectedSector = (string) old('recipient_sector', '');
                     if ($selectedSector === '' && $selectedRecipientId !== '') {
                         $selectedRecipient = $recipients->firstWhere('id', $selectedRecipientId);
-                        $selectedSector = (string) ($selectedRecipient?->metadata['sector'] ?? '');
+                        $selectedRecipientMeta = is_array($selectedRecipient?->metadata) ? $selectedRecipient->metadata : [];
+                        $selectedSector = (string) ($selectedRecipientMeta['sector'] ?? '');
                     }
                 @endphp
                 <div class="rounded-xl border border-blue-100 bg-blue-50 p-4 space-y-3">
@@ -98,8 +99,9 @@
                                     class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200">
                                 <option value="">— Sélectionner —</option>
                                 @foreach($recipients as $recip)
+                                    @php $recipMeta = is_array($recip->metadata) ? $recip->metadata : []; @endphp
                                     <option value="{{ $recip->id }}"
-                                            data-sector="{{ $recip->metadata['sector'] ?? '' }}"
+                                            data-sector="{{ (string) ($recipMeta['sector'] ?? '') }}"
                                             {{ $selectedRecipientId === $recip->id ? 'selected' : '' }}>
                                         {{ $recip->name }}
                                     </option>
