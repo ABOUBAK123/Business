@@ -24,6 +24,32 @@
             </p>
         </section>
 
+        <section class="bg-white/95 backdrop-blur rounded-2xl border border-blue-100 shadow-sm p-6">
+            <h2 class="text-base font-semibold text-gray-800 mb-3">Rechercher ma demande</h2>
+            <p class="text-sm text-gray-500 mb-3">Saisissez votre numero de traitement pour suivre l'etat de votre demande.</p>
+
+            @if(session('tracking_error'))
+                <div class="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                    {{ session('tracking_error') }}
+                </div>
+            @endif
+
+            <form method="POST" action="{{ route('public.act-requests.search') }}" class="flex flex-col sm:flex-row gap-2">
+                @csrf
+                <input
+                    type="text"
+                    name="tracking_number"
+                    value="{{ old('tracking_number') }}"
+                    placeholder="Ex: DACT-202604-123456"
+                    class="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-200"
+                    required
+                >
+                <button type="submit" class="rounded-lg bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 text-sm font-semibold transition">
+                    Suivre ma demande
+                </button>
+            </form>
+        </section>
+
         @if(!$selectedAdministration)
         {{-- Ecran 1 : Administrations --}}
         <section class="bg-white/95 backdrop-blur rounded-2xl border border-cyan-100 shadow-sm p-6">

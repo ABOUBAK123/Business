@@ -72,6 +72,28 @@ class PublicActRequestController extends Controller
         ]);
     }
 
+    public function searchByTrackingNumber(Request $request)
+    {
+        $request->validate([
+            'tracking_number' => 'required|string|max:60',
+        ]);
+
+        $trackingNumber = strtoupper(trim((string) $request->input('tracking_number', '')));
+
+        $submission = ActRequestSubmission::query()
+            ->whereRaw('UPPER(tracking_number) = ?', [$trackingNumber])
+            ->first();
+
+        if (!$submission || empty($submission->tracking_token)) {
+            return redirect()
+                ->route('public.act-requests.index')
+                ->withInput()
+                ->with('tracking_error', 'Numero de traitement introuvable. Verifiez puis reessayez.');
+        }
+
+        return redirect()->route('public.act-requests.track', $submission->tracking_token);
+    }
+
     public function showActsByAdministration(string $administration_id)
     {
         $administrations = IssuingAdministration::query()
