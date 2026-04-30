@@ -31,6 +31,11 @@ use Illuminate\Database\QueryException;
 
 class AdminController extends Controller
 {
+    public function recipientsIndex()
+    {
+        return redirect()->route('admin.index', ['tab' => 'recipients']);
+    }
+
     private function isSuperAdminProfile(?AdministrationProfile $profile): bool
     {
         if (!$profile || !is_string($profile->name)) {
@@ -287,11 +292,12 @@ class AdminController extends Controller
 
             $courrierArchivalDays = (int) AppSetting::where('key', 'courrier_archival_days')->value('value');
         } catch (\Throwable $e) {
-            if ($tab !== 'emitters') {
+            if (!in_array($tab, ['emitters', 'recipients'], true)) {
                 throw $e;
             }
 
-            Log::warning('Admin emitters tab fallback due to missing dependency', [
+            Log::warning('Admin tab fallback due to missing dependency', [
+                'tab' => $tab,
                 'message' => $e->getMessage(),
             ]);
 
@@ -301,10 +307,20 @@ class AdminController extends Controller
                 $settings = collect();
             }
 
-            try {
-                $emitters = IssuingAdministration::latest()->get();
-            } catch (\Throwable $ignored) {
-                $emitters = collect();
+            if ($tab === 'emitters') {
+                try {
+                    $emitters = IssuingAdministration::latest()->get();
+                } catch (\Throwable $ignored) {
+                    $emitters = collect();
+                }
+            }
+
+            if ($tab === 'recipients') {
+                try {
+                    $recipients = RecipientAdministration::latest()->get();
+                } catch (\Throwable $ignored) {
+                    $recipients = collect();
+                }
             }
         }
 
