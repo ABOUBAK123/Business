@@ -4085,6 +4085,14 @@ function toggleOoSecret() {
       </div>
 
       <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Entité sous tutelle</label>
+        <select id="c-sub-entity" name="sub_entity_id"
+          class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none" disabled>
+          <option value="">Direction sous tutelle</option>
+        </select>
+      </div>
+
+      <div>
         <label class="block text-xs font-medium text-gray-600 mb-1">E-mail <span class="text-red-500">*</span></label>
         <input type="email" name="email" placeholder="adresse@exemple.gouv" required
           class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
