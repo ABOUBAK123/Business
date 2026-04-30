@@ -27,7 +27,7 @@
             'pending' => 'En attente',
             'in_progress' => 'En cours de traitement',
             'sent' => 'Envoyee a l\'administration destinataire',
-            'treated' => 'Traitee',
+            'treated' => 'Terminee',
             'rejected' => 'Refusee',
         ];
 

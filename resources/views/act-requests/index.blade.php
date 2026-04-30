@@ -18,7 +18,7 @@
     </form>
 
     <div class="flex gap-2">
-        @foreach([''=>'Tous','pending'=>'En attente','in_progress'=>'En cours','treated'=>'Traité'] as $val => $label)
+        @foreach([''=>'Tous','pending'=>'En attente','in_progress'=>'En cours','sent'=>'Envoyee','treated'=>'Terminee'] as $val => $label)
         <a href="{{ route('act-requests.index', array_merge(request()->only('q'), ['status' => $val])) }}"
             class="px-3 py-2 rounded-xl text-xs font-semibold border transition
                 {{ $status === $val ? 'bg-[#2453d6] text-white border-[#2453d6]' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50' }}">
@@ -91,13 +91,15 @@
                             $colors = [
                                 'pending'     => 'bg-yellow-100 text-yellow-700',
                                 'in_progress' => 'bg-blue-100 text-blue-700',
+                                'sent'        => 'bg-indigo-100 text-indigo-700',
                                 'treated'     => 'bg-green-100 text-green-700',
                                 'rejected'    => 'bg-red-100 text-red-700',
                             ];
                             $labels = [
                                 'pending'     => 'En attente',
                                 'in_progress' => 'En cours',
-                                'treated'     => 'Traité',
+                                'sent'        => 'Envoyee',
+                                'treated'     => 'Terminee',
                                 'rejected'    => 'Refusé',
                             ];
                             $cls   = $colors[$req->status]   ?? 'bg-gray-100 text-gray-600';

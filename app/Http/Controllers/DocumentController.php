@@ -218,6 +218,65 @@ class DocumentController extends Controller
     public function download(Request $request, Document $document)
     {
         abort_if(!$this->userCanAccessDocument($document), 403);
+
+        $user = Auth::user();
+        if ($user && (string) $user->id !== (string) $document->owner_id) {
+            $userEmail = (string) ($user->email ?? '');
+            $adminCode = strtoupper(trim((string) ($user->profile?->administration?->code ?? '')));
+
+            $recipientAdminIds = collect();
+            if ($adminCode !== '') {
+                $recipientAdminIds = RecipientAdministration::query()
+                    ->whereRaw('UPPER(code) = ?', [$adminCode])
+                    ->pluck('id');
+            }
+
+            $recipientShares = DocumentShare::query()
+                ->where('document_id', $document->id)
+                ->where(function ($q) {
+                    $q->whereNull('expires_at')
+                      ->orWhere('expires_at', '>', now());
+                })
+                ->where(function ($q) use ($user, $userEmail, $recipientAdminIds) {
+                    $q->where('recipient_name', 'user:' . $user->id);
+
+                    if ($userEmail !== '') {
+                        $q->orWhere('recipient_email', $userEmail);
+                    }
+
+                    if ($recipientAdminIds->isNotEmpty()) {
+                        $q->orWhereIn('recipient_administration_id', $recipientAdminIds);
+                    }
+                })
+                ->get(['tracking_number', 'recipient_administration_id', 'applicant_email', 'applicant_full_name']);
+
+            foreach ($recipientShares as $share) {
+                $trackingNumber = strtoupper(trim((string) ($share->tracking_number ?? '')));
+                $submission = null;
+
+                if ($trackingNumber !== '') {
+                    $submission = ActRequestSubmission::query()
+                        ->whereRaw('UPPER(tracking_number) = ?', [$trackingNumber])
+                        ->first();
+                }
+
+                if (!$submission && !empty($share->recipient_administration_id)) {
+                    $submission = ActRequestSubmission::query()
+                        ->where('recipient_administration_id', $share->recipient_administration_id)
+                        ->where('applicant_email', (string) ($share->applicant_email ?? ''))
+                        ->where('applicant_full_name', (string) ($share->applicant_full_name ?? ''))
+                        ->whereIn('status', ['pending', 'in_progress', 'sent'])
+                        ->latest()
+                        ->first();
+                }
+
+                if ($submission && $submission->status !== 'treated') {
+                    $submission->status = 'treated';
+                    $submission->save();
+                }
+            }
+        }
+
         $path = str_replace('/storage/', '', $document->file_path);
         $ext  = pathinfo($document->file_path, PATHINFO_EXTENSION) ?: 'bin';
 
@@ -445,6 +504,7 @@ class DocumentController extends Controller
             'applicant_full_name'          => $request->input('applicantFullName'),
             'applicant_matricule'          => $request->input('applicantMatricule'),
             'applicant_email'              => $request->input('applicantEmail'),
+            'tracking_number'              => strtoupper(trim((string) $request->input('trackingNumber', ''))),
         ];
 
         $createdShares = collect();
@@ -559,6 +619,9 @@ class DocumentController extends Controller
             }
 
             $trackingNumber = strtoupper(trim((string) $request->input('trackingNumber', '')));
+            if ($trackingNumber === '') {
+                return response()->json(['ok' => false, 'message' => 'Numero de suivi obligatoire pour ce type de partage.'], 422);
+            }
 
             $recipientAdministration = RecipientAdministration::find($recipientAdministrationId);
             if (!$recipientAdministration) {
@@ -692,6 +755,14 @@ class DocumentController extends Controller
             ->filter()
             ->values();
 
+        $adminCode = strtoupper(trim((string) ($user->profile?->administration?->code ?? '')));
+        $recipientAdminIds = collect();
+        if ($adminCode !== '') {
+            $recipientAdminIds = RecipientAdministration::query()
+                ->whereRaw('UPPER(code) = ?', [$adminCode])
+                ->pluck('id');
+        }
+
         return DocumentShare::query()
             ->where('document_id', $document->id)
             ->where(function ($q) {
@@ -707,6 +778,10 @@ class DocumentController extends Controller
 
                 foreach ($subEntityCodes as $code) {
                     $q->orWhere('recipient_name', 'sub_entity:' . $code);
+                }
+
+                if ($recipientAdminIds->isNotEmpty()) {
+                    $q->orWhereIn('recipient_administration_id', $recipientAdminIds);
                 }
             })
             ->exists();
