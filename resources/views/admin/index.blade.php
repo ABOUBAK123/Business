@@ -3977,7 +3977,7 @@ function toggleOoSecret() {
             <div class="flex items-center gap-1">
               {{-- Modifier --}}
               @php
-                $editUserPayload = base64_encode(json_encode([
+                $editUserJson = json_encode([
                   'id' => $u->id,
                   'nom' => $nom,
                   'prenoms' => $prenoms,
@@ -3990,7 +3990,8 @@ function toggleOoSecret() {
                   'scope_type' => $dir?->direction_scope_type ?? '',
                   'scope_id' => $dir?->direction_scope_id ?? '',
                   'sub_code' => $dir?->sub_entity_code ?? '',
-                ], JSON_UNESCAPED_UNICODE));
+                ], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+                $editUserPayload = base64_encode($editUserJson !== false ? $editUserJson : '{}');
               @endphp
               <button type="button"
                 data-user="{{ $editUserPayload }}"
@@ -4416,7 +4417,10 @@ function openUserEditModal(data) {
 function openUserEditModalFromButton(buttonEl) {
   try {
     var encoded = buttonEl ? buttonEl.getAttribute('data-user') : '';
-    if (!encoded) return;
+    if (!encoded) {
+      alert('Données utilisateur introuvables pour la modification. Rechargez la page puis réessayez.');
+      return;
+    }
     var data = JSON.parse(atob(encoded));
     openUserEditModal(data);
   } catch (e) {
