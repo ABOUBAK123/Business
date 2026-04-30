@@ -71,16 +71,52 @@ function addStep() {
                 <select name="steps[${stepCount}][type]" class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                     ${Object.entries(types).map(([v,l]) => `<option value="${v}">${l}</option>`).join('')}
                 </select>
-                <select name="steps[${stepCount}][assignee_id]" class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                    <option value="">-- Assigné à --</option>
-                    ${users.map(u => `<option value="${u.id}">${u.name}</option>`).join('')}
-                </select>
+                <div class="relative">
+                    <input type="text" placeholder="Rechercher un signataire..." class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 search-input" data-step-id="${stepCount}">
+                    <input type="hidden" name="steps[${stepCount}][assignee_id]" class="assignee-input" value="">
+                    <div class="absolute z-50 top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg hidden search-results" style="max-height: 200px; overflow-y: auto;">
+                        ${users.map(u => `<div class="px-3 py-2 text-sm cursor-pointer hover:bg-indigo-50 user-option" data-user-id="${u.id}" data-user-name="${u.name}">${u.name} <span class="text-xs text-gray-400">${u.email}</span></div>`).join('')}
+                    </div>
+                </div>
             </div>
             <button type="button" onclick="removeStep(${stepCount})" class="text-red-400 hover:text-red-600 p-1">
                 <i class="fas fa-times"></i>
             </button>
         </div>`;
     document.getElementById('steps').appendChild(div);
+
+    // Ajouter les event listeners de recherche
+    const searchInput = div.querySelector('.search-input');
+    const searchResults = div.querySelector('.search-results');
+    const userOptions = div.querySelectorAll('.user-option');
+    const assigneeInput = div.querySelector('.assignee-input');
+
+    searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.toLowerCase();
+        searchResults.classList.toggle('hidden', !query);
+        userOptions.forEach(opt => {
+            const name = opt.dataset.userName.toLowerCase();
+            const text = opt.textContent.toLowerCase();
+            opt.classList.toggle('hidden', !name.includes(query) && !text.includes(query));
+        });
+    });
+
+    userOptions.forEach(opt => {
+        opt.addEventListener('click', () => {
+            searchInput.value = opt.dataset.userName;
+            assigneeInput.value = opt.dataset.userId;
+            searchResults.classList.add('hidden');
+        });
+    });
+
+    searchInput.addEventListener('blur', () => {
+        setTimeout(() => searchResults.classList.add('hidden'), 100);
+    });
+    searchInput.addEventListener('focus', () => {
+        if (searchInput.value) {
+            searchResults.classList.remove('hidden');
+        }
+    });
 }
 
 function removeStep(n) {

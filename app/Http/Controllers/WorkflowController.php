@@ -179,7 +179,10 @@ class WorkflowController extends Controller
 
     public function create()
     {
-        $users = User::where('status', 'active')->get(['id', 'name', 'email']);
+        $users = User::where('status', 'active')
+                     ->where('role', 'signer')
+                     ->orderBy('name')
+                     ->get(['id', 'name', 'email']);
         return view('workflows.create', compact('users'));
     }
 
