@@ -4297,9 +4297,9 @@ function userAdminTypeChange(prefix) {
   var subSel = document.getElementById(prefix + '-sub-entity');
   var roleSel = document.getElementById(prefix + '-role-profile');
   adminSel.innerHTML = '<option value="">Administration</option>';
-  subSel.innerHTML = '<option value="">Direction sous tutelle</option>';
+  if (subSel) { subSel.innerHTML = '<option value="">Direction sous tutelle</option>'; }
   adminSel.disabled = !type;
-  subSel.disabled = true;
+  if (subSel) { subSel.disabled = true; }
   if (roleSel) { roleSel.innerHTML = '<option value="">« Sélectionner un rôle »</option>'; roleSel.disabled = true; }
   if (!type) return;
   var list = type === 'emitter' ? __emitters : __recipients;
@@ -4313,8 +4313,10 @@ function userAdminIdChange(prefix) {
   var adminId = document.getElementById(prefix + '-admin-id').value;
   var subSel = document.getElementById(prefix + '-sub-entity');
   var roleSel = document.getElementById(prefix + '-role-profile');
-  subSel.innerHTML = '<option value="">Direction sous tutelle</option>';
-  subSel.disabled = !adminId;
+  if (subSel) {
+    subSel.innerHTML = '<option value="">Direction sous tutelle</option>';
+    subSel.disabled = !adminId;
+  }
   if (roleSel) {
     roleSel.innerHTML = '<option value="">« Sélectionner un rôle »</option>';
     roleSel.disabled = !adminId;
@@ -4323,9 +4325,11 @@ function userAdminIdChange(prefix) {
   var filtered = __subEntities.filter(function(s) {
     return s.scope_type === type && s.scope_id === adminId;
   });
-  filtered.forEach(function(s) {
-    subSel.innerHTML += '<option value="' + s.id + '">' + s.name + '</option>';
-  });
+  if (subSel) {
+    filtered.forEach(function(s) {
+      subSel.innerHTML += '<option value="' + s.id + '">' + s.name + '</option>';
+    });
+  }
   if (roleSel) {
     var filteredProfiles = __profiles.filter(function(p) {
       return p.administration_id === adminId;
