@@ -6,6 +6,7 @@ use App\Models\MeetingRoom;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class MeetingRoomController extends Controller
 {
@@ -28,6 +29,11 @@ class MeetingRoomController extends Controller
 
     public function index()
     {
+        if (!Schema::hasTable('meeting_rooms') || !Schema::hasTable('user_direction_assignments')) {
+            return redirect()->route('dashboard')
+                ->with('error', 'Le module Reunions n\'est pas encore initialise sur ce serveur. Lancez les migrations.');
+        }
+
         $administrationId = $this->resolveAdministrationId();
 
         $rooms = MeetingRoom::when($administrationId, fn ($q) => $q->where('administration_id', $administrationId))
@@ -39,6 +45,11 @@ class MeetingRoomController extends Controller
 
     public function store(Request $request)
     {
+        if (!Schema::hasTable('meeting_rooms') || !Schema::hasTable('user_direction_assignments')) {
+            return redirect()->route('dashboard')
+                ->with('error', 'Le module Reunions n\'est pas encore initialise sur ce serveur. Lancez les migrations.');
+        }
+
         $validated = $request->validate([
             'name' => 'required|string|max:255',
             'capacity' => 'required|integer|min:1',

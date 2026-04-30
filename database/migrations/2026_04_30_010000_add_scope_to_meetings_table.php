@@ -46,17 +46,26 @@ return new class extends Migration
                 ]);
         }
 
-        // FK ajoutee apres backfill pour eviter les erreurs de migration partielle.
-        Schema::table('meetings', function (Blueprint $table) {
+        // FK ajoutee apres backfill. On utilise SQL brut dans un vrai try/catch,
+        // car l'exception SQL est declenchee APRES la closure Schema::table().
+        if (
+            Schema::hasTable('issuing_administrations')
+            && Schema::hasColumn('issuing_administrations', 'id')
+            && Schema::hasColumn('meetings', 'issuing_administration_id')
+            && !$this->foreignKeyExists('meetings', 'meetings_issuing_administration_id_foreign')
+        ) {
             try {
-                $table->foreign('issuing_administration_id')
-                    ->references('id')
-                    ->on('issuing_administrations')
-                    ->nullOnDelete();
+                DB::statement(
+                    'ALTER TABLE `meetings` '
+                    . 'ADD CONSTRAINT `meetings_issuing_administration_id_foreign` '
+                    . 'FOREIGN KEY (`issuing_administration_id`) '
+                    . 'REFERENCES `issuing_administrations`(`id`) '
+                    . 'ON DELETE SET NULL'
+                );
             } catch (\Throwable $e) {
-                // Ignore si deja creee / non supportee dans l'environnement.
+                // Ne pas bloquer la migration si FK impossible (schema legacy/collation).
             }
-        });
+        }
     }
 
     public function down(): void
@@ -65,12 +74,16 @@ return new class extends Migration
             return;
         }
 
-        Schema::table('meetings', function (Blueprint $table) {
+        if ($this->foreignKeyExists('meetings', 'meetings_issuing_administration_id_foreign')) {
             try {
-                $table->dropForeign(['issuing_administration_id']);
+                DB::statement('ALTER TABLE `meetings` DROP FOREIGN KEY `meetings_issuing_administration_id_foreign`');
             } catch (\Throwable $e) {
-                // Ignore si la contrainte n'existe pas.
+                // Ignore si la contrainte est deja absente ou non supprimable.
             }
+        }
+
+        Schema::table('meetings', function (Blueprint $table) {
+            // Drop FK ci-dessous via SQL brut si elle existe.
 
             if (Schema::hasColumn('meetings', 'sub_entity_code')) {
                 $table->dropColumn('sub_entity_code');
@@ -79,5 +92,19 @@ return new class extends Migration
                 $table->dropColumn('issuing_administration_id');
             }
         });
+    }
+
+    private function foreignKeyExists(string $tableName, string $constraintName): bool
+    {
+        $database = DB::getDatabaseName();
+
+        $exists = DB::table('information_schema.TABLE_CONSTRAINTS')
+            ->where('CONSTRAINT_SCHEMA', $database)
+            ->where('TABLE_NAME', $tableName)
+            ->where('CONSTRAINT_NAME', $constraintName)
+            ->where('CONSTRAINT_TYPE', 'FOREIGN KEY')
+            ->exists();
+
+        return (bool) $exists;
     }
 };

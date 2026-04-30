@@ -11,12 +11,18 @@ use Endroid\QrCode\Writer\PngWriter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 class MeetingController extends Controller
 {
     public function index(Request $request)
     {
+        if (!$this->isMeetingsModuleReady()) {
+            return redirect()->route('dashboard')
+                ->with('error', 'Le module Reunions n\'est pas encore initialise sur ce serveur. Lancez les migrations.');
+        }
+
         $q = trim((string) $request->get('q', ''));
         $scope = $this->resolveCurrentUserScope();
 
@@ -40,6 +46,11 @@ class MeetingController extends Controller
 
     public function create()
     {
+        if (!$this->isMeetingsModuleReady()) {
+            return redirect()->route('dashboard')
+                ->with('error', 'Le module Reunions n\'est pas encore initialise sur ce serveur. Lancez les migrations.');
+        }
+
         $scope = $this->resolveCurrentUserScope();
         if ($scope === null) {
             return redirect()->route('meetings.index')
@@ -69,6 +80,11 @@ class MeetingController extends Controller
 
     public function store(Request $request)
     {
+        if (!$this->isMeetingsModuleReady()) {
+            return redirect()->route('dashboard')
+                ->with('error', 'Le module Reunions n\'est pas encore initialise sur ce serveur. Lancez les migrations.');
+        }
+
         $scope = $this->resolveCurrentUserScope();
         if ($scope === null) {
             return back()->withInput()->with('error', 'Impossible de créer une réunion sans entité sous tutelle.');
@@ -177,6 +193,11 @@ class MeetingController extends Controller
 
     public function show(Meeting $meeting)
     {
+        if (!$this->isMeetingsModuleReady()) {
+            return redirect()->route('dashboard')
+                ->with('error', 'Le module Reunions n\'est pas encore initialise sur ce serveur. Lancez les migrations.');
+        }
+
         $this->abortIfMeetingOutsideScope($meeting);
 
         $meeting->load(['room', 'organizer', 'minutesWriter', 'participants.user', 'attendances']);
@@ -237,6 +258,15 @@ class MeetingController extends Controller
             'administration_id' => (string) $assignment->direction_scope_id,
             'sub_entity_code' => strtoupper(trim((string) ($assignment->sub_entity_code ?? ''))),
         ];
+    }
+
+    private function isMeetingsModuleReady(): bool
+    {
+        return Schema::hasTable('meetings')
+            && Schema::hasTable('meeting_rooms')
+            && Schema::hasTable('meeting_participants')
+            && Schema::hasTable('meeting_attendances')
+            && Schema::hasTable('user_direction_assignments');
     }
 
     private function resolveScopeUserIds(array $scope): array
