@@ -3993,12 +3993,11 @@ function toggleOoSecret() {
                 ], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
                 $editUserPayload = base64_encode($editUserJson !== false ? $editUserJson : '{}');
               @endphp
-              <button type="button"
+              <a href="{{ route('admin.index', ['tab' => 'users', 'u_search' => $usersSearch, 'u_edit' => $u->id]) }}"
                 data-user="{{ $editUserPayload }}"
-                onclick="openUserEditModalFromButton(this)"
-                class="text-blue-600 hover:bg-blue-50 rounded p-1.5 transition" title="Modifier">
+                class="js-user-edit-link text-blue-600 hover:bg-blue-50 rounded p-1.5 transition" title="Modifier">
                 <i class="fas fa-pen text-xs"></i>
-              </button>
+              </a>
               {{-- Toggle statut --}}
               <form method="POST" action="{{ route('admin.users-tab.toggle-status', $u) }}" class="inline">
                 @csrf
@@ -4314,6 +4313,31 @@ var __emitters   = @json($emittersJson);
 var __recipients = @json($recipientsJson);
 var __subEntities= @json($subEntJson);
 var __profiles   = @json($profilesJson);
+@php
+  $editUserBootPayload = null;
+  if ($editUser) {
+    $editDir = $dirAssignments->get($editUser->id);
+    $editParts = preg_split('/\s+/', trim($editUser->full_name ?? $editUser->name ?? ''));
+    $editNom = count($editParts) > 1 ? end($editParts) : ($editUser->name ?? '');
+    $editPrenoms = count($editParts) > 1 ? implode(' ', array_slice($editParts, 0, -1)) : '';
+    $editUserBootJson = json_encode([
+      'id' => $editUser->id,
+      'nom' => $editNom,
+      'prenoms' => $editPrenoms,
+      'name' => $editUser->name,
+      'email' => $editUser->email,
+      'role' => $editUser->role,
+      'profile_id' => $editUser->profile_id ?? '',
+      'status' => $editUser->status,
+      'quota' => $editUser->quota ?? '',
+      'scope_type' => $editDir?->direction_scope_type ?? '',
+      'scope_id' => $editDir?->direction_scope_id ?? '',
+      'sub_code' => $editDir?->sub_entity_code ?? '',
+    ], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+    $editUserBootPayload = base64_encode($editUserBootJson !== false ? $editUserBootJson : '{}');
+  }
+@endphp
+var __editUserBootPayload = @json($editUserBootPayload);
 
 function openUserModal(type) {
   var el = document.getElementById('modal-user-' + type);
@@ -4469,6 +4493,24 @@ function previewAvatar(input, previewId) {
   if (el) el.addEventListener('click', function(e) {
     if (e.target === el) closeUserModal(id === 'modal-user-create' ? 'create' : 'edit');
   });
+});
+
+document.addEventListener('DOMContentLoaded', function() {
+  document.querySelectorAll('.js-user-edit-link').forEach(function(link) {
+    link.addEventListener('click', function(e) {
+      e.preventDefault();
+      openUserEditModalFromButton(link);
+    });
+  });
+
+  if (__editUserBootPayload) {
+    try {
+      var bootData = JSON.parse(atob(__editUserBootPayload));
+      openUserEditModal(bootData);
+    } catch (e) {
+      console.error('Impossible d\'ouvrir automatiquement le modal utilisateur:', e);
+    }
+  }
 });
 </script>@elseif($tab === 'theming')
 @php
