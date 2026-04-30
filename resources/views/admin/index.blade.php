@@ -4327,8 +4327,10 @@ function closeUserModal(type) {
 }
 
 function userAdminTypeChange(prefix) {
-  var type   = document.getElementById(prefix + '-admin-type').value;
+  var typeEl = document.getElementById(prefix + '-admin-type');
   var adminSel = document.getElementById(prefix + '-admin-id');
+  if (!typeEl || !adminSel) return;
+  var type   = typeEl.value;
   var subSel = document.getElementById(prefix + '-sub-entity');
   var roleSel = document.getElementById(prefix + '-role-profile');
   adminSel.innerHTML = '<option value="">Administration</option>';
@@ -4344,8 +4346,11 @@ function userAdminTypeChange(prefix) {
 }
 
 function userAdminIdChange(prefix) {
-  var type   = document.getElementById(prefix + '-admin-type').value;
-  var adminId = document.getElementById(prefix + '-admin-id').value;
+  var typeEl = document.getElementById(prefix + '-admin-type');
+  var adminEl = document.getElementById(prefix + '-admin-id');
+  if (!typeEl || !adminEl) return;
+  var type   = typeEl.value;
+  var adminId = adminEl.value;
   var subSel = document.getElementById(prefix + '-sub-entity');
   var roleSel = document.getElementById(prefix + '-role-profile');
   if (subSel) {
@@ -4395,22 +4400,35 @@ function openUserEditModal(data) {
       if (profSel.options[j].value === data.profile_id) { profSel.selectedIndex = j; break; }
     }
   }
-  // admin type
-  document.getElementById('e-admin-type').value = data.scope_type || '';
-  userAdminTypeChange('e');
-  setTimeout(function() {
-    if (data.scope_id) {
-      document.getElementById('e-admin-id').value = data.scope_id;
-      userAdminIdChange('e');
-      setTimeout(function() {
-        var subSel = document.getElementById('e-sub-entity');
-        for (var i=0; i<subSel.options.length; i++) {
-          var se = __subEntities.find(function(s){ return s.id === subSel.options[i].value; });
-          if (se && se.code === data.sub_code) { subSel.selectedIndex = i; break; }
-        }
-      }, 50);
+  // administration scope: editable selects (super admin) OR hidden fixed scope inputs
+  var adminTypeEl = document.getElementById('e-admin-type');
+  var adminIdEl = document.getElementById('e-admin-id');
+  if (adminTypeEl && adminIdEl) {
+    adminTypeEl.value = data.scope_type || '';
+    userAdminTypeChange('e');
+    setTimeout(function() {
+      if (data.scope_id) {
+        adminIdEl.value = data.scope_id;
+        userAdminIdChange('e');
+        setTimeout(function() {
+          var subSel = document.getElementById('e-sub-entity');
+          if (!subSel) return;
+          for (var i=0; i<subSel.options.length; i++) {
+            var se = __subEntities.find(function(s){ return s.id === subSel.options[i].value; });
+            if (se && se.code === data.sub_code) { subSel.selectedIndex = i; break; }
+          }
+        }, 50);
+      }
+    }, 50);
+  } else {
+    var editForm = document.getElementById('form-user-edit');
+    if (editForm) {
+      var hiddenType = editForm.querySelector('input[name="administration_type"]');
+      var hiddenId = editForm.querySelector('input[name="administration_id"]');
+      if (hiddenType && !hiddenType.value && data.scope_type) hiddenType.value = data.scope_type;
+      if (hiddenId && !hiddenId.value && data.scope_id) hiddenId.value = data.scope_id;
     }
-  }, 50);
+  }
   openUserModal('edit');
 }
 
