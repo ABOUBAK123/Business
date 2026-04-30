@@ -96,6 +96,21 @@ if (!array_key_exists($tab, $tabs)) {
     </div>
     @endforeach
 </div>
+@php
+$_oc = [
+    'templates'          => method_exists($templates, 'total') ? $templates->total() : $templates->count(),
+    'emitters'           => $emitters->count(),
+    'recipients'         => $recipients->count(),
+    'sub-entities'       => $subEntities->count(),
+    'requested-acts'     => $requestedActs->count(),
+    'direction-types'    => $directionTypes->count(),
+    'routing'            => method_exists($routingRules, 'total') ? $routingRules->total() : $routingRules->count(),
+    'users'              => method_exists($users, 'total') ? $users->total() : $users->count(),
+    'user-profiles'      => method_exists($profiles, 'total') ? $profiles->total() : $profiles->count(),
+    'instructions'       => $instructions->count(),
+    'signature-provider' => $sigProviders->count(),
+];
+@endphp
 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
     @foreach([
         ['templates',          'fas fa-file-code',          'Templates',             'Modèles de documents configurables.',      'sky'],
@@ -114,10 +129,16 @@ if (!array_key_exists($tab, $tabs)) {
         ['onlyoffice',         'fas fa-edit',               'OnlyOffice',            'Serveur d\'édition collaborative.',        'cyan'],
         ['courrier-archiving', 'fas fa-archive',            'Archivage courrier',    'Délai d\'archivage automatique des courriers.','stone'],
     ] as [$t, $icon, $title, $desc, $color])
+    @php $cnt = $_oc[$t] ?? null; @endphp
     <a href="{{ route('admin.index', ['tab' => $t]) }}"
        class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 hover:shadow-md transition group">
-        <div class="h-11 w-11 rounded-xl bg-{{ $color }}-100 flex items-center justify-center mb-3">
-            <i class="{{ $icon }} text-{{ $color }}-600"></i>
+        <div class="flex items-start justify-between mb-3">
+            <div class="h-11 w-11 rounded-xl bg-{{ $color }}-100 flex items-center justify-center">
+                <i class="{{ $icon }} text-{{ $color }}-600"></i>
+            </div>
+            @if($cnt !== null)
+            <span class="text-2xl font-black text-gray-800">{{ number_format($cnt) }}</span>
+            @endif
         </div>
         <h3 class="font-bold text-gray-800 mb-1 text-sm">{{ $title }}</h3>
         <p class="text-xs text-gray-400">{{ $desc }}</p>
