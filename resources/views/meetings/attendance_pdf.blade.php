@@ -82,6 +82,19 @@
             border-bottom: 1px solid #e5e9f0;
             vertical-align: top;
         }
+        .signature-preview {
+            width: 82px;
+            height: 32px;
+            object-fit: contain;
+            border: 1px solid #d1d5db;
+            border-radius: 4px;
+            background: #fff;
+            padding: 2px;
+        }
+        .signature-missing {
+            color: #9ca3af;
+            font-style: italic;
+        }
         .footer {
             margin-top: 16px;
             font-size: 9px;
@@ -142,6 +155,7 @@
             <th>Téléphone</th>
             <th>Fonction</th>
             <th>Organisation</th>
+            <th>Signature</th>
             <th>Heure</th>
         </tr>
     </thead>
@@ -155,6 +169,13 @@
             <td>{{ $a->phone }}</td>
             <td>{{ $a->job_title }}</td>
             <td>{{ $a->organization }}</td>
+            <td>
+                @if(!empty($signatureSources[(string) $a->id] ?? null))
+                    <img src="{{ $signatureSources[(string) $a->id] }}" class="signature-preview">
+                @else
+                    <span class="signature-missing">Aucune</span>
+                @endif
+            </td>
             <td>{{ $a->signed_at?->format('H:i') }}</td>
         </tr>
         @endforeach

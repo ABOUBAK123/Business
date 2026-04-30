@@ -6,9 +6,17 @@
 @section('content')
 @include('meetings._nav')
 <div class="flex items-center justify-between mb-4 gap-3">
-    <div>
+    <div class="flex items-center gap-3">
+        @if(!empty($branding['logo_url']))
+            <img src="{{ $branding['logo_url'] }}" alt="Logo administration" class="h-12 w-12 object-contain rounded bg-white border border-gray-200 p-1">
+        @endif
+        <div>
+            @if(!empty($branding['tutelle_entity_name']))
+                <div class="text-xs uppercase tracking-wide text-gray-500">{{ $branding['tutelle_entity_name'] }}</div>
+            @endif
         <div class="text-sm text-gray-700">Participants attendus: <strong>{{ $meeting->participants->count() }}</strong></div>
         <div class="text-sm text-gray-700">Présents: <strong>{{ $meeting->attendances->count() }}</strong></div>
+        </div>
     </div>
     <a href="#" onclick="document.getElementById('download-modal').classList.remove('hidden');return false;"
        class="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#2453d6] text-white text-sm font-semibold hover:bg-[#1f47bb]">
@@ -73,6 +81,7 @@ document.querySelectorAll('input[name="format"]').forEach(function(r) {
                 <th class="text-left px-4 py-3 font-semibold text-gray-700">Nom</th>
                 <th class="text-left px-4 py-3 font-semibold text-gray-700">Identifiant</th>
                 <th class="text-left px-4 py-3 font-semibold text-gray-700">Email</th>
+                <th class="text-left px-4 py-3 font-semibold text-gray-700">Signature</th>
                 <th class="text-left px-4 py-3 font-semibold text-gray-700">Heure</th>
             </tr>
         </thead>
@@ -82,11 +91,18 @@ document.querySelectorAll('input[name="format"]').forEach(function(r) {
                 <td class="px-4 py-3 text-gray-800">{{ $a->full_name }}</td>
                 <td class="px-4 py-3 text-gray-600">{{ filter_var($a->identifier, FILTER_VALIDATE_EMAIL) ? '' : $a->identifier }}</td>
                 <td class="px-4 py-3 text-gray-600">{{ $a->email }}</td>
+                <td class="px-4 py-3 text-gray-600">
+                    @if(!empty($a->signature_path))
+                        <img src="{{ $a->signature_path }}" alt="Signature de {{ $a->full_name }}" class="h-12 w-28 object-contain rounded border border-gray-200 bg-white p-1">
+                    @else
+                        <span class="text-gray-400">Non signee</span>
+                    @endif
+                </td>
                 <td class="px-4 py-3 text-gray-600">{{ $a->signed_at?->format('d/m/Y H:i:s') }}</td>
             </tr>
             @empty
             <tr>
-                <td colspan="4" class="px-4 py-8 text-center text-gray-400">Aucune présence enregistrée.</td>
+                <td colspan="5" class="px-4 py-8 text-center text-gray-400">Aucune présence enregistrée.</td>
             </tr>
             @endforelse
         </tbody>

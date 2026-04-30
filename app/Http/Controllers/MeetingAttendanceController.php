@@ -19,9 +19,10 @@ class MeetingAttendanceController extends Controller
     {
         $this->abortIfMeetingOutsideScope($meeting);
 
-        $meeting->load(['participants.user', 'attendances']);
+        $meeting->load(['participants.user', 'attendances', 'organizer.directionAssignments']);
+        $branding = $this->resolveOrganizerBranding($meeting);
 
-        return view('meetings.dashboard', compact('meeting'));
+        return view('meetings.dashboard', compact('meeting', 'branding'));
     }
 
     public function showByToken(string $token)
@@ -169,11 +170,17 @@ class MeetingAttendanceController extends Controller
             $meeting->load(['participants', 'room', 'organizer']);
             $branding = $this->resolveOrganizerBranding($meeting);
             $branding['logo_pdf_src'] = $this->resolvePdfLogoSource($branding['logo_url'] ?? null);
+            $signatureSources = [];
+
+            foreach ($attendances as $attendance) {
+                $signatureSources[(string) $attendance->id] = $this->resolvePdfImageSource($attendance->signature_path);
+            }
 
             $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('meetings.attendance_pdf', [
                 'meeting'     => $meeting,
                 'attendances' => $attendances,
                 'branding'    => $branding,
+                'signatureSources' => $signatureSources,
             ]);
 
             $pdf->setOption('isRemoteEnabled', true);
@@ -222,17 +229,22 @@ class MeetingAttendanceController extends Controller
 
     private function resolvePdfLogoSource(?string $logoUrl): ?string
     {
-        if (empty($logoUrl)) {
+        return $this->resolvePdfImageSource($logoUrl);
+    }
+
+    private function resolvePdfImageSource(?string $imageUrl): ?string
+    {
+        if (empty($imageUrl)) {
             return null;
         }
 
-        if (str_starts_with($logoUrl, 'data:image/')) {
-            return $logoUrl;
+        if (str_starts_with($imageUrl, 'data:image/')) {
+            return $imageUrl;
         }
 
         // Common case: logo served from /storage/... symlinked to storage/app/public
-        if (str_starts_with($logoUrl, '/storage/')) {
-            $relativePath = ltrim(substr($logoUrl, strlen('/storage/')), '/');
+        if (str_starts_with($imageUrl, '/storage/')) {
+            $relativePath = ltrim(substr($imageUrl, strlen('/storage/')), '/');
             if (Storage::disk('public')->exists($relativePath)) {
                 $content = Storage::disk('public')->get($relativePath);
                 $mime = Storage::disk('public')->mimeType($relativePath) ?: 'image/png';
@@ -241,8 +253,8 @@ class MeetingAttendanceController extends Controller
         }
 
         // Fallback for public relative paths
-        if (str_starts_with($logoUrl, '/')) {
-            $publicFile = public_path(ltrim($logoUrl, '/'));
+        if (str_starts_with($imageUrl, '/')) {
+            $publicFile = public_path(ltrim($imageUrl, '/'));
             if (is_file($publicFile)) {
                 $content = file_get_contents($publicFile);
                 if ($content !== false) {
@@ -253,7 +265,7 @@ class MeetingAttendanceController extends Controller
         }
 
         // Keep original URL as final fallback (works when remote loading is available)
-        return $logoUrl;
+        return $imageUrl;
     }
 
     private function isQrWindowValid(Meeting $meeting): bool
@@ -279,10 +291,29 @@ class MeetingAttendanceController extends Controller
 
             if ($issuingAdmin && !empty($issuingAdmin->logo)) {
                 $rawLogo = (string) $issuingAdmin->logo;
-                if (str_starts_with($rawLogo, 'http://') || str_starts_with($rawLogo, 'https://') || str_starts_with($rawLogo, '/')) {
+                if (str_starts_with($rawLogo, 'http://') || str_starts_with($rawLogo, 'https://') || str_starts_with($rawLogo, 'data:image/')) {
                     $logoUrl = $rawLogo;
-                } elseif (Storage::disk('public')->exists($rawLogo)) {
-                    $logoUrl = Storage::disk('public')->url($rawLogo);
+                } else {
+                    $normalized = ltrim($rawLogo, '/');
+
+                    // Common legacy values: "storage/..." or "/storage/..."
+                    if (str_starts_with($normalized, 'storage/')) {
+                        $normalized = ltrim(substr($normalized, strlen('storage/')), '/');
+                    }
+
+                    // Common values from older uploads: "public/..."
+                    if (str_starts_with($normalized, 'public/')) {
+                        $normalized = ltrim(substr($normalized, strlen('public/')), '/');
+                    }
+
+                    if (Storage::disk('public')->exists($normalized)) {
+                        $logoUrl = url('/storage/' . $normalized);
+                    } elseif (str_starts_with($rawLogo, '/')) {
+                        // Relative public path fallback
+                        $logoUrl = url($rawLogo);
+                    } elseif (is_file(public_path($normalized))) {
+                        $logoUrl = url('/' . $normalized);
+                    }
                 }
             }
 
