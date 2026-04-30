@@ -2470,6 +2470,7 @@ function emitLogoPreview(input) {
                        : null;
     $re           = $editRecip;
     $reMeta       = $re ? ($re->metadata ?? []) : [];
+    $reLogo       = $re ? ($re->logo ?: ($reMeta['logoPath'] ?? $reMeta['logo'] ?? null)) : null;
     $reChannel    = old('channel', $re->channel ?? 'api');
 @endphp
 <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
@@ -2534,8 +2535,8 @@ function emitLogoPreview(input) {
         <p class="text-sm font-semibold text-gray-800">Logo de l'administration</p>
         <div class="grid grid-cols-1 md:grid-cols-[88px_1fr] gap-3 items-center">
           <div class="w-20 h-20 rounded-lg border-2 border-dashed border-gray-300 bg-gray-50 flex items-center justify-center overflow-hidden">
-            @if($re && $re->logo)
-              <img src="{{ asset($re->logo) }}" alt="Logo actuel" class="w-full h-full object-contain" id="recip-logo-preview-img">
+            @if($re && $reLogo)
+              <img src="{{ asset($reLogo) }}" alt="Logo actuel" class="w-full h-full object-contain" id="recip-logo-preview-img">
             @else
               <span class="text-gray-400 text-xs text-center px-1" id="recip-logo-preview-txt">Aperçu logo</span>
               <img src="" alt="Aperçu" class="w-full h-full object-contain hidden" id="recip-logo-preview-img">
@@ -2701,14 +2702,17 @@ function emitLogoPreview(input) {
            class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
     <div class="grid grid-cols-1 md:grid-cols-2 gap-3" id="recip-list">
       @forelse($recipients as $item)
-      @php $iMeta = $item->metadata ?? []; @endphp
+      @php
+        $iMeta = $item->metadata ?? [];
+        $itemLogo = $item->logo ?: ($iMeta['logoPath'] ?? $iMeta['logo'] ?? null);
+      @endphp
       <div class="recip-card border border-gray-200 bg-gray-50 rounded-lg p-2.5
                   {{ $selRecipId === $item->id ? 'border-blue-500 bg-blue-50' : '' }}"
            data-name="{{ strtolower($item->name) }}" data-sector="{{ strtolower($iMeta['sector'] ?? '') }}">
         <div class="flex items-start gap-3">
           <div class="w-8 h-8 rounded-md border border-gray-200 bg-white overflow-hidden flex items-center justify-center shrink-0">
-            @if($item->logo)
-              <img src="{{ asset($item->logo) }}" alt="Logo {{ $item->name }}" class="w-full h-full object-contain">
+            @if($itemLogo)
+              <img src="{{ asset($itemLogo) }}" alt="Logo {{ $item->name }}" class="w-full h-full object-contain">
             @else
               <span class="text-[10px] font-semibold text-gray-400">LOGO</span>
             @endif

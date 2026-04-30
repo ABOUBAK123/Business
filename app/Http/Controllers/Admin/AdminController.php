@@ -1080,6 +1080,9 @@ class AdminController extends Controller
             $logoPath = 'images/logos/' . $filename;
         }
 
+        $metadata = $this->extractRecipientMetadata($request);
+        $metadata['logoPath'] = $logoPath;
+
         $payload = [
             'id'            => Str::uuid(),
             'name'          => $request->input('name'),
@@ -1087,7 +1090,7 @@ class AdminController extends Controller
             'email_address' => $request->input('email_address_meta'),
             'api_endpoint'  => $request->input('api_endpoint_meta'),
             'is_active'     => $request->boolean('is_active', true),
-            'metadata'      => $this->extractRecipientMetadata($request),
+            'metadata'      => $metadata,
         ];
 
         if (Schema::hasColumn('recipient_administrations', 'code')) {
@@ -1118,13 +1121,16 @@ class AdminController extends Controller
             $logoPath = 'images/logos/' . $filename;
         }
 
+        $metadata = $this->extractRecipientMetadata($request);
+        $metadata['logoPath'] = $logoPath;
+
         $payload = [
             'name'          => $request->input('name'),
             'channel'       => $request->input('channel'),
             'email_address' => $request->input('email_address_meta'),
             'api_endpoint'  => $request->input('api_endpoint_meta'),
             'is_active'     => $request->boolean('is_active', true),
-            'metadata'      => $this->extractRecipientMetadata($request),
+            'metadata'      => $metadata,
         ];
 
         if (Schema::hasColumn('recipient_administrations', 'code')) {
