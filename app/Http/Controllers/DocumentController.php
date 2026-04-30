@@ -594,6 +594,11 @@ class DocumentController extends Controller
                     ]);
                 }
             }
+
+            // Le document est considere comme envoye a l'administration destinataire.
+            if ($document->status !== 'sent') {
+                $document->update(['status' => 'sent']);
+            }
         }
 
         $sharesTotal = DocumentShare::where('document_id', $document->id)->count();
@@ -607,6 +612,7 @@ class DocumentController extends Controller
             'message'      => 'Document partagé avec succès.',
             'shares_count' => $sharesTotal,
             'created_shares' => $createdShares->count(),
+            'document_status' => $document->status,
         ]);
     }
 

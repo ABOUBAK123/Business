@@ -628,7 +628,7 @@ const fmtSize = (bytes) => {
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' Ko';
     return (bytes / (1024 * 1024)).toFixed(1) + ' Mo';
 };
-const statusLabel = { draft:'Brouillon', active:'Actif', signed:'Signé', archived:'Archivé', pending_signature:'En attente' };
+const statusLabel = { draft:'Brouillon', active:'Actif', signed:'Signé', archived:'Archivé', pending_signature:'En attente', sent:'Envoye' };
 
 function post(url, body = {}) {
     return fetch(url, {
@@ -782,7 +782,7 @@ function renderTable() {
             <td class="py-3 px-4 text-gray-500 text-xs">${isFolder(doc) ? '—' : fmtSize(doc.file_size)}</td>
             <td class="py-3 px-4 text-gray-600">${fmtDate(doc.updated_at || doc.created_at)}</td>
             <td class="py-3 px-4">
-                <span class="text-xs px-2 py-0.5 rounded-full ${doc.status === 'signed' ? 'bg-green-100 text-green-700' : doc.status === 'draft' ? 'bg-gray-100 text-gray-600' : doc.status === 'archived' ? 'bg-orange-100 text-orange-700' : 'bg-indigo-100 text-indigo-700'}">
+                <span class="text-xs px-2 py-0.5 rounded-full ${doc.status === 'signed' ? 'bg-green-100 text-green-700' : doc.status === 'sent' ? 'bg-emerald-100 text-emerald-700' : doc.status === 'draft' ? 'bg-gray-100 text-gray-600' : doc.status === 'archived' ? 'bg-orange-100 text-orange-700' : 'bg-indigo-100 text-indigo-700'}">
                     ${statusLabel[doc.status] || doc.status}
                 </span>
             </td>
@@ -1305,6 +1305,7 @@ async function submitShare() {
     await post(ROUTES.share(shareDocId), payload).then(data => {
         const doc = allDocs.find(d => d.id === shareDocId);
         if (data.shares_count !== undefined && doc) doc.shares_count = data.shares_count;
+        if (data.document_status && doc) doc.status = data.document_status;
         const suffix = data.created_shares ? ` (${data.created_shares} destinataire(s))` : '';
         show(`« ${doc?.title} » a été partagé avec succès${suffix}.`, true);
         renderTable();
