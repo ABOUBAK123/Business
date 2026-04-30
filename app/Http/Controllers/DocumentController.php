@@ -222,13 +222,18 @@ class DocumentController extends Controller
         $user = Auth::user();
         if ($user && (string) $user->id !== (string) $document->owner_id) {
             $userEmail = (string) ($user->email ?? '');
-            $adminCode = strtoupper(trim((string) ($user->profile?->administration?->code ?? '')));
+            $profile = $user->profile;
 
             $recipientAdminIds = collect();
-            if ($adminCode !== '') {
-                $recipientAdminIds = RecipientAdministration::query()
-                    ->whereRaw('UPPER(code) = ?', [$adminCode])
-                    ->pluck('id');
+            if ($profile && $profile->administration_type === 'recipient' && $profile->administration_id) {
+                $recipientAdminIds = collect([$profile->administration_id]);
+            } else {
+                $adminCode = strtoupper(trim((string) ($profile?->administration?->code ?? '')));
+                if ($adminCode !== '') {
+                    $recipientAdminIds = RecipientAdministration::query()
+                        ->whereRaw('UPPER(code) = ?', [$adminCode])
+                        ->pluck('id');
+                }
             }
 
             $recipientShares = DocumentShare::query()
@@ -277,8 +282,12 @@ class DocumentController extends Controller
             }
         }
 
-        $path = str_replace('/storage/', '', $document->file_path);
-        $ext  = pathinfo($document->file_path, PATHINFO_EXTENSION) ?: 'bin';
+        $path = ltrim(str_replace('/storage/', '', (string) $document->file_path), '/');
+        $ext  = pathinfo((string) $document->file_path, PATHINFO_EXTENSION) ?: 'bin';
+
+        if ($path === '' || !Storage::disk('public')->exists($path)) {
+            abort(404, 'Fichier introuvable sur le serveur.');
+        }
 
         // Sanitiser le titre : supprimer / \ et caractères de contrôle
         $safeTitle = preg_replace('/[\/\\\\\x00-\x1f]+/', '-', $document->title);
@@ -316,10 +325,10 @@ class DocumentController extends Controller
         }
 
         $document = Document::findOrFail($share->document_id);
-        $path = str_replace('/storage/', '', $document->file_path);
-        $ext  = pathinfo($document->file_path, PATHINFO_EXTENSION) ?: 'bin';
+        $path = ltrim(str_replace('/storage/', '', (string) $document->file_path), '/');
+        $ext  = pathinfo((string) $document->file_path, PATHINFO_EXTENSION) ?: 'bin';
 
-        if (!Storage::disk('public')->exists($path)) {
+        if ($path === '' || !Storage::disk('public')->exists($path)) {
             abort(404, 'Fichier introuvable');
         }
 
@@ -349,10 +358,10 @@ class DocumentController extends Controller
             abort(403, 'Lien expiré ou invalide');
         }
 
-        $path = str_replace('/storage/', '', $document->file_path);
-        $ext  = pathinfo($document->file_path, PATHINFO_EXTENSION) ?: 'bin';
+        $path = ltrim(str_replace('/storage/', '', (string) $document->file_path), '/');
+        $ext  = pathinfo((string) $document->file_path, PATHINFO_EXTENSION) ?: 'bin';
 
-        if (!Storage::disk('public')->exists($path)) {
+        if ($path === '' || !Storage::disk('public')->exists($path)) {
             abort(404, 'Fichier introuvable');
         }
 
@@ -767,12 +776,17 @@ class DocumentController extends Controller
             ->filter()
             ->values();
 
-        $adminCode = strtoupper(trim((string) ($user->profile?->administration?->code ?? '')));
+        $profile = $user->profile;
         $recipientAdminIds = collect();
-        if ($adminCode !== '') {
-            $recipientAdminIds = RecipientAdministration::query()
-                ->whereRaw('UPPER(code) = ?', [$adminCode])
-                ->pluck('id');
+        if ($profile && $profile->administration_type === 'recipient' && $profile->administration_id) {
+            $recipientAdminIds = collect([$profile->administration_id]);
+        } else {
+            $adminCode = strtoupper(trim((string) ($profile?->administration?->code ?? '')));
+            if ($adminCode !== '') {
+                $recipientAdminIds = RecipientAdministration::query()
+                    ->whereRaw('UPPER(code) = ?', [$adminCode])
+                    ->pluck('id');
+            }
         }
 
         return DocumentShare::query()
@@ -781,7 +795,7 @@ class DocumentController extends Controller
                 $q->whereNull('expires_at')
                   ->orWhere('expires_at', '>', now());
             })
-            ->where(function ($q) use ($user, $subEntityCodes) {
+            ->where(function ($q) use ($user, $subEntityCodes, $recipientAdminIds) {
                 $q->where('recipient_name', 'user:' . $user->id);
 
                 if (!empty($user->email)) {
