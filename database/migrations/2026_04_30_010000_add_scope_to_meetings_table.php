@@ -52,6 +52,7 @@ return new class extends Migration
             Schema::hasTable('issuing_administrations')
             && Schema::hasColumn('issuing_administrations', 'id')
             && Schema::hasColumn('meetings', 'issuing_administration_id')
+            && $this->canCreateIssuingAdminForeignKey()
             && !$this->foreignKeyExists('meetings', 'meetings_issuing_administration_id_foreign')
         ) {
             try {
@@ -106,5 +107,54 @@ return new class extends Migration
             ->exists();
 
         return (bool) $exists;
+    }
+
+    private function canCreateIssuingAdminForeignKey(): bool
+    {
+        $database = DB::getDatabaseName();
+
+        $meetingTable = DB::table('information_schema.TABLES')
+            ->select(['ENGINE', 'TABLE_COLLATION'])
+            ->where('TABLE_SCHEMA', $database)
+            ->where('TABLE_NAME', 'meetings')
+            ->first();
+
+        $adminTable = DB::table('information_schema.TABLES')
+            ->select(['ENGINE', 'TABLE_COLLATION'])
+            ->where('TABLE_SCHEMA', $database)
+            ->where('TABLE_NAME', 'issuing_administrations')
+            ->first();
+
+        if (!$meetingTable || !$adminTable) {
+            return false;
+        }
+
+        // MySQL FK requires InnoDB (or another FK-capable engine).
+        if (strtoupper((string) $meetingTable->ENGINE) !== 'INNODB' || strtoupper((string) $adminTable->ENGINE) !== 'INNODB') {
+            return false;
+        }
+
+        $meetingColumn = DB::table('information_schema.COLUMNS')
+            ->select(['COLUMN_TYPE', 'CHARACTER_SET_NAME', 'COLLATION_NAME'])
+            ->where('TABLE_SCHEMA', $database)
+            ->where('TABLE_NAME', 'meetings')
+            ->where('COLUMN_NAME', 'issuing_administration_id')
+            ->first();
+
+        $adminColumn = DB::table('information_schema.COLUMNS')
+            ->select(['COLUMN_TYPE', 'CHARACTER_SET_NAME', 'COLLATION_NAME'])
+            ->where('TABLE_SCHEMA', $database)
+            ->where('TABLE_NAME', 'issuing_administrations')
+            ->where('COLUMN_NAME', 'id')
+            ->first();
+
+        if (!$meetingColumn || !$adminColumn) {
+            return false;
+        }
+
+        // FK columns must be identical type/charset/collation in MySQL.
+        return strtolower((string) $meetingColumn->COLUMN_TYPE) === strtolower((string) $adminColumn->COLUMN_TYPE)
+            && strtolower((string) ($meetingColumn->CHARACTER_SET_NAME ?? '')) === strtolower((string) ($adminColumn->CHARACTER_SET_NAME ?? ''))
+            && strtolower((string) ($meetingColumn->COLLATION_NAME ?? '')) === strtolower((string) ($adminColumn->COLLATION_NAME ?? ''));
     }
 };
