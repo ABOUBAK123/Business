@@ -104,6 +104,51 @@
             grid-template-columns: 1fr;
             gap: 12px;
         }
+        .qr-signature-box {
+            background: #ffffff;
+            border: 1px solid #d1d5db;
+            border-radius: 16px;
+            overflow: hidden;
+        }
+        .qr-signature-canvas {
+            display: block;
+            width: 100%;
+            height: 220px;
+            background:
+                linear-gradient(to bottom, transparent 31px, #eef2f7 32px),
+                #ffffff;
+            background-size: 100% 32px;
+            touch-action: none;
+            cursor: crosshair;
+        }
+        .qr-signature-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            border-top: 1px solid #e5e7eb;
+            background: #f9fafb;
+        }
+        .qr-signature-hint {
+            font-size: 0.8rem;
+            color: #6b7280;
+            line-height: 1.4;
+        }
+        .qr-signature-clear {
+            border: 1px solid #d1d5db;
+            background: #ffffff;
+            color: #374151;
+            border-radius: 10px;
+            padding: 10px 12px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .qr-signature-clear:hover {
+            background: #f3f4f6;
+        }
         .qr-submit {
             width: 100%;
             border: 0;
@@ -154,6 +199,13 @@
             }
             .qr-subtitle {
                 font-size: 0.88rem;
+            }
+            .qr-signature-canvas {
+                height: 180px;
+            }
+            .qr-signature-actions {
+                flex-direction: column;
+                align-items: stretch;
             }
         }
     </style>
@@ -214,17 +266,96 @@
             <label class="block text-xs font-semibold text-gray-700 mb-1">Organisation</label>
             <input id="field-organization" name="organization" class="w-full border border-gray-300 rounded-lg px-3 py-3 text-base">
         </div>
+        <div class="qr-field">
+            <label class="block text-xs font-semibold text-gray-700 mb-1">Signature</label>
+            <div class="qr-signature-box">
+                <canvas id="signature-pad" class="qr-signature-canvas"></canvas>
+                <div class="qr-signature-actions">
+                    <div class="qr-signature-hint">Signez avec le doigt, le stylet ou la souris dans la zone ci-dessus.</div>
+                    <button type="button" id="signature-clear" class="qr-signature-clear">Effacer</button>
+                </div>
+            </div>
+            <input type="hidden" name="signature" id="signature-data">
+        </div>
         <button class="w-full px-3 py-4 rounded-xl bg-[#2453d6] text-white text-base font-semibold hover:bg-[#1f47bb] active:scale-95 transition-transform qr-submit">Signer ma présence</button>
     </form>
 </div>
 
 <script>
 (function () {
+    const form = document.querySelector('form');
     const lookupUrl = '{{ route("meetings.qr.lookup", $meeting->qr_token) }}';
     const identifierInput = document.getElementById('field-identifier');
     const badge = document.getElementById('autofill-badge');
     const fields = ['full_name', 'email', 'phone', 'job_title', 'organization'];
+    const signatureCanvas = document.getElementById('signature-pad');
+    const signatureClear = document.getElementById('signature-clear');
+    const signatureData = document.getElementById('signature-data');
+    const signatureContext = signatureCanvas.getContext('2d');
     let debounceTimer = null;
+    let isDrawing = false;
+    let hasSignature = false;
+
+    function resizeSignatureCanvas() {
+        const ratio = Math.max(window.devicePixelRatio || 1, 1);
+        const rect = signatureCanvas.getBoundingClientRect();
+        signatureCanvas.width = Math.floor(rect.width * ratio);
+        signatureCanvas.height = Math.floor(rect.height * ratio);
+        signatureContext.setTransform(1, 0, 0, 1, 0, 0);
+        signatureContext.scale(ratio, ratio);
+        signatureContext.lineCap = 'round';
+        signatureContext.lineJoin = 'round';
+        signatureContext.lineWidth = 2;
+        signatureContext.strokeStyle = '#111827';
+        hasSignature = false;
+        signatureData.value = '';
+    }
+
+    function pointFromEvent(event) {
+        const rect = signatureCanvas.getBoundingClientRect();
+        if (event.touches && event.touches[0]) {
+            return {
+                x: event.touches[0].clientX - rect.left,
+                y: event.touches[0].clientY - rect.top
+            };
+        }
+
+        return {
+            x: event.clientX - rect.left,
+            y: event.clientY - rect.top
+        };
+    }
+
+    function startDrawing(event) {
+        isDrawing = true;
+        const point = pointFromEvent(event);
+        signatureContext.beginPath();
+        signatureContext.moveTo(point.x, point.y);
+        event.preventDefault();
+    }
+
+    function draw(event) {
+        if (!isDrawing) {
+            return;
+        }
+
+        const point = pointFromEvent(event);
+        signatureContext.lineTo(point.x, point.y);
+        signatureContext.stroke();
+        hasSignature = true;
+        event.preventDefault();
+    }
+
+    function stopDrawing() {
+        isDrawing = false;
+    }
+
+    function clearSignature() {
+        signatureContext.clearRect(0, 0, signatureCanvas.width, signatureCanvas.height);
+        signatureContext.beginPath();
+        hasSignature = false;
+        signatureData.value = '';
+    }
 
     function fill(data) {
         fields.forEach(function (key) {
@@ -258,6 +389,25 @@
                 })
                 .catch(function () {});
         }, 400);
+    });
+
+    resizeSignatureCanvas();
+    window.addEventListener('resize', resizeSignatureCanvas);
+
+    signatureCanvas.addEventListener('mousedown', startDrawing);
+    signatureCanvas.addEventListener('mousemove', draw);
+    signatureCanvas.addEventListener('mouseup', stopDrawing);
+    signatureCanvas.addEventListener('mouseleave', stopDrawing);
+    signatureCanvas.addEventListener('touchstart', startDrawing, { passive: false });
+    signatureCanvas.addEventListener('touchmove', draw, { passive: false });
+    signatureCanvas.addEventListener('touchend', stopDrawing);
+    signatureCanvas.addEventListener('touchcancel', stopDrawing);
+    signatureClear.addEventListener('click', clearSignature);
+
+    form.addEventListener('submit', function () {
+        if (hasSignature) {
+            signatureData.value = signatureCanvas.toDataURL('image/png');
+        }
     });
 })();
 </script>
