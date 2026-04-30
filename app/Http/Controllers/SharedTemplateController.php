@@ -102,8 +102,21 @@ class SharedTemplateController extends Controller
         $template->loadMissing('variables');
 
         $values = $request->input('values', []);
-        $outputFormat = $request->input('output_format', 'source');
+        $outputFormat = 'source';
         $generationWarning = null;
+
+        // Convertir les dates ISO (YYYY-MM-DD) en format français (ex: "29 avril 2026")
+        // Les champs <input type="date"> du navigateur renvoient toujours YYYY-MM-DD.
+        $values = array_map(function ($val) {
+            if (is_string($val) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $val)) {
+                try {
+                    return \Carbon\Carbon::parse($val)->locale('fr')->isoFormat('D MMMM YYYY');
+                } catch (\Throwable $e) {
+                    return $val; // garder la valeur originale en cas d'erreur
+                }
+            }
+            return $val;
+        }, $values);
 
         // Livrable A: validation stricte des champs dynamiques requis.
         $coreService->assertRequiredValues($template, $values);
@@ -128,6 +141,18 @@ class SharedTemplateController extends Controller
         /* -- Carte de remplacement : slug => label_original_dans_docx -- */
         $replacements = $coreService->buildReplacementMap($template, $contentVarMap, $docxVars);
         \Log::info('GENERATE replacements=' . json_encode($replacements));
+
+        // Carte slug => texte EXACT du DOCX (avant slugification + enrichissement IA).
+        // Utilisée pour garantir que [nom du demandeur] est remplacé même si le slug
+        // stocké en BDD est 'nom_du_demandeur' et le label IA est 'Nom du demandeur'.
+        $docxOriginalMap = [];
+        foreach ($docxVars as $v) {
+            $key   = (string) ($v['key']   ?? '');
+            $label = (string) ($v['label'] ?? '');
+            if ($key !== '' && $label !== '') {
+                $docxOriginalMap[$key] = $label;
+            }
+        }
 
         /* -- Remplacement dans le champ content (texte) --------- */
         $content = $template->content ?? '';
@@ -156,6 +181,18 @@ class SharedTemplateController extends Controller
                     $content
                 );
             }
+            // Texte exact du DOCX (avant slugification/enrichissement IA)
+            $docxOrig = $docxOriginalMap[$slug] ?? null;
+            if ($docxOrig !== null && $docxOrig !== $original && $docxOrig !== $slug) {
+                $content = preg_replace('/\{\{\s*' . preg_quote($docxOrig, '/') . '\s*\}\}/u', $val, $content);
+                $content = preg_replace('/\[' . preg_quote($docxOrig, '/') . '\]/u', $val, $content);
+            }
+            // Slug underscores → espaces ([nom du demandeur] depuis 'nom_du_demandeur')
+            $slugSpaces = str_replace('_', ' ', $slug);
+            if ($slugSpaces !== $slug && $slugSpaces !== $original && $slugSpaces !== ($docxOrig ?? '')) {
+                $content = preg_replace('/\{\{\s*' . preg_quote($slugSpaces, '/') . '\s*\}\}/u', $val, $content);
+                $content = preg_replace('/\[' . preg_quote($slugSpaces, '/') . '\]/u', $val, $content);
+            }
         }
 
         /* ══════════════════════════════════════════════════════════
@@ -167,6 +204,12 @@ class SharedTemplateController extends Controller
         $docNumber = $numbering['document_number'];
         $subEntityCode = $numbering['sub_entity_code'];
         $issuingAdminId = $numbering['issuing_administration_id'];
+
+        // Fallback: certains templates partages n'ont pas d'administration de delivrance.
+        // On genere quand meme un numero lisible pour garantir sa presence sur le document.
+        if (!$docNumber) {
+            $docNumber = 'DOC-' . now()->format('Ymd-His') . '-' . strtoupper(substr((string) Str::uuid(), 0, 6));
+        }
 
         /* ══════════════════════════════════════════════════════════
          *  QR CODE — token + URL de vérification
@@ -267,7 +310,7 @@ class SharedTemplateController extends Controller
                 // Les labels DB ont PRIORITÉ sur les slugs auto (ordre inversé: auto d'abord, DB ensuite)
                 // Ex: 'date_du_jour' => 'date du jour' (DB label) écrase 'date_du_jour' => 'date_du_jour' (auto slug)
                 $autoReplacements = $coreService->buildAutoReplacements($replacements);
-                $this->replaceInOfficeFile($absPath, $autoReplacements, $autoValues);
+                $this->replaceInOfficeFile($absPath, $autoReplacements, $autoValues, $docxOriginalMap);
                 \Log::info('GENERATE replaceInOfficeFile done. docNumber=' . ($docNumber ?? 'NULL') . ' qrTemp=' . ($qrTempPath ?? 'NULL'));
 
                 // Injecter le pied de page Word avec numéro + QR code (docx uniquement)
@@ -277,21 +320,8 @@ class SharedTemplateController extends Controller
                     $this->injectDocxFooterWithQr($absPath, $docNumber ?? '', $verifyUrl, $qrTempPath, $qrWptForDocx, $qrHptForDocx);
                 }
 
-                // Option recommandée : template Office -> export PDF final (si convertisseur disponible)
-                if ($outputFormat === 'pdf') {
-                    $pdfPath = $this->convertOfficeToPdf($absDestPath);
-                    if ($pdfPath) {
-                        $pdfDestPath = 'documents/' . $baseName . '-' . now()->format('Ymd-His') . '.pdf';
-                        Storage::disk('public')->put($pdfDestPath, file_get_contents($pdfPath));
-                        @unlink($pdfPath);
-
-                        $ext = 'pdf';
-                        $mimeType = 'application/pdf';
-                        $storagePath = '/storage/' . $pdfDestPath;
-                    } else {
-                        $generationWarning = 'Conversion PDF indisponible sur ce serveur. Document généré au format source.';
-                    }
-                }
+                // Le document Office (DOCX/XLSX/PPTX) est servi directement avec les variables remplacées.
+                $storagePath = '/storage/' . $destPath;
             }
 
             // Nettoyage QR temp
@@ -820,7 +850,7 @@ class SharedTemplateController extends Controller
      * est entier dans un seul run. Pour les cas complexes, OnlyOffice garantit
      * l'intégrité des runs lors de la saisie directe.
      */
-    private function replaceInOfficeFile(string $absFilePath, array $replacements, array $values): void
+    private function replaceInOfficeFile(string $absFilePath, array $replacements, array $values, array $docxOriginalMap = []): void
     {
         if (!class_exists('ZipArchive')) return;
 
@@ -883,6 +913,40 @@ class SharedTemplateController extends Controller
                     // Syntaxe ancienne avec slug : {{slug}} — insensible à la casse (iu)
                     $newContent = preg_replace(
                         '/\{\{\s*' . preg_quote($slug, '/') . '\s*\}\}/iu',
+                        $val,
+                        $newContent
+                    );
+                }
+
+                // ── Texte EXACT du DOCX (avant slugification) ─────────────
+                // Ex : slug='nom_du_demandeur', docxOrig='nom du demandeur'
+                //      label IA='Nom du demandeur' → aucune des deux ne correspond.
+                // On essaie donc aussi le texte exact extrait du fichier.
+                $docxOrig = $docxOriginalMap[$slug] ?? null;
+                if ($docxOrig !== null && $docxOrig !== $original && $docxOrig !== $slug) {
+                    $newContent = preg_replace(
+                        '/\[' . preg_quote($docxOrig, '/') . '\]/iu',
+                        $val,
+                        $newContent
+                    );
+                    $newContent = preg_replace(
+                        '/\{\{\s*' . preg_quote($docxOrig, '/') . '\s*\}\}/iu',
+                        $val,
+                        $newContent
+                    );
+                }
+
+                // ── Slug avec underscores → espaces ───────────────────────
+                // Couvre [nom du demandeur] depuis le slug 'nom_du_demandeur'.
+                $slugSpaces = str_replace('_', ' ', $slug);
+                if ($slugSpaces !== $slug && $slugSpaces !== $original && $slugSpaces !== ($docxOrig ?? '')) {
+                    $newContent = preg_replace(
+                        '/\[' . preg_quote($slugSpaces, '/') . '\]/iu',
+                        $val,
+                        $newContent
+                    );
+                    $newContent = preg_replace(
+                        '/\{\{\s*' . preg_quote($slugSpaces, '/') . '\s*\}\}/iu',
                         $val,
                         $newContent
                     );

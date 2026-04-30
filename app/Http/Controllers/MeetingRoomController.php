@@ -4,12 +4,35 @@ namespace App\Http\Controllers;
 
 use App\Models\MeetingRoom;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 class MeetingRoomController extends Controller
 {
+    private function resolveAdministrationId(): ?string
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return null;
+        }
+
+        $assignment = DB::table('user_direction_assignments')
+            ->where('user_id', (string) $user->id)
+            ->orderByDesc('created_at')
+            ->first();
+
+        return ($assignment && !empty($assignment->direction_scope_id))
+            ? (string) $assignment->direction_scope_id
+            : null;
+    }
+
     public function index()
     {
-        $rooms = MeetingRoom::latest()->paginate(15);
+        $administrationId = $this->resolveAdministrationId();
+
+        $rooms = MeetingRoom::when($administrationId, fn ($q) => $q->where('administration_id', $administrationId))
+            ->latest()
+            ->paginate(15);
 
         return view('meetings.rooms.index', compact('rooms'));
     }
@@ -34,6 +57,7 @@ class MeetingRoomController extends Controller
         }
 
         MeetingRoom::create([
+            'administration_id' => $this->resolveAdministrationId(),
             'name' => $validated['name'],
             'capacity' => $validated['capacity'],
             'location' => $validated['location'],

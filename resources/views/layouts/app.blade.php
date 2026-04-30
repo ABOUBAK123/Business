@@ -363,7 +363,7 @@
             <div class="relative" id="profile-menu-wrap">
                 <button onclick="toggleProfileMenu()" id="profile-btn"
                     class="h-9 w-9 rounded-full overflow-hidden border-2 border-[#2453d6]/30 hover:border-[#2453d6] transition flex items-center justify-center font-bold text-sm bg-[#2453d6]/10 text-[#2453d6] flex-shrink-0 focus:outline-none">
-                    @if(auth()->user()->avatar)
+                    @if(auth()->user()->avatar && file_exists(public_path(auth()->user()->avatar)))
                         <img src="{{ asset(auth()->user()->avatar) }}" alt="avatar" class="h-full w-full object-cover">
                     @else
                         {{ strtoupper(substr(auth()->user()->name ?? 'U', 0, 2)) }}
@@ -378,7 +378,7 @@
                     <div class="px-4 py-4 bg-gradient-to-r from-[#2453d6] to-blue-500 flex items-center gap-3">
                         <div class="relative group flex-shrink-0">
                             <div class="h-12 w-12 rounded-full overflow-hidden bg-white/20 flex items-center justify-center font-bold text-white text-lg border-2 border-white/40">
-                                @if(auth()->user()->avatar)
+                                @if(auth()->user()->avatar && file_exists(public_path(auth()->user()->avatar)))
                                     <img src="{{ asset(auth()->user()->avatar) }}" alt="avatar" class="h-full w-full object-cover">
                                 @else
                                     {{ strtoupper(substr(auth()->user()->name ?? 'U', 0, 2)) }}

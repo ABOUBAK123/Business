@@ -18,6 +18,8 @@ class Meeting extends Model
         'estimated_duration_minutes',
         'organizer_id',
         'minutes_writer_id',
+        'issuing_administration_id',
+        'sub_entity_code',
         'agenda',
         'attachments',
         'priority',
@@ -55,6 +57,11 @@ class Meeting extends Model
     public function minutesWriter()
     {
         return $this->belongsTo(User::class, 'minutes_writer_id');
+    }
+
+    public function administration()
+    {
+        return $this->belongsTo(IssuingAdministration::class, 'issuing_administration_id');
     }
 
     public function participants()

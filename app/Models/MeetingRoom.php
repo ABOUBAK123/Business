@@ -10,6 +10,7 @@ class MeetingRoom extends Model
     use HasUuids;
 
     protected $fillable = [
+        'administration_id',
         'name',
         'capacity',
         'location',
@@ -24,6 +25,11 @@ class MeetingRoom extends Model
         'equipments' => 'array',
         'capacity' => 'integer',
     ];
+
+    public function administration()
+    {
+        return $this->belongsTo(\App\Models\IssuingAdministration::class, 'administration_id');
+    }
 
     public function meetings()
     {

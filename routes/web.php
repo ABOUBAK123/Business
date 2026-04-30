@@ -111,6 +111,7 @@ Route::post('/demande-acte/{administration_id}/{requested_act_id}', [PublicActRe
 // Emargement public par QR code (sans authentification)
 Route::get('/meetings/qr/{token}', [MeetingAttendanceController::class, 'showByToken'])->name('meetings.qr.show');
 Route::post('/meetings/qr/{token}', [MeetingAttendanceController::class, 'signByToken'])->name('meetings.qr.sign');
+Route::get('/meetings/qr/{token}/lookup', [MeetingAttendanceController::class, 'lookupByToken'])->name('meetings.qr.lookup');
 
 // Téléchargement public d'un document via token QR
 Route::get('/qr-download/{token}', [QrVerificationController::class, 'downloadByToken'])->name('qr.download');
@@ -215,6 +216,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/meetings', [MeetingController::class, 'store'])->name('meetings.store');
     Route::get('/meetings/{meeting}', [MeetingController::class, 'show'])->name('meetings.show');
     Route::get('/meetings/{meeting}/dashboard', [MeetingAttendanceController::class, 'dashboard'])->name('meetings.dashboard');
+    Route::get('/meetings/{meeting}/attendance/download', [MeetingAttendanceController::class, 'downloadAttendance'])->name('meetings.attendance.download');
 
     // Salles de reunion
     Route::get('/meeting-rooms', [MeetingRoomController::class, 'index'])->name('meetings.rooms.index');

@@ -4,16 +4,13 @@
 @section('page-subtitle', 'Planification et suivi des réunions')
 
 @section('content')
+@include('meetings._nav')
 <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
     <form method="GET" class="flex gap-2">
         <input type="text" name="q" value="{{ $q }}" placeholder="Rechercher une réunion..."
                class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-72 focus:outline-none focus:ring-2 focus:ring-[#2453d6]">
         <button class="px-3 py-2 rounded-lg text-sm font-semibold bg-[#2453d6] text-white hover:bg-[#1f47bb]">Chercher</button>
     </form>
-    <div class="flex gap-2">
-        <a href="{{ route('meetings.rooms.index') }}" class="px-3 py-2 rounded-lg text-sm font-semibold border border-gray-300 text-gray-700 hover:bg-gray-50">Salles</a>
-        <a href="{{ route('meetings.create') }}" class="px-3 py-2 rounded-lg text-sm font-semibold bg-[#2453d6] text-white hover:bg-[#1f47bb]">Nouvelle réunion</a>
-    </div>
 </div>
 
 <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">

@@ -6,9 +6,11 @@ use App\Models\Meeting;
 use App\Models\MeetingParticipant;
 use App\Models\MeetingRoom;
 use App\Models\User;
+use Endroid\QrCode\Builder\Builder;
+use Endroid\QrCode\Writer\PngWriter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class MeetingController extends Controller
@@ -16,8 +18,16 @@ class MeetingController extends Controller
     public function index(Request $request)
     {
         $q = trim((string) $request->get('q', ''));
+        $scope = $this->resolveCurrentUserScope();
 
         $meetings = Meeting::with(['room', 'organizer', 'minutesWriter'])
+            ->when($scope !== null, function ($query) use ($scope) {
+                $query->where('issuing_administration_id', $scope['administration_id'])
+                    ->where('sub_entity_code', $scope['sub_entity_code']);
+            }, function ($query) {
+                // Fallback de securite: sans scope, l'utilisateur ne voit que ses reunions.
+                $query->where('organizer_id', Auth::id());
+            })
             ->when($q !== '', function ($query) use ($q) {
                 $query->where('title', 'like', "%{$q}%");
             })
@@ -30,18 +40,40 @@ class MeetingController extends Controller
 
     public function create()
     {
+        $scope = $this->resolveCurrentUserScope();
+        if ($scope === null) {
+            return redirect()->route('meetings.index')
+                ->with('error', 'Votre compte n\'est rattaché à aucune entité sous tutelle.');
+        }
+
         $rooms = MeetingRoom::where('status', 'active')
             ->where('maintenance_status', 'operational')
+            ->where('administration_id', $scope['administration_id'])
             ->orderBy('name')
             ->get();
 
-        $users = User::select('id', 'name', 'email')->orderBy('name')->get();
+        $users = User::query()
+            ->select('users.id', 'users.name', 'users.email')
+            ->whereExists(function ($query) use ($scope) {
+                $query->select(DB::raw(1))
+                    ->from('user_direction_assignments as uda')
+                    ->whereColumn('uda.user_id', 'users.id')
+                    ->where('uda.direction_scope_id', $scope['administration_id'])
+                    ->whereRaw("UPPER(COALESCE(uda.sub_entity_code, '')) = ?", [$scope['sub_entity_code']]);
+            })
+            ->orderBy('users.name')
+            ->get();
 
         return view('meetings.create', compact('rooms', 'users'));
     }
 
     public function store(Request $request)
     {
+        $scope = $this->resolveCurrentUserScope();
+        if ($scope === null) {
+            return back()->withInput()->with('error', 'Impossible de créer une réunion sans entité sous tutelle.');
+        }
+
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'meeting_type' => 'required|in:ordinary,extraordinary,management_committee,project,technical,other',
@@ -59,6 +91,17 @@ class MeetingController extends Controller
             'attachments' => 'nullable|array',
             'attachments.*' => 'file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx|max:20480',
         ]);
+
+        $allowedUserIds = $this->resolveScopeUserIds($scope);
+        if (!in_array((string) $validated['minutes_writer_id'], $allowedUserIds, true)) {
+            return back()->withInput()->with('error', 'Le rédacteur doit appartenir à la même entité sous tutelle.');
+        }
+
+        $requestedParticipants = array_map('strval', (array) ($validated['participants'] ?? []));
+        $forbiddenParticipants = array_diff($requestedParticipants, $allowedUserIds);
+        if (!empty($forbiddenParticipants)) {
+            return back()->withInput()->with('error', 'Tous les participants doivent appartenir à la même entité sous tutelle.');
+        }
 
         $startsAt = now()->parse($validated['starts_at']);
         $endsAt = now()->parse($validated['ends_at']);
@@ -96,6 +139,8 @@ class MeetingController extends Controller
             'estimated_duration_minutes' => $startsAt->diffInMinutes($endsAt),
             'organizer_id' => Auth::id(),
             'minutes_writer_id' => $validated['minutes_writer_id'],
+            'issuing_administration_id' => $scope['administration_id'],
+            'sub_entity_code' => $scope['sub_entity_code'],
             'agenda' => $validated['agenda'] ?? null,
             'attachments' => $attachments,
             'priority' => $validated['priority'],
@@ -132,10 +177,77 @@ class MeetingController extends Controller
 
     public function show(Meeting $meeting)
     {
+        $this->abortIfMeetingOutsideScope($meeting);
+
         $meeting->load(['room', 'organizer', 'minutesWriter', 'participants.user', 'attendances']);
 
         $qrUrl = route('meetings.qr.show', ['token' => $meeting->qr_token]);
 
-        return view('meetings.show', compact('meeting', 'qrUrl'));
+        $qrImageDataUri = null;
+        try {
+            $qrResult = Builder::create()
+                ->writer(new PngWriter())
+                ->data($qrUrl)
+                ->size(360)
+                ->margin(8)
+                ->build();
+
+            $qrImageDataUri = 'data:image/png;base64,' . base64_encode($qrResult->getString());
+        } catch (\Throwable $e) {
+            // En cas d'erreur du moteur QR, on garde au minimum le lien scannable/copiable.
+            $qrImageDataUri = null;
+        }
+
+        return view('meetings.show', compact('meeting', 'qrUrl', 'qrImageDataUri'));
+    }
+
+    private function abortIfMeetingOutsideScope(Meeting $meeting): void
+    {
+        $scope = $this->resolveCurrentUserScope();
+
+        if ($scope === null) {
+            abort_unless((string) $meeting->organizer_id === (string) Auth::id(), 403);
+            return;
+        }
+
+        abort_unless(
+            (string) ($meeting->issuing_administration_id ?? '') === $scope['administration_id']
+            && strtoupper((string) ($meeting->sub_entity_code ?? '')) === $scope['sub_entity_code'],
+            403
+        );
+    }
+
+    private function resolveCurrentUserScope(): ?array
+    {
+        $user = Auth::user();
+        if (!$user) {
+            return null;
+        }
+
+        $assignment = DB::table('user_direction_assignments')
+            ->where('user_id', (string) $user->id)
+            ->orderByDesc('created_at')
+            ->first();
+
+        if (!$assignment || empty($assignment->direction_scope_id)) {
+            return null;
+        }
+
+        return [
+            'administration_id' => (string) $assignment->direction_scope_id,
+            'sub_entity_code' => strtoupper(trim((string) ($assignment->sub_entity_code ?? ''))),
+        ];
+    }
+
+    private function resolveScopeUserIds(array $scope): array
+    {
+        return DB::table('user_direction_assignments')
+            ->where('direction_scope_id', $scope['administration_id'])
+            ->whereRaw("UPPER(COALESCE(sub_entity_code, '')) = ?", [$scope['sub_entity_code']])
+            ->pluck('user_id')
+            ->map(fn ($id) => (string) $id)
+            ->unique()
+            ->values()
+            ->all();
     }
 }

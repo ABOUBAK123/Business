@@ -9,6 +9,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (!Schema::hasTable('users') || Schema::hasColumn('users', 'locale')) {
+            return;
+        }
+
         Schema::table('users', function (Blueprint $table) {
             $table->string('locale', 5)->default('fr')->after('remember_token');
         });
@@ -21,6 +25,10 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (!Schema::hasTable('users') || !Schema::hasColumn('users', 'locale')) {
+            return;
+        }
+
         Schema::table('users', function (Blueprint $table) {
             $table->dropColumn('locale');
         });

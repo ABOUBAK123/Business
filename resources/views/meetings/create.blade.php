@@ -4,6 +4,7 @@
 @section('page-subtitle', 'Planifier une réunion')
 
 @section('content')
+@include('meetings._nav')
 <form method="POST" action="{{ route('meetings.store') }}" enctype="multipart/form-data" class="space-y-5">
     @csrf
 

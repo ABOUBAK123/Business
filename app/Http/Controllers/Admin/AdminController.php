@@ -472,21 +472,31 @@ class AdminController extends Controller
             ]);
         }
 
+        $savedVars = 0;
+        $aiMeta = [
+            'applied' => false,
+            'available' => false,
+            'source' => 'none',
+            'count' => 0,
+            'message' => '',
+        ];
+
         if (!empty($extractedVars)) {
-            foreach ($extractedVars as $v) {
-                \App\Models\TemplateVariable::firstOrCreate(
-                    ['template_id' => $template->id, 'key' => $v['key']],
-                    [
-                        'label'         => $v['label'],
-                        'field_type'    => 'text',
-                        'required'      => false,
-                        'placeholder'   => '',
-                        'default_value' => '',
-                        'options'       => json_encode([]),
-                    ]
-                );
-            }
+            $savedVars = $this->saveDetectedTemplateVars($template, $extractedVars);
+            $aiMeta = $this->autoEnrichTemplateVariables($template, $extractedVars);
         }
+
+        $formFields = $template->variables()
+            ->get(['key', 'label', 'field_type', 'required', 'placeholder'])
+            ->map(fn ($v) => [
+                'key' => (string) $v->key,
+                'label' => (string) $v->label,
+                'field_type' => (string) ($v->field_type ?: 'text'),
+                'required' => (bool) $v->required,
+                'placeholder' => (string) ($v->placeholder ?? ''),
+            ])
+            ->values()
+            ->toArray();
 
         // Générer la config OnlyOffice pour ce fichier
         $onlyofficeSecret = AppSetting::where('key', 'onlyoffice_secret')->value('value') ?: '';
@@ -543,7 +553,80 @@ class AdminController extends Controller
             'fileType'       => $ext,
             'variables'      => $extractedVars,
             'variables_count'=> count($extractedVars),
+            'variables_saved'=> $savedVars,
+            'form_fields'    => $formFields,
+            'form_fields_count' => count($formFields),
+            'ai'             => $aiMeta,
         ]);
+    }
+
+    private function autoEnrichTemplateVariables(DocumentTemplate $template, array $rawVars = []): array
+    {
+        try {
+            $rawArray = !empty($rawVars)
+                ? array_map(fn ($v) => [
+                    'key' => (string) ($v['key'] ?? ''),
+                    'label' => (string) ($v['label'] ?? ($v['key'] ?? '')),
+                ], $rawVars)
+                : $template->variables()->get()->map(fn ($v) => [
+                    'key' => (string) $v->key,
+                    'label' => (string) ($v->label ?: $v->key),
+                ])->toArray();
+
+            $rawArray = array_values(array_filter($rawArray, fn ($v) => !empty($v['key'])));
+            if (empty($rawArray)) {
+                return [
+                    'applied' => false,
+                    'available' => false,
+                    'source' => 'none',
+                    'count' => 0,
+                    'message' => 'Aucune variable à enrichir.',
+                ];
+            }
+
+            $ollama = new \App\Services\OllamaService();
+            $available = $ollama->isAvailable();
+            $enriched = $available ? $ollama->enrichVariables($rawArray) : $ollama->fallbackEnrich($rawArray);
+            $source = $available ? 'ollama' : 'fallback';
+
+            $validTypes = ['text', 'date', 'number', 'select', 'textarea'];
+            foreach ($enriched as $item) {
+                $key = (string) ($item['key'] ?? '');
+                if ($key === '') {
+                    continue;
+                }
+
+                $type = in_array($item['field_type'] ?? '', $validTypes, true) ? $item['field_type'] : 'text';
+                $template->variables()->where('key', $key)->update([
+                    'label' => (string) ($item['label'] ?? $key),
+                    'field_type' => $type,
+                    'required' => (bool) ($item['required'] ?? false),
+                    'placeholder' => (string) ($item['placeholder'] ?? ''),
+                ]);
+            }
+
+            return [
+                'applied' => true,
+                'available' => $available,
+                'source' => $source,
+                'count' => count($enriched),
+                'message' => $available
+                    ? 'Variables enrichies par IA (Ollama).'
+                    : 'Ollama indisponible: enrichissement heuristique appliqué.',
+            ];
+        } catch (\Throwable $e) {
+            Log::warning('autoEnrichTemplateVariables failed: ' . $e->getMessage(), [
+                'template_id' => (string) $template->id,
+            ]);
+
+            return [
+                'applied' => false,
+                'available' => false,
+                'source' => 'error',
+                'count' => 0,
+                'message' => 'Échec enrichissement IA: ' . $e->getMessage(),
+            ];
+        }
     }
 
     // ── Paramètres ────────────────────────────────────────────────────────────
@@ -1067,6 +1150,13 @@ class AdminController extends Controller
             return response()->json([
                 'success' => false,
                 'error' => 'Le serveur OnlyOffice n\'est pas configuré. Renseignez l\'adresse du ONLYOFFICE Docs dans l\'onglet OnlyOffice.',
+            ], 422);
+        }
+
+        if ($ext !== 'pdf' && !$onlyofficeSecret) {
+            return response()->json([
+                'success' => false,
+                'error' => 'Secret JWT OnlyOffice manquant. Configurez onlyoffice_secret (même valeur que DocumentServer) pour éviter les erreurs 403 /downloadfile.',
             ], 422);
         }
 

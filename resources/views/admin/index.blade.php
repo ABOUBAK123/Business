@@ -207,6 +207,12 @@ if (!array_key_exists($tab, $tabs)) {
                         class="bg-green-100 text-green-700 rounded-lg px-3 py-2 text-xs font-semibold hover:bg-green-200 transition flex items-center justify-center gap-1">
                   <i class="fas fa-external-link-alt text-xs"></i> Ouvrir l'éditeur OnlyOffice
                 </button>
+
+                {{-- Nouveau flux: upload Word + analyse IA + génération formulaire --}}
+                <button type="button" onclick="tplOpenUploadFlow()"
+                        class="bg-blue-100 text-blue-700 rounded-lg px-3 py-2 text-xs font-semibold hover:bg-blue-200 transition flex items-center justify-center gap-1">
+                  <i class="fas fa-file-upload text-xs"></i> Uploader Word et générer le formulaire (IA)
+                </button>
             </div>
 
             {{-- Éditeur de texte riche Quill pour le contenu du template --}}
@@ -254,7 +260,15 @@ if (!array_key_exists($tab, $tabs)) {
             @php $tplShared = $shareMap[$tpl->id] ?? []; @endphp
             <div class="border rounded-lg p-3 {{ $selectedTplId === $tpl->id ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-gray-50' }}">
                 <button type="button" onclick="tplSelect('{{ $tpl->id }}')" class="w-full text-left">
-                    <p class="text-xs font-semibold text-gray-800 truncate" title="{{ $tpl->name }}">{{ $tpl->name }}</p>
+                <div class="flex items-center justify-between gap-2">
+                  <p class="text-xs font-semibold text-gray-800 truncate" title="{{ $tpl->name }}">{{ $tpl->name }}</p>
+                  @if(request('ia_generated') === '1' && (string) $selectedTplId === (string) $tpl->id)
+                  <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200 px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap"
+                      title="Template importé avec détection IA et génération automatique des champs">
+                    <i class="fas fa-robot text-[9px]"></i> Formulaire auto IA
+                  </span>
+                  @endif
+                </div>
                     <p class="text-xs text-gray-500 truncate">{{ $tpl->file_name ?: '-' }} • {{ strtoupper($tpl->file_type) }}</p>
                     @if($tpl->administration)
                     <p class="text-xs text-gray-400">{{ $tpl->administration->name }}</p>
@@ -942,6 +956,15 @@ if (!array_key_exists($tab, $tabs)) {
     }
     window.tplOpenOnlyOffice = tplOpenOnlyOffice;
 
+    // Ouvre directement le panneau d'upload pour le nouveau flux IA.
+    function tplOpenUploadFlow() {
+      tplOoDisarmCloseGuard();
+      openModal('modal-tpl-oo');
+      tplOoOpenUpload();
+      tplOoShowStatus('Importez un fichier Word. Les variables seront détectées et le formulaire sera généré automatiquement.', 7000);
+    }
+    window.tplOpenUploadFlow = tplOpenUploadFlow;
+
 
     // --- Ouvrir le panneau d'import de fichier --------------------------------
     function tplOoOpenUpload(targetTemplateId) {
@@ -1067,32 +1090,37 @@ if (!array_key_exists($tab, $tabs)) {
             var upPanel = document.getElementById('tpl-oo-upload-panel');
             if (upPanel) upPanel.classList.add('hidden');
             _tplOoUploadTargetId = null;
-            tplOoShowStatus('Chargement en cours...', 0);
 
             var tplId = cfg.template_id || null;
             if (!tplId) {
               tplOoShowStatus('Template importé mais identifiant introuvable.', 6000);
               return;
             }
-            fetch(_adminTplBase + '/' + tplId + '/oo-config', {
-              headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content }
-            })
-            .then(function(r) { return r.json(); })
-            .then(function(fullCfg) {
-              if (fullCfg.error) { tplOoShowStatus('Erreur : ' + fullCfg.error, 7000); return; }
-              if (fullCfg.warning) { tplOoShowStatus('Avertissement réseau : ' + fullCfg.warning, 8000); }
-              tplOoLoadEditor(fullCfg);
-            })
-            .catch(function(err) { tplOoShowStatus('Erreur réseau : ' + err.message, 5000); });
 
-            // Afficher les variables d�tect�es apr�s upload
-            if (cfg.variables && cfg.variables.length > 0) {
-                var _vNames = cfg.variables.slice(0, 5).map(function(v) { return '[' + v.key + ']'; }).join(', ');
-                if (cfg.variables.length > 5) _vNames += ' + ' + (cfg.variables.length - 5) + ' autres';
-                tplOoShowStatus(cfg.variables.length + ' variable(s) d�tect�e(s) : ' + _vNames, 9000);
-            } else if (cfg.fileType !== 'pdf') {
-                tplOoShowStatus('Aucune variable d�tect�e. V�rifiez que votre template contient des balises [variable] (ou @{{variable}}).', 6000);
+            var detectedCount = Number(cfg.variables_count || 0);
+            var fieldsCount = Number(cfg.form_fields_count || 0);
+            var aiInfo = cfg.ai || {};
+            var aiSuffix = '';
+            if (aiInfo && aiInfo.applied) {
+              aiSuffix = aiInfo.source === 'ollama'
+                ? ' IA Ollama appliquée.'
+                : ' IA indisponible, heuristique appliquée.';
             }
+
+            if (detectedCount > 0) {
+              tplOoShowStatus(
+                detectedCount + ' variable(s) détectée(s), ' + fieldsCount + ' champ(s) formulaire généré(s).' + aiSuffix,
+                4500
+              );
+            } else {
+              tplOoShowStatus('Aucune variable détectée dans le modèle importé.', 6000);
+            }
+
+            // Nouveau paradigme: après upload + analyse IA, on revient sur le sous-onglet
+            // templates avec le template sélectionné pour afficher directement le formulaire.
+            setTimeout(function() {
+              tplNavigate(window.location.pathname + '?tab=templates&selected_template=' + encodeURIComponent(String(tplId)) + '&ia_generated=1');
+            }, 650);
         };
 
         xhr.onerror = function() {
