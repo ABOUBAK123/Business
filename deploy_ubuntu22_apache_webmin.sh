@@ -45,15 +45,15 @@ apt-get install -y apache2 libapache2-mod-fcgid php8.2 php8.2-cli php8.2-common 
 
 echo "[1b/11] Configuring PHP upload limits..."
 cat >/etc/php/8.2/fpm/conf.d/99-e-administration-upload.ini <<'PHPINI'
-upload_max_filesize = 20M
-post_max_size = 64M
+upload_max_filesize = 50M
+post_max_size = 128M
 max_file_uploads = 20
 memory_limit = 512M
 PHPINI
 
 cat >/etc/php/8.2/cli/conf.d/99-e-administration-upload.ini <<'PHPINI'
-upload_max_filesize = 20M
-post_max_size = 64M
+upload_max_filesize = 50M
+post_max_size = 128M
 max_file_uploads = 20
 memory_limit = 512M
 PHPINI
