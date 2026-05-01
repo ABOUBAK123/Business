@@ -71,4 +71,5 @@ class SharedTemplateControllerDefragmentRunsTest extends TestCase
         $this->assertStringNotContainsString('<w:proofErr', $out,
             'proofErr markers must be removed in rebuilt paragraph.');
     }
+
 }

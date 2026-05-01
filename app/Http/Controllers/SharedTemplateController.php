@@ -141,6 +141,18 @@ class SharedTemplateController extends Controller
 
         /* -- Carte de remplacement : slug => label_original_dans_docx -- */
         $replacements = $coreService->buildReplacementMap($template, $contentVarMap, $docxVars);
+
+        // Sécurité anti-régression : toujours inclure les clés réellement soumises
+        // par le formulaire. Cela couvre les cas où la détection interne du template
+        // manque une variable (fragmentation XML, historique, variation de label).
+        foreach (array_keys($values) as $submittedKey) {
+            $submittedKey = trim((string) $submittedKey);
+            if ($submittedKey === '' || isset($replacements[$submittedKey])) {
+                continue;
+            }
+            $replacements[$submittedKey] = $submittedKey;
+        }
+
         \Log::info('GENERATE replacements=' . json_encode($replacements));
 
         // Carte slug => texte EXACT du DOCX (avant slugification + enrichissement IA).
