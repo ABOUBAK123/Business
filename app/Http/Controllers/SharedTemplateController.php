@@ -13,6 +13,7 @@ use Endroid\QrCode\Builder\Builder;
 use Endroid\QrCode\Writer\PngWriter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -206,9 +207,33 @@ class SharedTemplateController extends Controller
         $issuingAdminId = $numbering['issuing_administration_id'];
 
         // Fallback: certains templates partages n'ont pas d'administration de delivrance.
-        // On genere quand meme un numero lisible pour garantir sa presence sur le document.
+        // On conserve la meme codification que le flux standard.
         if (!$docNumber) {
-            $docNumber = 'DOC-' . now()->format('Ymd-His') . '-' . strtoupper(substr((string) Str::uuid(), 0, 6));
+            $currentYear = now()->year;
+            $adminCodeFallback = 'ADM';
+            $subEntityCode = $subEntityCode ?: 'GEN';
+
+            $counterScope = strtolower(str_replace(' ', '_', (string) $subEntityCode));
+            $counterKey = 'doc_counter_shared_' . $counterScope . '_' . $currentYear;
+
+            $seq = DB::transaction(function () use ($counterKey): int {
+                $setting = AppSetting::lockForUpdate()->where('key', $counterKey)->first();
+                if ($setting) {
+                    $next = (int) $setting->value + 1;
+                    $setting->update(['value' => (string) $next]);
+                    return $next;
+                }
+
+                AppSetting::create([
+                    'key' => $counterKey,
+                    'value' => '1',
+                    'description' => 'Compteur documents partages fallback',
+                ]);
+
+                return 1;
+            });
+
+            $docNumber = sprintf('%s - %s - %05d - %d', $adminCodeFallback, $subEntityCode, $seq, $currentYear);
         }
 
         /* ══════════════════════════════════════════════════════════
