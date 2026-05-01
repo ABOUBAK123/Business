@@ -1091,12 +1091,12 @@ class SharedTemplateController extends Controller
                     }
 
                     $newContent = preg_replace(
-                        '#\[\s*' . $loose . '\s*\]#iu',
+                        '~\[\s*' . $loose . '\s*\]~iu',
                         $val,
                         $newContent
                     );
                     $newContent = preg_replace(
-                        '#\{\{\s*' . $loose . '\s*\}\}#iu',
+                        '~\{\{\s*' . $loose . '\s*\}\}~iu',
                         $val,
                         $newContent
                     );
