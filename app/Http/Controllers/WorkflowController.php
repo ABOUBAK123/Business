@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class WorkflowController extends Controller
@@ -154,6 +155,50 @@ class WorkflowController extends Controller
         ];
     }
 
+    private function resolveCurrentAdministrationId(): ?string
+    {
+        $userId = (string) Auth::id();
+        if ($userId === '') {
+            return null;
+        }
+
+        // Source prioritaire: affectation active de l'utilisateur.
+        $adminIdFromAssignment = DB::table('user_direction_assignments')
+            ->where('user_id', $userId)
+            ->whereNotNull('direction_scope_id')
+            ->orderByDesc('created_at')
+            ->value('direction_scope_id');
+
+        if (!empty($adminIdFromAssignment)) {
+            return (string) $adminIdFromAssignment;
+        }
+
+        // Fallback: ancien rattachement via profil d'administration.
+        return (string) (Auth::user()?->profile?->administration_id ?: '');
+    }
+
+    private function buildSignerUsersQueryForAdministration(?string $administrationId)
+    {
+        $usersQuery = User::query()
+            ->where('status', 'active')
+            ->where('role', 'signer');
+
+        if (!$administrationId) {
+            return $usersQuery->whereRaw('1 = 0');
+        }
+
+        return $usersQuery->where(function ($query) use ($administrationId) {
+            $query->whereHas('profile', function ($profileQuery) use ($administrationId) {
+                $profileQuery->where('administration_id', $administrationId);
+            })->orWhereExists(function ($subQuery) use ($administrationId) {
+                $subQuery->select(DB::raw(1))
+                    ->from('user_direction_assignments as uda')
+                    ->whereColumn('uda.user_id', 'users.id')
+                    ->where('uda.direction_scope_id', $administrationId);
+            });
+        });
+    }
+
     // ── Pages ────────────────────────────────────────────────────────────────
 
     public function index()
@@ -167,20 +212,12 @@ class WorkflowController extends Controller
             return response()->json($workflows->map(fn($wf) => $this->formatWorkflow($wf))->values());
         }
 
-        $currentAdminId = Auth::user()?->profile?->administration_id;
-        $usersQuery = User::where('status', 'active')
-            ->where('role', 'signer');
-
-        if ($currentAdminId) {
-            $usersQuery->whereHas('profile', function ($query) use ($currentAdminId) {
-                $query->where('administration_id', $currentAdminId);
-            });
-        } else {
-            $usersQuery->whereRaw('1 = 0');
-        }
+        $currentAdminId = $this->resolveCurrentAdministrationId();
+        $usersQuery = $this->buildSignerUsersQueryForAdministration($currentAdminId);
 
         $users = $usersQuery
             ->orderBy('name')
+            ->distinct('users.id')
             ->get(['id', 'name', 'full_name', 'email']);
 
         $documents = Document::where('owner_id', Auth::id())
@@ -193,20 +230,12 @@ class WorkflowController extends Controller
 
     public function create()
     {
-        $currentAdminId = Auth::user()?->profile?->administration_id;
-        $usersQuery = User::where('status', 'active')
-            ->where('role', 'signer');
-
-        if ($currentAdminId) {
-            $usersQuery->whereHas('profile', function ($query) use ($currentAdminId) {
-                $query->where('administration_id', $currentAdminId);
-            });
-        } else {
-            $usersQuery->whereRaw('1 = 0');
-        }
+        $currentAdminId = $this->resolveCurrentAdministrationId();
+        $usersQuery = $this->buildSignerUsersQueryForAdministration($currentAdminId);
 
         $users = $usersQuery
             ->orderBy('name')
+            ->distinct('users.id')
             ->get(['id', 'name', 'email']);
         return view('workflows.create', compact('users'));
     }
