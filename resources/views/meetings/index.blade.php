@@ -28,13 +28,21 @@
         </thead>
         <tbody>
             @forelse($meetings as $meeting)
+            @php
+                $statusLabels = [
+                    'planned' => 'Planifiee',
+                ];
+                $workflowLabels = [
+                    'draft' => 'Brouillon',
+                ];
+            @endphp
             <tr class="border-b border-gray-100">
                 <td class="px-4 py-3 font-medium text-gray-800">{{ $meeting->title }}</td>
                 <td class="px-4 py-3 text-gray-600">{{ $meeting->room?->name }}</td>
                 <td class="px-4 py-3 text-gray-600">{{ $meeting->starts_at?->format('d/m/Y H:i') }}</td>
                 <td class="px-4 py-3 text-gray-600">{{ $meeting->organizer?->name }}</td>
-                <td class="px-4 py-3 text-gray-600">{{ $meeting->status }}</td>
-                <td class="px-4 py-3 text-gray-600">{{ $meeting->workflow_status ?? 'draft' }}</td>
+                <td class="px-4 py-3 text-gray-600">{{ $statusLabels[$meeting->status] ?? $meeting->status }}</td>
+                <td class="px-4 py-3 text-gray-600">{{ $workflowLabels[$meeting->workflow_status ?? 'draft'] ?? ($meeting->workflow_status ?? 'draft') }}</td>
                 <td class="px-4 py-3">
                     <a href="{{ route('meetings.show', $meeting) }}" class="text-[#2453d6] font-semibold hover:underline">Ouvrir</a>
                 </td>
