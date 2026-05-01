@@ -988,9 +988,9 @@ class MeetingController extends Controller
             $zip->close();
 
             // --- Détecter les variables {{ nom_variable }} -----------------------
-            $textForScan = strip_tags($xmlContent);
-            preg_match_all('/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/', $textForScan, $varMatches);
-            $variables = array_values(array_unique($varMatches[1]));
+            $textForScan = $this->extractDocxText($xmlContent);
+            preg_match_all('/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/u', $textForScan, $varMatches);
+            $variables = array_values(array_unique($varMatches[1] ?? []));
 
             // --- Sceller les zones @@@ -------------------------------------------
             $signatureCount = substr_count($textForScan, '@@@');
@@ -1105,30 +1105,9 @@ class MeetingController extends Controller
                 abort(403);
             }
 
-            // Utiliser le modèle scellé seulement s'il est au moins aussi récent
-            // que le modèle source. Sinon, retomber sur l'original.
-            $minutesTemplatePath = (string) ($meeting->minutes_template ?? '');
-            $sealedPath          = (string) ($meeting->template_sealed_path ?? '');
-            $templatePath        = $minutesTemplatePath;
-
-            if ($sealedPath && str_starts_with($sealedPath, '/storage/') && $minutesTemplatePath && str_starts_with($minutesTemplatePath, '/storage/')) {
-                $sealedRelative  = ltrim(str_replace('/storage/', '', $sealedPath), '/');
-                $sourceRelative  = ltrim(str_replace('/storage/', '', $minutesTemplatePath), '/');
-                $sealedExists    = Storage::disk('public')->exists($sealedRelative);
-                $sourceExists    = Storage::disk('public')->exists($sourceRelative);
-
-                if ($sealedExists && $sourceExists) {
-                    $sealedAbs = Storage::disk('public')->path($sealedRelative);
-                    $sourceAbs = Storage::disk('public')->path($sourceRelative);
-
-                    $sealedMTime = @filemtime($sealedAbs) ?: 0;
-                    $sourceMTime = @filemtime($sourceAbs) ?: 0;
-
-                    if ($sealedMTime >= $sourceMTime) {
-                        $templatePath = $sealedPath;
-                    }
-                }
-            }
+            // Toujours partir du template source courant pour éviter qu'un scellé
+            // ancien supprime encore du contenu après modification du modèle.
+            $templatePath = (string) ($meeting->minutes_template ?? '');
 
             if (!$templatePath || !str_starts_with($templatePath, '/storage/')) {
                 abort(404, 'Aucun modèle disponible pour cette réunion.');
@@ -1152,18 +1131,10 @@ class MeetingController extends Controller
                 abort(500, 'Structure DOCX invalide.');
             }
 
-            // --- Substituer les variables ----------------------------------------
+            // --- Sceller puis substituer les variables ---------------------------
+            $xmlContent = $this->sealSignatureZones($xmlContent);
             $values = (array) $request->input('variables', []);
-            foreach ($values as $varName => $varValue) {
-                if (!preg_match('/^[a-zA-Z0-9_]+$/', (string) $varName)) {
-                    continue; // Ignorer les noms invalides (sécurité)
-                }
-                $safeValue = htmlspecialchars((string) $varValue, ENT_XML1 | ENT_QUOTES, 'UTF-8');
-                // Couvrir les variantes d'espacement
-                foreach (["{{ {$varName} }}", "{{{$varName}}}", "{{ {$varName}}}", "{{{$varName} }}"] as $placeholder) {
-                    $xmlContent = str_replace($placeholder, $safeValue, $xmlContent);
-                }
-            }
+            $xmlContent = $this->replaceTemplateVariablesInDocxXml($xmlContent, $values);
 
             // --- Créer le DOCX final ---------------------------------------------
             $tmpFile = tempnam(sys_get_temp_dir(), 'mtg_doc_') . '.docx';
@@ -1181,5 +1152,110 @@ class MeetingController extends Controller
             return response()->download($tmpFile, $fileName, [
                 'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
             ])->deleteFileAfterSend(true);
+        }
+
+        /**
+         * Extrait le texte DOCX en concaténant les noeuds w:t par paragraphe.
+         * Cela rend visibles les placeholders même s'ils sont split sur plusieurs runs.
+         */
+        private function extractDocxText(string $xml): string
+        {
+            $dom = new \DOMDocument();
+            $prev = libxml_use_internal_errors(true);
+            $loaded = $dom->loadXML($xml, LIBXML_NONET | LIBXML_NOBLANKS);
+            libxml_clear_errors();
+            libxml_use_internal_errors($prev);
+
+            if (!$loaded) {
+                return strip_tags($xml);
+            }
+
+            $xp = new \DOMXPath($dom);
+            $xp->registerNamespace('w', 'http://schemas.openxmlformats.org/wordprocessingml/2006/main');
+
+            $out = [];
+            $paragraphs = $xp->query('//w:p');
+            foreach ($paragraphs as $p) {
+                $buf = '';
+                foreach ($xp->query('.//w:t', $p) as $t) {
+                    $buf .= (string) $t->nodeValue;
+                }
+                $out[] = $buf;
+            }
+
+            return implode("\n", $out);
+        }
+
+        /**
+         * Remplace les placeholders {{ var }} en travaillant au niveau texte de
+         * chaque paragraphe DOCX, pour gérer les placeholders split en plusieurs runs.
+         */
+        private function replaceTemplateVariablesInDocxXml(string $xml, array $values): string
+        {
+            $normalizedValues = [];
+            foreach ($values as $k => $v) {
+                $name = trim((string) $k);
+                if (!preg_match('/^[a-zA-Z0-9_]+$/', $name)) {
+                    continue;
+                }
+                $normalizedValues[strtolower($name)] = (string) $v;
+            }
+
+            if (empty($normalizedValues)) {
+                return $xml;
+            }
+
+            $dom = new \DOMDocument();
+            $prev = libxml_use_internal_errors(true);
+            $loaded = $dom->loadXML($xml, LIBXML_NONET | LIBXML_NOBLANKS);
+            libxml_clear_errors();
+            libxml_use_internal_errors($prev);
+
+            if (!$loaded) {
+                return $xml;
+            }
+
+            $xp = new \DOMXPath($dom);
+            $xp->registerNamespace('w', 'http://schemas.openxmlformats.org/wordprocessingml/2006/main');
+
+            $paragraphs = $xp->query('//w:p');
+            foreach ($paragraphs as $p) {
+                $textNodes = $xp->query('.//w:t', $p);
+                if (!$textNodes || $textNodes->length === 0) {
+                    continue;
+                }
+
+                $joined = '';
+                foreach ($textNodes as $t) {
+                    $joined .= (string) $t->nodeValue;
+                }
+
+                if (!str_contains($joined, '{{')) {
+                    continue;
+                }
+
+                $replaced = preg_replace_callback(
+                    '/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/u',
+                    static function (array $m) use ($normalizedValues): string {
+                        $needle = strtolower((string) ($m[1] ?? ''));
+                        if (!array_key_exists($needle, $normalizedValues)) {
+                            return $m[0];
+                        }
+                        return $normalizedValues[$needle];
+                    },
+                    $joined
+                );
+
+                if ($replaced === null || $replaced === $joined) {
+                    continue;
+                }
+
+                $textNodes->item(0)->nodeValue = $replaced;
+                for ($i = 1; $i < $textNodes->length; $i++) {
+                    $textNodes->item($i)->nodeValue = '';
+                }
+            }
+
+            return $dom->saveXML() ?: $xml;
         }
 }
