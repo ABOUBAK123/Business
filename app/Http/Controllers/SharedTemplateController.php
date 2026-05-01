@@ -985,6 +985,25 @@ class SharedTemplateController extends Controller
             function (array $match) {
                 $para = $match[0];
 
+                // Ne jamais réécrire un paragraphe "complexe" : sinon on peut
+                // perdre des objets Word (zones, dessins, signets, champs, etc.).
+                if (preg_match(
+                    '/<(w:(drawing|pict|object|tbl|hyperlink|bookmarkStart|bookmarkEnd|fldSimple|instrText|sdt|smartTag|proofErr)|mc:AlternateContent)\b/i',
+                    $para
+                )) {
+                    return $para;
+                }
+
+                // Défense supplémentaire : ne réécrire que les paragraphes composés
+                // uniquement de pPr + runs texte. S'il y a autre chose, on laisse tel quel.
+                $skeleton = $para;
+                $skeleton = preg_replace('/^<w:p[^>]*>|<\/w:p>$/s', '', $skeleton);
+                $skeleton = preg_replace('/<w:pPr>.*?<\/w:pPr>/s', '', $skeleton);
+                $skeleton = preg_replace('/<w:r[ >].*?<\/w:r>/s', '', $skeleton);
+                if ($skeleton === null || trim(strip_tags($skeleton)) !== '') {
+                    return $para;
+                }
+
                 // Extraire le texte brut XML de tous les <w:t> (sans décoder les entités)
                 preg_match_all('/<w:t[^>]*>(.*?)<\/w:t>/s', $para, $texts);
                 $fullText = implode('', $texts[1]);
