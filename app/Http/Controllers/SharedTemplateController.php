@@ -984,6 +984,7 @@ class SharedTemplateController extends Controller
 
         $numFiles = $zip->numFiles;
         $toUpdate = [];
+        $canonicalValueMap = $this->buildCanonicalValueMap($replacements, $values, $docxOriginalMap);
 
         for ($i = 0; $i < $numFiles; $i++) {
             $stat = $zip->statIndex($i);
@@ -1102,6 +1103,14 @@ class SharedTemplateController extends Controller
                 }
             }
 
+            // Fallback final: remplace tout placeholder restant via une clé canonique
+            // (tolère guillemets, parenthèses, apostrophes typographiques et petites fautes).
+            $newContent = $this->replaceRemainingPlaceholdersByCanonicalLookup(
+                $newContent,
+                $canonicalValueMap,
+                $name
+            );
+
             if ($newContent !== $xmlContent) {
                 $toUpdate[$name] = $newContent;
             }
@@ -1144,6 +1153,120 @@ class SharedTemplateController extends Controller
             }
             $zip2->close();
         }
+    }
+
+    /**
+     * Construit une table canonique token => valeur à injecter.
+     */
+    private function buildCanonicalValueMap(array $replacements, array $values, array $docxOriginalMap = []): array
+    {
+        $map = [];
+
+        foreach ($replacements as $slug => $original) {
+            $val = htmlspecialchars((string) ($values[$slug] ?? ''), ENT_XML1, 'UTF-8');
+            if ($val === '') {
+                continue;
+            }
+
+            $candidates = array_values(array_unique(array_filter([
+                (string) $slug,
+                (string) $original,
+                (string) ($docxOriginalMap[$slug] ?? ''),
+                str_replace('_', ' ', (string) $slug),
+            ], static fn ($v) => trim((string) $v) !== '')));
+
+            foreach ($candidates as $candidate) {
+                $canon = $this->canonicalizePlaceholderToken($candidate);
+                if ($canon !== '' && !isset($map[$canon])) {
+                    $map[$canon] = $val;
+                }
+            }
+        }
+
+        // Ajoute aussi directement les clés soumises, utile si un slug n'est pas dans $replacements.
+        foreach ($values as $k => $v) {
+            $val = htmlspecialchars((string) $v, ENT_XML1, 'UTF-8');
+            if ($val === '') {
+                continue;
+            }
+            $canon = $this->canonicalizePlaceholderToken((string) $k);
+            if ($canon !== '' && !isset($map[$canon])) {
+                $map[$canon] = $val;
+            }
+        }
+
+        return $map;
+    }
+
+    /**
+     * Remplace les placeholders restants {{...}} et [...] via lookup canonique.
+     */
+    private function replaceRemainingPlaceholdersByCanonicalLookup(string $xml, array $canonicalValueMap, string $xmlName): string
+    {
+        if (empty($canonicalValueMap)) {
+            return $xml;
+        }
+
+        $replaceCb = function (array $m) use ($canonicalValueMap, $xmlName) {
+            $rawInner = (string) ($m[1] ?? '');
+            $canon = $this->canonicalizePlaceholderToken($rawInner);
+
+            if ($canon !== '' && isset($canonicalValueMap[$canon])) {
+                return $canonicalValueMap[$canon];
+            }
+
+            // Tolérance fautes de frappe légères (ex: financemant/financement, intutile/intitule)
+            if ($canon !== '') {
+                $best = null;
+                $bestDist = 99;
+                foreach (array_keys($canonicalValueMap) as $candidateCanon) {
+                    $dist = levenshtein($canon, $candidateCanon);
+                    if ($dist < $bestDist) {
+                        $bestDist = $dist;
+                        $best = $candidateCanon;
+                    }
+                }
+
+                $maxDist = max(1, (int) floor(strlen($canon) * 0.18));
+                if ($best !== null && $bestDist <= $maxDist) {
+                    \Log::info('replaceInOfficeFile FUZZY match in ' . $xmlName
+                        . ' token=' . $rawInner . ' canon=' . $canon . ' -> ' . $best
+                        . ' (dist=' . $bestDist . ')');
+                    return $canonicalValueMap[$best];
+                }
+            }
+
+            return $m[0];
+        };
+
+        $xml = preg_replace_callback('/\{\{\s*(.*?)\s*\}\}/u', $replaceCb, $xml) ?? $xml;
+        $xml = preg_replace_callback('/\[\s*([^\[\]]*?)\s*\]/u', $replaceCb, $xml) ?? $xml;
+
+        return $xml;
+    }
+
+    /**
+     * Canonicalise un token de placeholder pour matcher les variantes typographiques.
+     */
+    private function canonicalizePlaceholderToken(string $token): string
+    {
+        $token = trim($token);
+        if ($token === '') {
+            return '';
+        }
+
+        // Retirer décorations fréquentes autour du contenu.
+        $token = preg_replace('/^[\s\x{00AB}\x{00BB}"\'"()\[\]{}]+|[\s\x{00AB}\x{00BB}"\'"()\[\]{}]+$/u', '', $token) ?? $token;
+        $token = str_replace(["’", "‘", "`", "´"], "'", $token);
+
+        $ascii = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $token);
+        $token = ($ascii !== false && $ascii !== '') ? $ascii : $token;
+        $token = strtolower($token);
+
+        $token = preg_replace('/[^a-z0-9]+/u', '_', $token) ?? $token;
+        $token = trim($token, '_');
+
+        return $token;
     }
 
     /**
