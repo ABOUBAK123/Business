@@ -14,6 +14,7 @@ use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class WorkflowController extends Controller
@@ -277,6 +278,19 @@ class WorkflowController extends Controller
             ->values();
 
         if ($forbiddenAssigneeIds->isNotEmpty()) {
+            Log::warning('SECURITY_WORKFLOW_OUT_OF_SCOPE_ASSIGNEE_BLOCKED', [
+                'actor_user_id' => (string) Auth::id(),
+                'actor_email' => (string) (Auth::user()?->email ?? ''),
+                'resolved_administration_id' => (string) ($this->resolveCurrentAdministrationId() ?: ''),
+                'workflow_name' => (string) ($request->input('name') ?? ''),
+                'requested_assignee_ids' => $requestedAssigneeIds->all(),
+                'forbidden_assignee_ids' => $forbiddenAssigneeIds->all(),
+                'allowed_assignee_count' => count($allowedSignerIds),
+                'ip' => (string) $request->ip(),
+                'user_agent' => (string) ($request->userAgent() ?? ''),
+                'url' => (string) $request->fullUrl(),
+            ]);
+
             $message = 'Attribution non autorisée: un ou plusieurs utilisateurs ne sont pas des signataires actifs de votre administration.';
 
             if ($request->wantsJson()) {
