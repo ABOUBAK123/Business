@@ -62,7 +62,7 @@
                 </button>
             </div>
             @else
-            <p class="text-sm text-gray-400 italic">Aucun modèle de compte rendu chargé. <a href="{{ route('meetings.edit', $meeting) ?? '#' }}" class="text-blue-600 hover:underline">Modifier la réunion</a> pour en ajouter un.</p>
+            <p class="text-sm text-gray-400 italic">Aucun modèle de compte rendu chargé pour cette réunion.</p>
             @endif
 
             <form method="POST" action="{{ route('meetings.minutes.update', $meeting) }}" class="space-y-2">
