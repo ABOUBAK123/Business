@@ -1070,8 +1070,10 @@ class SharedTemplateController extends Controller
                 // Ne jamais toucher les paragraphes complexes: ils peuvent contenir
                 // des objets/ancres/champs que la reconstruction d'un unique <w:r>
                 // ferait disparaître (zone, QR, numérotation, etc.).
+                // Note: <w:proofErr> est exclu car c'est un simple marqueur orthographique
+                // sans contenu — il fragmente souvent les variables {{…}} entre runs.
                 if (preg_match(
-                    '/<(w:(drawing|pict|object|tbl|hyperlink|bookmarkStart|bookmarkEnd|fldSimple|instrText|fldChar|sdt|smartTag|proofErr|tab|br|cr)|mc:AlternateContent)\b/i',
+                    '/<(w:(drawing|pict|object|tbl|hyperlink|bookmarkStart|bookmarkEnd|fldSimple|instrText|fldChar|sdt|smartTag|tab|br|cr)|mc:AlternateContent)\b/i',
                     $para
                 )) {
                     return $para;
@@ -1083,6 +1085,8 @@ class SharedTemplateController extends Controller
                 $skeleton = preg_replace('/^<w:p[^>]*>|<\/w:p>$/s', '', $skeleton);
                 $skeleton = preg_replace('/<w:pPr>.*?<\/w:pPr>/s', '', $skeleton);
                 $skeleton = preg_replace('/<w:r[ >].*?<\/w:r>/s', '', $skeleton);
+                // Les <w:proofErr> n'ont pas de contenu texte, on les ignore dans le squelette
+                $skeleton = preg_replace('/<w:proofErr[^>]*\/>/s', '', $skeleton);
                 if ($skeleton === null || trim(strip_tags($skeleton)) !== '') {
                     return $para;
                 }

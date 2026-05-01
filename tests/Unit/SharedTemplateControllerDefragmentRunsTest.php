@@ -51,4 +51,24 @@ class SharedTemplateControllerDefragmentRunsTest extends TestCase
         $this->assertStringNotContainsString('<w:t>[</w:t>', $out);
         $this->assertStringContainsString('<w:rPr><w:b/></w:rPr>', $out);
     }
+
+    public function test_defragment_runs_merges_placeholder_fragmented_by_proofErr(): void
+    {
+        // Word insère des <w:proofErr> (spell-check markers) entre les runs,
+        // ce qui fragmente les variables {{ NOM DU DEMANDEUR}} en plusieurs <w:t>.
+        $xml = '<w:document><w:body>'
+            . '<w:p>'
+            . '<w:r><w:rPr><w:sz w:val="28"/></w:rPr><w:t>{{ NOM</w:t></w:r>'
+            . '<w:proofErr w:type="gramEnd"/>'
+            . '<w:r><w:rPr><w:sz w:val="28"/></w:rPr><w:t xml:space="preserve"> DU DEMANDEUR}}</w:t></w:r>'
+            . '</w:p>'
+            . '</w:body></w:document>';
+
+        $out = $this->callDefragmentRuns($xml);
+
+        $this->assertStringContainsString('{{ NOM DU DEMANDEUR}}', $out,
+            'Variable fragmented by proofErr must be merged into a single text node.');
+        $this->assertStringNotContainsString('<w:proofErr', $out,
+            'proofErr markers must be removed in rebuilt paragraph.');
+    }
 }
