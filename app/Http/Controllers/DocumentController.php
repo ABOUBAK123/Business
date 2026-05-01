@@ -683,10 +683,10 @@ class DocumentController extends Controller
                 ]);
 
                 if ($submission) {
-                    $submission->status = 'sent';
+                    $submission->status = 'recu';
                     $submission->save();
                     $updatedTrackingStatus = true;
-                    Log::info('DocumentController@share submission status set to sent', ['submission_id' => $submission->id]);
+                    Log::info('DocumentController@share submission status set to recu', ['submission_id' => $submission->id]);
                 }
             }
 

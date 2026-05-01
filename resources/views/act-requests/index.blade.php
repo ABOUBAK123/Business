@@ -18,7 +18,7 @@
     </form>
 
     <div class="flex gap-2">
-        @foreach([''=>'Tous','pending'=>'En attente','in_progress'=>'En cours','sent'=>'Envoyee','treated'=>'Terminee'] as $val => $label)
+        @foreach([''=>'Tous','pending'=>'En attente','in_progress'=>'En cours','sent'=>'Envoyée','recu'=>'Reçu','treated'=>'Terminé'] as $val => $label)
         <a href="{{ route('act-requests.index', array_merge(request()->only('q'), ['status' => $val])) }}"
             class="px-3 py-2 rounded-xl text-xs font-semibold border transition
                 {{ $status === $val ? 'bg-[#2453d6] text-white border-[#2453d6]' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50' }}">
@@ -92,14 +92,16 @@
                                 'pending'     => 'bg-yellow-100 text-yellow-700',
                                 'in_progress' => 'bg-blue-100 text-blue-700',
                                 'sent'        => 'bg-indigo-100 text-indigo-700',
+                                'recu'        => 'bg-purple-100 text-purple-700',
                                 'treated'     => 'bg-green-100 text-green-700',
                                 'rejected'    => 'bg-red-100 text-red-700',
                             ];
                             $labels = [
                                 'pending'     => 'En attente',
                                 'in_progress' => 'En cours',
-                                'sent'        => 'Envoyee',
-                                'treated'     => 'Terminee',
+                                'sent'        => 'Envoyée',
+                                'recu'        => 'Reçu',
+                                'treated'     => 'Terminé',
                                 'rejected'    => 'Refusé',
                             ];
                             $cls   = $colors[$req->status]   ?? 'bg-gray-100 text-gray-600';
@@ -114,7 +116,7 @@
                         @php
                             $attachments = is_array($req->attachments) ? $req->attachments : [];
                             $attachmentCount = count($attachments);
-                            $zipAlreadyDownloaded = in_array($req->status, ['in_progress', 'sent', 'treated'], true);
+                            $zipAlreadyDownloaded = in_array($req->status, ['in_progress', 'sent', 'recu', 'treated'], true);
                             $zipBtnClasses = $zipAlreadyDownloaded
                                 ? 'bg-green-50 hover:bg-green-100 text-green-700 border-green-200'
                                 : 'bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-200';
