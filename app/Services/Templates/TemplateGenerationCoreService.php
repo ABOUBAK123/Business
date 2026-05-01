@@ -90,7 +90,19 @@ class TemplateGenerationCoreService
         $subEntityCode = null;
         $issuingAdminId = null;
 
-        if (!$template->administration_id) {
+        $targetAdministrationId = (string) ($template->administration_id ?? '');
+        if ($userId) {
+            $userAdministrationId = (string) (DB::table('users as u')
+                ->leftJoin('administration_profiles as ap', 'ap.id', '=', 'u.profile_id')
+                ->where('u.id', $userId)
+                ->value('ap.administration_id') ?? '');
+
+            if ($userAdministrationId !== '') {
+                $targetAdministrationId = $userAdministrationId;
+            }
+        }
+
+        if ($targetAdministrationId === '') {
             return [
                 'document_number' => null,
                 'sub_entity_code' => null,
@@ -102,20 +114,20 @@ class TemplateGenerationCoreService
         if ($userId) {
             $userAssignment = DB::table('user_direction_assignments')
                 ->where('user_id', $userId)
-                ->where('direction_scope_id', $template->administration_id)
+                ->where('direction_scope_id', $targetAdministrationId)
                 ->first();
 
             $userSubCode = $userAssignment ? strtoupper((string) ($userAssignment->sub_entity_code ?? '')) : '';
         }
 
         DB::transaction(function () use (
-            $template,
+            $targetAdministrationId,
             $userSubCode,
             &$docNumber,
             &$subEntityCode,
             &$issuingAdminId
         ): void {
-            $admin = IssuingAdministration::lockForUpdate()->find($template->administration_id);
+            $admin = IssuingAdministration::lockForUpdate()->find($targetAdministrationId);
             if (!$admin) {
                 return;
             }
