@@ -1113,7 +1113,37 @@ class SharedTemplateController extends Controller
 
         \Log::info('replaceInOfficeFile files_updated=' . count($toUpdate) . ' keys=' . implode(',', array_keys($toUpdate)));
 
+        // ── Diagnostic post-remplacement : placeholders encore présents ────────
+        // Relit les fichiers XML mis à jour et signale tout {{ }} ou [ ] restant.
         $zip->close();
+
+        // Rouvrir en lecture seule pour vérifier le résultat
+        $zip2 = new \ZipArchive();
+        if ($zip2->open($absFilePath) === true) {
+            for ($i = 0, $n2 = $zip2->numFiles; $i < $n2; $i++) {
+                $stat2 = $zip2->statIndex($i);
+                $name2 = $stat2['name'];
+                if (!preg_match('/\.xml$/i', $name2)) continue;
+                if (preg_match('#\[Content_Types\]|_rels/#', $name2)) continue;
+                $xml2 = $zip2->getFromIndex($i);
+                if ($xml2 === false) continue;
+                // Extraire le texte lisible (balises <w:t>)
+                preg_match_all('/<w:t[^>]*>([^<]*)<\/w:t>/u', $xml2, $tM);
+                $plain2 = implode('', $tM[1]);
+                $remaining = [];
+                if (preg_match_all('/\{\{[^}]{1,120}\}\}/u', $plain2, $rm)) {
+                    $remaining = array_merge($remaining, $rm[0]);
+                }
+                if (preg_match_all('/\[[^\[\]]{1,120}\]/u', $plain2, $rm)) {
+                    $remaining = array_merge($remaining, $rm[0]);
+                }
+                if (!empty($remaining)) {
+                    \Log::warning('replaceInOfficeFile REMAINING placeholders in ' . $name2
+                        . ': ' . implode(' | ', array_unique($remaining)));
+                }
+            }
+            $zip2->close();
+        }
     }
 
     /**
