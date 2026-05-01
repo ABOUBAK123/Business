@@ -102,8 +102,25 @@
         </div>
 
         <div class="md:col-span-2">
-            <label class="block text-xs font-semibold text-gray-700 mb-1">Modèle de compte rendu personnalisable</label>
-            <textarea name="minutes_template" rows="6" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Saisissez le modèle de compte rendu...">{{ old('minutes_template') }}</textarea>
+            <label class="block text-xs font-semibold text-gray-700 mb-1">Modèle de compte rendu (fichier Word)</label>
+            <div id="tpl-dropzone"
+                 class="border-2 border-dashed border-gray-300 rounded-xl px-4 py-6 text-center cursor-pointer hover:border-[#2453d6] hover:bg-blue-50 transition"
+                 onclick="document.getElementById('minutes_template_file').click()">
+                <i class="fas fa-file-word text-3xl text-blue-400 mb-2 block"></i>
+                <p class="text-sm text-gray-600">Cliquer ici ou <strong>déposer un fichier .docx</strong></p>
+                <p class="text-xs text-gray-400 mt-1">Formats acceptés : .doc, .docx — max 20 Mo</p>
+                <p id="tpl-filename" class="text-xs text-emerald-600 font-semibold mt-2 hidden"></p>
+            </div>
+            <input type="file" id="minutes_template_file" name="minutes_template_file"
+                   accept=".doc,.docx" class="hidden"
+                   onchange="
+                     const fn = this.files[0]?.name;
+                     const lbl = document.getElementById('tpl-filename');
+                     if (fn) { lbl.textContent = '✔ ' + fn; lbl.classList.remove('hidden'); }
+                   ">
+            @error('minutes_template_file')
+                <p class="text-xs text-red-500 mt-1">{{ $message }}</p>
+            @enderror
         </div>
 
         <div class="md:col-span-2">
@@ -147,4 +164,28 @@
         <button class="px-4 py-2 rounded-lg bg-[#2453d6] text-white text-sm font-semibold hover:bg-[#1f47bb]">Créer la réunion</button>
     </div>
 </form>
+
+<script>
+(function () {
+    const zone  = document.getElementById('tpl-dropzone');
+    const input = document.getElementById('minutes_template_file');
+    const lbl   = document.getElementById('tpl-filename');
+
+    if (!zone || !input) return;
+
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('border-[#2453d6]', 'bg-blue-50'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('border-[#2453d6]', 'bg-blue-50'));
+    zone.addEventListener('drop', e => {
+        e.preventDefault();
+        zone.classList.remove('border-[#2453d6]', 'bg-blue-50');
+        const file = e.dataTransfer?.files?.[0];
+        if (!file) return;
+        const dt = new DataTransfer();
+        dt.items.add(file);
+        input.files = dt.files;
+        lbl.textContent = '✔ ' + file.name;
+        lbl.classList.remove('hidden');
+    });
+}());
+</script>
 @endsection

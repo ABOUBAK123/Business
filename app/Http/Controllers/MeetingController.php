@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AppSetting;
 use App\Models\Meeting;
 use App\Models\MeetingAttendance;
 use App\Models\MeetingMinutesVersion;
@@ -103,7 +104,7 @@ class MeetingController extends Controller
             'processing_deadline' => 'nullable|date|after_or_equal:starts_at',
             'minutes_writer_id' => 'required|uuid|exists:users,id',
             'agenda' => 'nullable|string',
-            'minutes_template' => 'nullable|string',
+            'minutes_template_file' => 'nullable|file|mimes:doc,docx|max:20480',
             'priority' => 'required|in:low,normal,high,urgent',
             'confidentiality' => 'required|in:public,internal,confidential',
             'diffusion_email_subject' => 'nullable|string|max:255',
@@ -154,6 +155,17 @@ class MeetingController extends Controller
             ];
         }
 
+        $minutesTemplatePath = null;
+        if ($request->hasFile('minutes_template_file')) {
+            $tplFile = $request->file('minutes_template_file');
+            $tplStorePath = $tplFile->storeAs(
+                'meetings/templates/' . Str::uuid(),
+                $tplFile->getClientOriginalName(),
+                'public'
+            );
+            $minutesTemplatePath = '/storage/' . $tplStorePath;
+        }
+
         $meeting = Meeting::create([
             'id' => Str::uuid(),
             'title' => $validated['title'],
@@ -168,8 +180,8 @@ class MeetingController extends Controller
             'issuing_administration_id' => $scope['administration_id'],
             'sub_entity_code' => $scope['sub_entity_code'],
             'agenda' => $validated['agenda'] ?? null,
-            'minutes_template' => $validated['minutes_template'] ?? null,
-            'minutes_content' => $validated['minutes_template'] ?? null,
+            'minutes_template' => $minutesTemplatePath,
+            'minutes_content' => null,
             'attachments' => $attachments,
             'priority' => $validated['priority'],
             'confidentiality' => $validated['confidentiality'],
@@ -703,5 +715,142 @@ class MeetingController extends Controller
                 );
             }
         });
+    }
+
+    // -------------------------------------------------------------------------
+    // Modèle de compte rendu – accès OnlyOffice
+    // -------------------------------------------------------------------------
+
+    /**
+     * Sert le fichier template via URL signée (accessible par OnlyOffice sans session).
+     */
+    public function templateFile(Request $request, Meeting $meeting)
+    {
+        $expires  = (int) $request->query('expires');
+        $access   = (string) $request->query('access');
+        $expected = hash_hmac('sha256', 'tpl|' . $meeting->id . '|' . $expires, (string) config('app.key'));
+
+        if (!hash_equals($expected, $access) || now()->timestamp > $expires) {
+            abort(403, 'Token expiré ou invalide.');
+        }
+
+        $templatePath = (string) ($meeting->minutes_template ?? '');
+        if (!$templatePath || !str_starts_with($templatePath, '/storage/')) {
+            abort(404, 'Aucun modèle de compte rendu pour cette réunion.');
+        }
+
+        $relative = ltrim(str_replace('/storage/', '', $templatePath), '/');
+        if (!Storage::disk('public')->exists($relative)) {
+            abort(404, 'Fichier modèle introuvable sur le disque.');
+        }
+
+        return response()->file(Storage::disk('public')->path($relative), [
+            'Content-Type'        => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'Content-Disposition' => 'inline; filename="' . basename($relative) . '"',
+        ]);
+    }
+
+    /**
+     * Génère la configuration OnlyOffice pour ouvrir le modèle dans l'éditeur.
+     */
+    public function templateOoConfig(Request $request, Meeting $meeting)
+    {
+        $this->abortIfMeetingOutsideScope($meeting);
+
+        $templatePath = (string) ($meeting->minutes_template ?? '');
+        if (!$templatePath || !str_starts_with($templatePath, '/storage/')) {
+            return response()->json(['error' => 'Aucun modèle de compte rendu uploadé pour cette réunion.'], 404);
+        }
+
+        $relative = ltrim(str_replace('/storage/', '', $templatePath), '/');
+        if (!Storage::disk('public')->exists($relative)) {
+            return response()->json(['error' => 'Fichier modèle introuvable sur le disque.'], 404);
+        }
+
+        $onlyofficeUrl = AppSetting::where('key', 'onlyoffice_server_url')->value('value') ?: '';
+        $appPublicUrl  = AppSetting::where('key', 'app_public_url')->value('value') ?: '';
+
+        if (!$onlyofficeUrl) {
+            return response()->json(['error' => 'OnlyOffice non configuré. Contactez l\'administrateur.'], 400);
+        }
+
+        $expires    = now()->addHours(8)->timestamp;
+        $access     = hash_hmac('sha256', 'tpl|' . $meeting->id . '|' . $expires, (string) config('app.key'));
+        $signedPath = route('meetings.template.file', [
+            'meeting' => $meeting->id,
+            'expires' => $expires,
+            'access'  => $access,
+        ], false);
+
+        $docUrl = $appPublicUrl
+            ? rtrim($appPublicUrl, '/') . $signedPath
+            : url($signedPath);
+
+        $callbackAccess = hash_hmac('sha256', 'tplcb|' . $meeting->id, (string) config('app.key'));
+        $callbackBase   = $appPublicUrl ? rtrim($appPublicUrl, '/') : rtrim((string) config('app.url'), '/');
+        $callbackUrl    = $callbackBase . '/api/oo-callback/meeting-template/' . $meeting->id . '?access=' . $callbackAccess;
+
+        $fileExt = strtolower(pathinfo($relative, PATHINFO_EXTENSION) ?: 'docx');
+
+        $payload = [
+            'document' => [
+                'fileType'    => $fileExt,
+                'key'         => 'meeting-tpl-' . $meeting->id . '-' . $meeting->updated_at->timestamp,
+                'title'       => 'Modèle – ' . $meeting->title,
+                'url'         => $docUrl,
+                'permissions' => ['edit' => true, 'download' => true, 'print' => true],
+            ],
+            'documentType' => 'word',
+            'editorConfig' => [
+                'mode'        => 'edit',
+                'lang'        => 'fr',
+                'callbackUrl' => $callbackUrl,
+                'user'        => ['id' => 'u-' . Auth::id(), 'name' => Auth::user()->name ?? 'Utilisateur'],
+                'customization' => [
+                    'autosave'      => true,
+                    'compactHeader' => true,
+                ],
+            ],
+        ];
+
+        return response()->json([
+            'onlyofficeUrl' => rtrim($onlyofficeUrl, '/'),
+            'config'        => $payload,
+        ]);
+    }
+
+    /**
+     * Callback OnlyOffice pour sauvegarder le modèle après édition.
+     */
+    public function templateOoCallback(Request $request, Meeting $meeting)
+    {
+        $access   = (string) $request->query('access');
+        $expected = hash_hmac('sha256', 'tplcb|' . $meeting->id, (string) config('app.key'));
+
+        if (!hash_equals($expected, $access)) {
+            return response()->json(['error' => 1]);
+        }
+
+        $body   = $request->all();
+        $status = (int) ($body['status'] ?? 0);
+
+        // Status 2 = prêt à sauvegarder, 6 = forcer la sauvegarde
+        if (in_array($status, [2, 6], true)) {
+            $downloadUrl = $body['url'] ?? null;
+            if ($downloadUrl) {
+                $ctx     = stream_context_create(['ssl' => ['verify_peer' => false, 'verify_peer_name' => false]]);
+                $content = file_get_contents($downloadUrl, false, $ctx);
+                if ($content !== false) {
+                    $templatePath = (string) ($meeting->minutes_template ?? '');
+                    if ($templatePath && str_starts_with($templatePath, '/storage/')) {
+                        $relative = ltrim(str_replace('/storage/', '', $templatePath), '/');
+                        Storage::disk('public')->put($relative, $content);
+                        $meeting->touch();
+                    }
+                }
+            }
+        }
+
+        return response()->json(['error' => 0]);
     }
 }

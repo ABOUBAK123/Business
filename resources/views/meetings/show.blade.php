@@ -47,9 +47,27 @@
 
         <div class="border-t border-gray-100 pt-4 space-y-3">
             <h3 class="font-semibold text-gray-800">Compte rendu personnalisable</h3>
+
+            {{-- Modèle uploadé --}}
+            @if($meeting->minutes_template && str_starts_with($meeting->minutes_template, '/storage/'))
+            <div class="flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
+                <i class="fas fa-file-word text-2xl text-blue-500"></i>
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-semibold text-gray-800 truncate">{{ basename($meeting->minutes_template) }}</p>
+                    <p class="text-xs text-gray-500">Modèle de compte rendu</p>
+                </div>
+                <button type="button" onclick="openTemplateInOO()"
+                        class="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#2453d6] text-white text-xs font-semibold hover:bg-[#1f47bb] whitespace-nowrap">
+                    <i class="fas fa-edit mr-1"></i> Ouvrir dans OnlyOffice
+                </button>
+            </div>
+            @else
+            <p class="text-sm text-gray-400 italic">Aucun modèle de compte rendu chargé. <a href="{{ route('meetings.edit', $meeting) ?? '#' }}" class="text-blue-600 hover:underline">Modifier la réunion</a> pour en ajouter un.</p>
+            @endif
+
             <form method="POST" action="{{ route('meetings.minutes.update', $meeting) }}" class="space-y-2">
                 @csrf
-                <textarea name="minutes_content" rows="8" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Rédiger le compte rendu...">{{ old('minutes_content', $meeting->minutes_content ?? $meeting->minutes_template ?? '') }}</textarea>
+                <textarea name="minutes_content" rows="8" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Rédiger le compte rendu...">{{ old('minutes_content', $meeting->minutes_content ?? '') }}</textarea>
                 <input type="text" name="note" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Note de version (optionnel)">
                 <button class="px-3 py-2 rounded-lg bg-[#2453d6] text-white text-sm font-semibold hover:bg-[#1f47bb]">Enregistrer une version</button>
             </form>
@@ -202,5 +220,91 @@
         document.getElementById('sign-form').submit();
     };
 })();
+</script>
+
+{{-- ===== Modal OnlyOffice – Modèle de compte rendu ===== --}}
+<div id="oo-tpl-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 hidden" role="dialog" aria-modal="true">
+    <div class="bg-white rounded-2xl shadow-2xl flex flex-col w-full max-w-6xl mx-4" style="height:90vh">
+        <div class="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+            <div>
+                <p class="font-bold text-gray-900 text-sm">Modèle de compte rendu – <span class="text-[#2453d6]">{{ $meeting->title }}</span></p>
+                <p class="text-xs text-gray-400">Éditeur OnlyOffice – les modifications sont sauvegardées automatiquement</p>
+            </div>
+            <button onclick="closeOoTplModal()" class="text-gray-400 hover:text-gray-700 text-xl leading-none">&times;</button>
+        </div>
+        <div id="oo-tpl-loading" class="flex-1 flex items-center justify-center text-gray-500 text-sm gap-3">
+            <svg class="animate-spin h-6 w-6 text-[#2453d6]" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+            </svg>
+            Chargement de l'éditeur…
+        </div>
+        <iframe id="oo-tpl-frame" class="flex-1 hidden rounded-b-2xl" frameborder="0" allowfullscreen></iframe>
+        <div id="oo-tpl-error" class="hidden px-5 py-4 text-sm text-red-700 bg-red-50 rounded-b-2xl"></div>
+    </div>
+</div>
+
+<script>
+const OO_TPL_CONFIG_URL = '{{ route('meetings.template.oo.config', $meeting) }}';
+const OO_TPL_CSRF = '{{ csrf_token() }}';
+
+async function openTemplateInOO() {
+    const modal   = document.getElementById('oo-tpl-modal');
+    const loading = document.getElementById('oo-tpl-loading');
+    const frame   = document.getElementById('oo-tpl-frame');
+    const errBox  = document.getElementById('oo-tpl-error');
+
+    modal.classList.remove('hidden');
+    loading.classList.remove('hidden');
+    frame.classList.add('hidden');
+    frame.src = '';
+    errBox.classList.add('hidden');
+
+    try {
+        const resp = await fetch(OO_TPL_CONFIG_URL, {
+            method: 'POST',
+            headers: { 'X-CSRF-TOKEN': OO_TPL_CSRF, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        });
+        const data = await resp.json();
+
+        if (!resp.ok || data.error) {
+            throw new Error(data.error || 'Erreur lors du chargement de la configuration OnlyOffice.');
+        }
+
+        const ooBase = data.onlyofficeUrl.replace(/\/$/, '');
+        const html = `<!DOCTYPE html><html><head>
+            <meta charset="utf-8">
+            <style>html,body,#oo-editor{margin:0;padding:0;height:100%;width:100%;overflow:hidden}</style>
+            <script src="${ooBase}/web-apps/apps/api/documents/api.js"><\/script>
+        </head><body>
+            <div id="oo-editor"></div>
+            <script>
+            new DocsAPI.DocEditor("oo-editor", ${JSON.stringify(data.config)});
+            <\/script>
+        </body></html>`;
+
+        const blob = new Blob([html], { type: 'text/html' });
+        frame.src = URL.createObjectURL(blob);
+        frame.onload = () => {
+            loading.classList.add('hidden');
+            frame.classList.remove('hidden');
+        };
+    } catch (err) {
+        loading.classList.add('hidden');
+        errBox.textContent = err.message;
+        errBox.classList.remove('hidden');
+    }
+}
+
+function closeOoTplModal() {
+    const modal = document.getElementById('oo-tpl-modal');
+    const frame = document.getElementById('oo-tpl-frame');
+    modal.classList.add('hidden');
+    frame.src = '';
+}
+
+document.getElementById('oo-tpl-modal')?.addEventListener('click', function (e) {
+    if (e.target === this) closeOoTplModal();
+});
 </script>
 @endsection

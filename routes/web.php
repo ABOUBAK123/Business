@@ -99,6 +99,12 @@ Route::get('/e-administration_laravel/api/oo-file/template/{templateId}', [Admin
     ->name('oo.template.file.web.subdir');
 Route::get('/e-administration_laravel/public/api/oo-file/template/{templateId}', [AdminController::class, 'ooTemplateFile'])
     ->name('oo.template.file.web.subdir.public');
+
+// Modèle de compte rendu des réunions – accès OnlyOffice (sans session)
+Route::get('/meetings/{meeting}/template-file', [MeetingController::class, 'templateFile'])
+    ->name('meetings.template.file');
+Route::post('/api/oo-callback/meeting-template/{meeting}', [MeetingController::class, 'templateOoCallback'])
+    ->name('meetings.template.oo.callback');
 Route::get('/public/api/oo-file/template/{templateId}', [AdminController::class, 'ooTemplateFile'])
     ->name('oo.template.file.web.public');
 
@@ -223,6 +229,7 @@ Route::middleware('auth')->group(function () {
     Route::get('/meetings/{meeting}', [MeetingController::class, 'show'])->name('meetings.show');
     Route::post('/meetings/{meeting}/minutes', [MeetingController::class, 'updateMinutes'])->name('meetings.minutes.update');
     Route::post('/meetings/{meeting}/workflow', [MeetingController::class, 'workflow'])->name('meetings.workflow');
+    Route::post('/meetings/{meeting}/template-oo-config', [MeetingController::class, 'templateOoConfig'])->name('meetings.template.oo.config');
     Route::get('/meetings-reporting', [MeetingController::class, 'reporting'])->name('meetings.reporting');
     Route::get('/meetings-export/csv', [MeetingController::class, 'exportCsv'])->name('meetings.export.csv');
     Route::get('/meetings-export/pdf-summary', [MeetingController::class, 'exportSummaryPdf'])->name('meetings.export.pdf.summary');
