@@ -1105,11 +1105,17 @@ class SharedTemplateController extends Controller
 
             // Fallback final: remplace tout placeholder restant via une clé canonique
             // (tolère guillemets, parenthèses, apostrophes typographiques et petites fautes).
-            $newContent = $this->replaceRemainingPlaceholdersByCanonicalLookup(
-                $newContent,
-                $canonicalValueMap,
-                $name
-            );
+            try {
+                $newContent = $this->replaceRemainingPlaceholdersByCanonicalLookup(
+                    $newContent,
+                    $canonicalValueMap,
+                    $name
+                );
+            } catch (\Throwable $e) {
+                // Ne jamais bloquer la génération sur ce fallback de confort.
+                \Log::warning('replaceInOfficeFile canonical fallback skipped in ' . $name
+                    . ' error=' . $e->getMessage());
+            }
 
             if ($newContent !== $xmlContent) {
                 $toUpdate[$name] = $newContent;
@@ -1217,9 +1223,17 @@ class SharedTemplateController extends Controller
 
             // Tolérance fautes de frappe légères (ex: financemant/financement, intutile/intitule)
             if ($canon !== '') {
+                // Garde-fou perf et robustesse.
+                if (strlen($canon) > 180) {
+                    return $m[0];
+                }
+
                 $best = null;
                 $bestDist = 99;
                 foreach (array_keys($canonicalValueMap) as $candidateCanon) {
+                    if (strlen($candidateCanon) > 180) {
+                        continue;
+                    }
                     $dist = levenshtein($canon, $candidateCanon);
                     if ($dist < $bestDist) {
                         $bestDist = $dist;
@@ -1239,10 +1253,21 @@ class SharedTemplateController extends Controller
             return $m[0];
         };
 
-        $xml = preg_replace_callback('/\{\{\s*(.*?)\s*\}\}/u', $replaceCb, $xml) ?? $xml;
-        $xml = preg_replace_callback('/\[\s*([^\[\]]*?)\s*\]/u', $replaceCb, $xml) ?? $xml;
+        $xml2 = preg_replace_callback('/\{\{\s*(.*?)\s*\}\}/u', $replaceCb, $xml);
+        if ($xml2 === null) {
+            \Log::warning('replaceInOfficeFile canonical {{}} regex failed in ' . $xmlName
+                . ' preg_error=' . preg_last_error_msg());
+            $xml2 = $xml;
+        }
 
-        return $xml;
+        $xml3 = preg_replace_callback('/\[\s*([^\[\]]*?)\s*\]/u', $replaceCb, $xml2);
+        if ($xml3 === null) {
+            \Log::warning('replaceInOfficeFile canonical [] regex failed in ' . $xmlName
+                . ' preg_error=' . preg_last_error_msg());
+            $xml3 = $xml2;
+        }
+
+        return $xml3;
     }
 
     /**
