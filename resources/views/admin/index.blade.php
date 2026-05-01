@@ -405,6 +405,11 @@ $_oc = [
                     <p class="text-xs text-gray-500">Balise : <code class="bg-gray-100 px-1 rounded">[{{ $variable->key }}]</code></p>
                     <p class="text-xs text-gray-500">Type : {{ $variable->field_type }}</p>
                     <div class="mt-2 flex gap-2">
+                        <button type="button"
+                                onclick="openEditVariableModal('{{ $selectedTpl->id }}', '{{ $variable->id }}', '{{ addslashes($variable->label) }}', '{{ $variable->field_type }}', '{{ $selectedTplId }}')"
+                                class="px-2 py-1 rounded bg-blue-100 text-blue-700 text-xs hover:bg-blue-200 transition">
+                            <i class="fas fa-pen text-xs"></i> Modifier
+                        </button>
                         <form method="POST"
                               action="{{ route('admin.templates.variables.destroy', [$selectedTpl, $variable->id]) }}"
                               onsubmit="return confirm('Supprimer cette variable ?')" class="inline">
@@ -499,7 +504,45 @@ $_oc = [
     </div>
 </div>
 
-{{-- ═══ MODAL TEMPLATE ONLYOFFICE ═══ --}}
+{{-- ═══ MODAL MODIFIER VARIABLE ═══ --}}
+<div id="modal-edit-variable" class="adm-modal">
+    <div class="adm-modal-box max-w-md">
+        <button onclick="closeModal('modal-edit-variable')" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl"><i class="fas fa-times"></i></button>
+        <h3 class="text-lg font-bold text-gray-800 mb-4">Modifier la variable</h3>
+        <form id="form-edit-variable" method="POST" action="#">
+            @csrf
+            @method('PUT')
+            <input type="hidden" name="tab" value="templates">
+            <input type="hidden" id="edit-var-selected-template" name="selected_template" value="">
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Nom de la variable *</label>
+                    <input type="text" id="edit-var-label" name="label" required
+                           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-blue-300 outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">Type</label>
+                    <select id="edit-var-field-type" name="field_type"
+                            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-xs focus:ring-2 focus:ring-blue-300 outline-none">
+                        <option value="text">Texte</option>
+                        <option value="date">Date</option>
+                        <option value="number">Nombre</option>
+                        <option value="select">Liste</option>
+                        <option value="textarea">Zone de texte</option>
+                    </select>
+                </div>
+            </div>
+            <div class="mt-5 flex justify-end gap-2">
+                <button type="button" onclick="closeModal('modal-edit-variable')"
+                        class="px-4 py-2 bg-gray-100 text-gray-700 rounded-xl text-sm font-semibold hover:bg-gray-200 transition">Annuler</button>
+                <button type="submit"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition">Enregistrer</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+
 <div id="modal-tpl-oo" class="adm-modal">
     <div class="adm-modal-box" style="max-width:96vw;width:96vw;max-height:96vh;height:96vh;padding:0;display:flex;flex-direction:column;">
 
@@ -2174,6 +2217,17 @@ $_oc = [
         });
     }
     window.tplShareSearch = tplShareSearch;
+
+    // --- Modifier variable ---------------------------------------------------
+    function openEditVariableModal(templateId, variableId, label, fieldType, selectedTplId) {
+        var baseUrl = '{{ url("admin/templates") }}/' + templateId + '/variables/' + variableId;
+        document.getElementById('form-edit-variable').action = baseUrl;
+        document.getElementById('edit-var-label').value = label;
+        document.getElementById('edit-var-field-type').value = fieldType;
+        document.getElementById('edit-var-selected-template').value = selectedTplId;
+        openModal('modal-edit-variable');
+    }
+    window.openEditVariableModal = openEditVariableModal;
 })();
 </script>
 @endpush

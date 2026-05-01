@@ -298,6 +298,7 @@ Route::middleware('auth')->group(function () {
         Route::put('/templates/{template}',                              [AdminController::class, 'updateTemplate'])->name('templates.update');
         Route::delete('/templates/{template}',                           [AdminController::class, 'destroyTemplate'])->name('templates.destroy');
         Route::post('/templates/{template}/variables',                   [AdminController::class, 'storeTemplateVariable'])->name('templates.variables.store');
+        Route::put('/templates/{template}/variables/{variableId}',       [AdminController::class, 'updateTemplateVariable'])->name('templates.variables.update');
         Route::delete('/templates/{template}/variables/{variableId}',    [AdminController::class, 'destroyTemplateVariable'])->name('templates.variables.destroy');
         Route::post('/templates/{template}/share',                       [AdminController::class, 'updateTemplateShare'])->name('templates.share');
         Route::post('/templates/{template}/zones',                       [AdminController::class, 'saveTemplateZones'])->name('templates.zones.save');

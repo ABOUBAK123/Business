@@ -1916,6 +1916,20 @@ class AdminController extends Controller
         return back()->with('success', 'Variable supprimée.')->withInput(['tab' => 'templates', 'selected_template' => $template->id]);
     }
 
+    public function updateTemplateVariable(Request $request, DocumentTemplate $template, string $variableId)
+    {
+        $request->validate([
+            'label'      => 'required|string|max:255',
+            'field_type' => 'required|in:text,date,number,select,textarea',
+        ]);
+        $template->variables()->where('id', $variableId)->update([
+            'label'       => $request->input('label'),
+            'field_type'  => $request->input('field_type'),
+            'placeholder' => $request->input('placeholder', ''),
+        ]);
+        return back()->with('success', 'Variable modifiée.')->withInput(['tab' => 'templates', 'selected_template' => $template->id]);
+    }
+
     public function updateTemplateShare(Request $request, DocumentTemplate $template)
     {
         $userId  = $request->input('user_id');
