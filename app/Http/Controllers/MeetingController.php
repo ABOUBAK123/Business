@@ -740,32 +740,6 @@ class MeetingController extends Controller
                 'mime' => 'application/pdf',
             ]);
             $message->attachData($attendancePdf, 'liste_presence_' . Str::slug($meeting->title) . '.pdf', [
-
-        private function sendValidationRequestEmail(Meeting $meeting): void
-        {
-            $meeting->loadMissing(['validator', 'minutesWriter']);
-
-            $validatorEmail = trim((string) ($meeting->validator?->email ?? ''));
-            if ($validatorEmail === '' || !filter_var($validatorEmail, FILTER_VALIDATE_EMAIL)) {
-                return;
-            }
-
-            $showUrl = route('meetings.show', $meeting);
-            $writerName = (string) ($meeting->minutesWriter?->name ?: 'Rédacteur');
-            $subject = 'Validation requise - Compte rendu réunion: ' . $meeting->title;
-            $body = "Bonjour,\n\n"
-                . "Vous avez été désigné comme validateur pour le compte rendu de la réunion suivante:\n"
-                . "- Titre: {$meeting->title}\n"
-                . "- Date: " . (string) optional($meeting->starts_at)->format('d/m/Y H:i') . "\n"
-                . "- Rédacteur: {$writerName}\n\n"
-                . "Veuillez ouvrir la réunion pour corriger/valider le compte rendu:\n"
-                . "{$showUrl}\n\n"
-                . "Cordialement.";
-
-            Mail::raw($body, function ($message) use ($validatorEmail, $subject) {
-                $message->to($validatorEmail)->subject($subject);
-            });
-        }
                 'mime' => 'application/pdf',
             ]);
 
@@ -786,6 +760,32 @@ class MeetingController extends Controller
                     ['mime' => (string) ($attachment['mime'] ?? Storage::disk('public')->mimeType($relativePath) ?? 'application/octet-stream')]
                 );
             }
+        });
+    }
+
+    private function sendValidationRequestEmail(Meeting $meeting): void
+    {
+        $meeting->loadMissing(['validator', 'minutesWriter']);
+
+        $validatorEmail = trim((string) ($meeting->validator?->email ?? ''));
+        if ($validatorEmail === '' || !filter_var($validatorEmail, FILTER_VALIDATE_EMAIL)) {
+            return;
+        }
+
+        $showUrl = route('meetings.show', $meeting);
+        $writerName = (string) ($meeting->minutesWriter?->name ?: 'Redacteur');
+        $subject = 'Validation requise - Compte rendu reunion: ' . $meeting->title;
+        $body = "Bonjour,\n\n"
+            . "Vous avez ete designe comme validateur pour le compte rendu de la reunion suivante:\n"
+            . "- Titre: {$meeting->title}\n"
+            . "- Date: " . (string) optional($meeting->starts_at)->format('d/m/Y H:i') . "\n"
+            . "- Redacteur: {$writerName}\n\n"
+            . "Veuillez ouvrir la reunion pour corriger/valider le compte rendu:\n"
+            . "{$showUrl}\n\n"
+            . "Cordialement.";
+
+        Mail::raw($body, function ($message) use ($validatorEmail, $subject) {
+            $message->to($validatorEmail)->subject($subject);
         });
     }
 
