@@ -89,7 +89,7 @@ class CourrierController extends Controller
         if (!$user || !$user->profile_id) {
             return false;
         }
-        $profileName = strtoupper(trim($user->profile->name ?? ''));
+        $profileName = mb_strtoupper(trim($user->profile->name ?? ''), 'UTF-8');
         return in_array($profileName, self::ROLES_IMPUTATION, true);
     }
 
@@ -222,7 +222,7 @@ class CourrierController extends Controller
             })
             ->get()
             ->first(function (User $user) {
-                $profileName = strtoupper(trim((string) ($user->profile->name ?? '')));
+                $profileName = mb_strtoupper(trim((string) ($user->profile->name ?? '')), 'UTF-8');
                 return in_array($profileName, self::ROLES_IMPUTATION, true);
             });
 
@@ -263,7 +263,7 @@ class CourrierController extends Controller
             })
             ->get()
             ->first(function (User $user) {
-                $profileName = strtoupper(trim((string) ($user->profile->name ?? '')));
+                $profileName = mb_strtoupper(trim((string) ($user->profile->name ?? '')), 'UTF-8');
                 return in_array($profileName, self::ROLES_IMPUTATION, true);
             });
     }
@@ -295,7 +295,7 @@ class CourrierController extends Controller
             })
             ->get()
             ->first(function (User $user) {
-                $profileName = strtoupper(trim((string) ($user->profile->name ?? '')));
+                $profileName = mb_strtoupper(trim((string) ($user->profile->name ?? '')), 'UTF-8');
                 return in_array($profileName, self::ROLES_IMPUTATION, true);
             });
     }
