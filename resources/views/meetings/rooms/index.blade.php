@@ -51,17 +51,17 @@
                         <div class="flex items-center gap-2">
                             <button
                                 type="button"
-                                class="px-2.5 py-1.5 rounded-lg bg-blue-100 text-blue-700 text-xs font-semibold hover:bg-blue-200"
-                                onclick="openEditRoomModal({
-                                    id: '{{ $room->id }}',
-                                    name: @json($room->name),
-                                    capacity: '{{ $room->capacity }}',
-                                    location: @json($room->location),
-                                    description: @json($room->description),
-                                    status: '{{ $room->status }}',
-                                    maintenance_status: '{{ $room->maintenance_status }}',
-                                    equipments: @json($room->equipments ?? [])
-                                })"
+                                data-room='@json([
+                                    "id" => (string) $room->id,
+                                    "name" => (string) ($room->name ?? ""),
+                                    "capacity" => (string) ($room->capacity ?? ""),
+                                    "location" => (string) ($room->location ?? ""),
+                                    "description" => (string) ($room->description ?? ""),
+                                    "status" => (string) ($room->status ?? "active"),
+                                    "maintenance_status" => (string) ($room->maintenance_status ?? "operational"),
+                                    "equipments" => (array) ($room->equipments ?? []),
+                                ])'
+                                class="js-open-edit-room px-2.5 py-1.5 rounded-lg bg-blue-100 text-blue-700 text-xs font-semibold hover:bg-blue-200"
                             >
                                 Modifier
                             </button>
@@ -145,6 +145,17 @@ function closeEditRoomModal() {
     document.getElementById('edit-room-modal').classList.remove('flex');
     document.getElementById('edit-room-modal').classList.add('hidden');
 }
+
+document.querySelectorAll('.js-open-edit-room').forEach(function (button) {
+    button.addEventListener('click', function () {
+        try {
+            const room = JSON.parse(this.dataset.room || '{}');
+            openEditRoomModal(room);
+        } catch (e) {
+            alert('Impossible d\'ouvrir le formulaire de modification.');
+        }
+    });
+});
 
 document.getElementById('edit-room-form').addEventListener('submit', function () {
     const equipmentsInput = document.getElementById('edit-equipments');
