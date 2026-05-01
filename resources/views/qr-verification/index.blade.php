@@ -193,11 +193,11 @@ async function verifyDocumentNumber() {
                         ${doc.title ? `<p><span class="font-semibold text-gray-600">Titre:</span> ${esc(doc.title)}</p>` : ''}
                         ${doc.administration ? `<p><span class="font-semibold text-gray-600">Administration:</span> ${esc(doc.administration)}</p>` : ''}
                     </div>
-                    ${data.preview_url ? `
+                    ${(data.editor_url || data.preview_url) ? `
                     <div class="pt-1 flex items-center gap-2">
-                        <button type="button" onclick="openPreviewPopup('${data.preview_url.replace(/'/g, "\\'")}')"
+                        <button type="button" onclick="openOnlyOfficeEditor('${(data.editor_url || '').replace(/'/g, "\\'")}')"
                             class="inline-flex items-center gap-2 px-5 py-2.5 bg-[#2453d6] hover:bg-[#1f47bb] text-white font-semibold rounded-xl text-sm transition">
-                            <i class="fas fa-eye"></i> Visualiser dans un popup
+                            <i class="fas fa-pen-to-square"></i> Ouvrir dans l'éditeur OnlyOffice
                         </button>
                         <a href="${data.preview_url}" target="_blank"
                            class="inline-flex items-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-700 font-semibold rounded-xl text-sm hover:bg-gray-50 transition">
@@ -235,6 +235,13 @@ function openPreviewPopup(url) {
     const left = Math.max(0, Math.round((window.screen.width - width) / 2));
     const top = Math.max(0, Math.round((window.screen.height - height) / 2));
     window.open(url, 'docPreviewPopup', `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`);
+}
+
+function openOnlyOfficeEditor(url) {
+    if (!url) {
+        return;
+    }
+    window.location.href = url;
 }
 
 function formatDocumentNumberInput(value) {

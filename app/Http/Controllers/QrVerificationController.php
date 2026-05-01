@@ -140,6 +140,7 @@ class QrVerificationController extends Controller
                 'administration' => $document->issuingAdministration?->name,
             ],
             'preview_url' => route('documents.download', ['document' => $document->id, 'inline' => 1]),
+            'editor_url' => route('documents.index', ['open_oo' => $document->id]),
         ]);
     }
 }

@@ -1427,8 +1427,22 @@ function closeOoDocModal() {
     document.getElementById('ooDocPlaceholder').innerHTML = '';
 }
 
+function maybeOpenOnlyOfficeFromQuery() {
+    const params = new URLSearchParams(window.location.search);
+    const docId = (params.get('open_oo') || '').trim();
+    if (!docId) return;
+
+    openInOnlyOffice(docId);
+
+    params.delete('open_oo');
+    const query = params.toString();
+    const nextUrl = `${window.location.pathname}${query ? '?' + query : ''}${window.location.hash || ''}`;
+    window.history.replaceState({}, '', nextUrl);
+}
+
 // Init
 renderTable();
+maybeOpenOnlyOfficeFromQuery();
 </script>
 
 <!-- Modal OnlyOffice Editeur de document -->
