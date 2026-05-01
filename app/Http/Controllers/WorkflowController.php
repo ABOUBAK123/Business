@@ -199,6 +199,18 @@ class WorkflowController extends Controller
         });
     }
 
+    private function resolveAllowedSignerIdsForCurrentAdministration(): array
+    {
+        $currentAdminId = $this->resolveCurrentAdministrationId();
+
+        return $this->buildSignerUsersQueryForAdministration($currentAdminId)
+            ->pluck('users.id')
+            ->map(fn ($id) => (string) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
     // ── Pages ────────────────────────────────────────────────────────────────
 
     public function index()
@@ -250,6 +262,32 @@ class WorkflowController extends Controller
             'steps.*.type'=> 'required|in:review,sign,approve,reject,notify',
             'steps.*.assignee_id' => 'nullable|exists:users,id',
         ]);
+
+        // Sécurité serveur: empêcher toute attribution hors administration même
+        // en cas de requête forcée depuis le navigateur.
+        $allowedSignerIds = $this->resolveAllowedSignerIdsForCurrentAdministration();
+        $requestedAssigneeIds = collect((array) $request->input('steps', []))
+            ->map(fn ($step) => (string) ($step['assignee_id'] ?? ''))
+            ->filter(fn ($id) => $id !== '')
+            ->unique()
+            ->values();
+
+        $forbiddenAssigneeIds = $requestedAssigneeIds
+            ->reject(fn ($id) => in_array($id, $allowedSignerIds, true))
+            ->values();
+
+        if ($forbiddenAssigneeIds->isNotEmpty()) {
+            $message = 'Attribution non autorisée: un ou plusieurs utilisateurs ne sont pas des signataires actifs de votre administration.';
+
+            if ($request->wantsJson()) {
+                return response()->json([
+                    'message' => $message,
+                    'forbidden_assignee_ids' => $forbiddenAssigneeIds,
+                ], 422);
+            }
+
+            return back()->withInput()->with('error', $message);
+        }
 
         $workflow = Workflow::create([
             'id'          => Str::uuid(),
