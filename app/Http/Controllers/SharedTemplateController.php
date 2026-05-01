@@ -985,17 +985,18 @@ class SharedTemplateController extends Controller
             function (array $match) {
                 $para = $match[0];
 
-                // Ne jamais réécrire un paragraphe "complexe" : sinon on peut
-                // perdre des objets Word (zones, dessins, signets, champs, etc.).
+                // Ne jamais toucher les paragraphes complexes: ils peuvent contenir
+                // des objets/ancres/champs que la reconstruction d'un unique <w:r>
+                // ferait disparaître (zone, QR, numérotation, etc.).
                 if (preg_match(
-                    '/<(w:(drawing|pict|object|tbl|hyperlink|bookmarkStart|bookmarkEnd|fldSimple|instrText|sdt|smartTag|proofErr)|mc:AlternateContent)\b/i',
+                    '/<(w:(drawing|pict|object|tbl|hyperlink|bookmarkStart|bookmarkEnd|fldSimple|instrText|fldChar|sdt|smartTag|proofErr|tab|br|cr)|mc:AlternateContent)\b/i',
                     $para
                 )) {
                     return $para;
                 }
 
-                // Défense supplémentaire : ne réécrire que les paragraphes composés
-                // uniquement de pPr + runs texte. S'il y a autre chose, on laisse tel quel.
+                // Défense supplémentaire: on ne réécrit que les paragraphes qui ne
+                // contiennent que pPr + runs texte (aucune autre structure).
                 $skeleton = $para;
                 $skeleton = preg_replace('/^<w:p[^>]*>|<\/w:p>$/s', '', $skeleton);
                 $skeleton = preg_replace('/<w:pPr>.*?<\/w:pPr>/s', '', $skeleton);
@@ -1008,8 +1009,19 @@ class SharedTemplateController extends Controller
                 preg_match_all('/<w:t[^>]*>(.*?)<\/w:t>/s', $para, $texts);
                 $fullText = implode('', $texts[1]);
 
+                // Rien à faire s'il n'y a qu'un seul noeud texte
+                if (count($texts[0]) < 2) {
+                    return $para;
+                }
+
                 // Si pas de [variable] ni {{variable}} dans ce paragraphe → ne rien toucher
                 if (!preg_match('/\[[^\[\]]+\]/', $fullText) && strpos($fullText, '{{') === false) {
+                    return $para;
+                }
+
+                // Réécrire uniquement quand un placeholder est effectivement fragmenté
+                // sur plusieurs runs (<w:t>...</w:t><w:t>...).
+                if (!preg_match('/(\[|\{\{)[\s\S]*?<\/w:t>[\s\S]*?<w:t[^>]*>[\s\S]*?(\]|\}\})/s', $para)) {
                     return $para;
                 }
 
@@ -1029,12 +1041,19 @@ class SharedTemplateController extends Controller
                 preg_match('/^<w:p[^>]*>/', $para, $openTag);
                 $open = $openTag[0] ?? '<w:p>';
 
+                // Conserver les attributs du premier <w:t> (ex: xml:space="preserve").
+                $firstTextAttrs = ' xml:space="preserve"';
+                if (preg_match('/<w:t([^>]*)>/', $para, $tAttrMatch)) {
+                    $attrs = trim((string) ($tAttrMatch[1] ?? ''));
+                    $firstTextAttrs = $attrs !== '' ? ' ' . $attrs : '';
+                }
+
                 // Reconstruire le paragraphe : pPr + un seul run avec tout le texte brut
                 return $open
                     . $pPr
                     . '<w:r>'
                     . $firstRpr
-                    . '<w:t xml:space="preserve">' . $fullText . '</w:t>'
+                    . '<w:t' . $firstTextAttrs . '>' . $fullText . '</w:t>'
                     . '</w:r>'
                     . '</w:p>';
             },
