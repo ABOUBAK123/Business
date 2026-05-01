@@ -226,6 +226,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/meetings', [MeetingController::class, 'index'])->name('meetings.index');
     Route::get('/meetings/create', [MeetingController::class, 'create'])->name('meetings.create');
     Route::post('/meetings', [MeetingController::class, 'store'])->name('meetings.store');
+    // Backward-compat route name used by older compiled meeting views.
+    Route::get('/meetings/{meeting}/edit', [MeetingController::class, 'show'])->name('meetings.edit');
     Route::get('/meetings/{meeting}', [MeetingController::class, 'show'])->name('meetings.show');
     Route::post('/meetings/{meeting}/minutes', [MeetingController::class, 'updateMinutes'])->name('meetings.minutes.update');
     Route::post('/meetings/{meeting}/workflow', [MeetingController::class, 'workflow'])->name('meetings.workflow');
