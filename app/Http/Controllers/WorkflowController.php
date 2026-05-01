@@ -167,7 +167,10 @@ class WorkflowController extends Controller
             return response()->json($workflows->map(fn($wf) => $this->formatWorkflow($wf))->values());
         }
 
-        $users = User::where('status', 'active')->get(['id', 'name', 'full_name', 'email']);
+        $users = User::where('status', 'active')
+            ->where('role', 'signer')
+            ->orderBy('name')
+            ->get(['id', 'name', 'full_name', 'email']);
 
         $documents = Document::where('owner_id', Auth::id())
             ->whereNull('deleted_at')
