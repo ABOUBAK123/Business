@@ -118,6 +118,27 @@ class CourrierController extends Controller
         return $code !== '' ? $code : null;
     }
 
+    /**
+     * Scope metier strict pour le courrier: administration + sous-entite.
+     * Retourne null si une des deux informations est absente.
+     *
+     * @return array{administration_id:string, sub_entity_code:string}|null
+     */
+    private function currentUserCourrierScope(): ?array
+    {
+        $adminId = $this->administrationId();
+        $subEntityCode = $this->currentUserSubEntityCode();
+
+        if (!$adminId || !$subEntityCode) {
+            return null;
+        }
+
+        return [
+            'administration_id' => $adminId,
+            'sub_entity_code' => $subEntityCode,
+        ];
+    }
+
     private function appendWorkflowParticipant(Courrier $courrier, ?string $userId): array
     {
         return $this->appendWorkflowParticipantIds(
@@ -605,6 +626,20 @@ class CourrierController extends Controller
         $this->guardPermission('courrier.imputation');
         $viewer = $this->viewerConfig();
         $imputationEntities = $this->imputationChildEntities();
+        $scope = $this->currentUserCourrierScope();
+
+        if (!$scope) {
+            return view('courrier.index', [
+                'subtab'         => 'imputation',
+                'subtabs'        => $this->visibleSubtabs(),
+                'accesDenied'    => true,
+                'courriers'      => collect(),
+                'imputFiltre'    => 'tous',
+                'imputSearch'    => '',
+                'ooViewer'       => $viewer['viewer'],
+                'ooUrl'          => $viewer['oo_url'],
+            ]);
+        }
 
         // Seuls les directeurs peuvent accéder à l'imputation
         if (!$this->utilisateurEstDirecteur()) {
@@ -620,8 +655,8 @@ class CourrierController extends Controller
             ]);
         }
 
-        $adminId        = $this->administrationId();
-        $subEntityCode  = $this->currentUserSubEntityCode(); // entité du directeur connecté
+        $adminId        = $scope['administration_id'];
+        $subEntityCode  = $scope['sub_entity_code']; // entité du directeur connecté
         $imputFiltre    = $request->get('imp_filtre', 'tous');
         $imputSearch    = trim($request->get('imp_q', ''));
 
@@ -629,9 +664,9 @@ class CourrierController extends Controller
         $query = Courrier::with(['enregistrePar'])
             ->where('type', 'arrive')
             ->where('statut', 'en_attente')
-            ->when($adminId, fn($q) => $q->where('administration_id', $adminId))
-                        // Seuls les courriers de la meme sous-entite que le directeur connecte
-                        ->when($subEntityCode, fn($q) => $q->whereRaw('UPPER(sub_entity_code) = ?', [$subEntityCode]))
+            ->where('administration_id', $adminId)
+            // Seuls les courriers de la meme sous-entite que le directeur connecte
+            ->whereRaw('UPPER(sub_entity_code) = ?', [$subEntityCode])
             ->when($imputFiltre === 'urgent', fn($q) => $q->whereIn('urgence', ['urgent', 'tres_urgent']))
             ->when($imputSearch !== '', fn($q) => $q->where(function ($q) use ($imputSearch) {
                 $q->where('objet', 'like', '%' . $imputSearch . '%')
@@ -1197,6 +1232,13 @@ class CourrierController extends Controller
     {
         $this->guardPermission('courrier.enregistrement');
         $type = $request->input('type_courrier', 'arrive');
+        $scope = $this->currentUserCourrierScope();
+
+        if (!$scope) {
+            return back()->withErrors([
+                'scope' => 'Votre compte doit etre rattache a une administration et une entite sous tutelle pour enregistrer un courrier.',
+            ])->withInput();
+        }
 
         $validated = $request->validate([
             'type_courrier'  => 'required|in:arrive,depart',
@@ -1212,7 +1254,8 @@ class CourrierController extends Controller
             'accuse_reception'=> 'nullable|file|max:10240',
         ]);
 
-        $adminId = $this->administrationId();
+        $adminId = $scope['administration_id'];
+        $subEntityCode = $scope['sub_entity_code'];
         $numero  = $this->prochainNumero($type);
 
         // Gestion fichiers joints
@@ -1242,7 +1285,7 @@ class CourrierController extends Controller
             'statut'           => 'en_attente',
             'enregistre_par'   => Auth::id(),
             'administration_id'=> $adminId,
-            'sub_entity_code'  => $this->subEntityCode(),
+            'sub_entity_code'  => $subEntityCode,
             'pieces_jointes'   => $pjPaths ?: null,
             'accuse_reception' => $accusePath,
         ]);
