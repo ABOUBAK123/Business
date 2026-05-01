@@ -9,6 +9,9 @@
     $isWriter = (string) ($meeting->minutes_writer_id ?? '') === $currentUserId;
     $isValidator = (string) ($meeting->validator_id ?? '') === $currentUserId;
 @endphp
+@php
+    $isOrganizer = isset($isOrganizer) ? $isOrganizer : ((string) ($meeting->organizer_id ?? '') === (string) auth()->id());
+@endphp
 @include('meetings._nav')
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
     <div class="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
@@ -53,35 +56,120 @@
             </ul>
         </div>
 
-        <div class="border-t border-gray-100 pt-4 space-y-3">
-            <h3 class="font-semibold text-gray-800">Compte rendu personnalisable</h3>
+        <div class="border-t border-gray-100 pt-4 space-y-4">
+            <h3 class="font-semibold text-gray-800 flex items-center gap-2">
+                <i class="fas fa-file-word text-blue-500"></i>
+                Modèle de compte rendu
+            </h3>
 
-            {{-- Modèle uploadé --}}
             @if($meeting->minutes_template && str_starts_with($meeting->minutes_template, '/storage/'))
+
+            {{-- Fichier modèle --}}
             <div class="flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
                 <i class="fas fa-file-word text-2xl text-blue-500"></i>
                 <div class="flex-1 min-w-0">
                     <p class="text-sm font-semibold text-gray-800 truncate">{{ basename($meeting->minutes_template) }}</p>
-                    <p class="text-xs text-gray-500">Modèle de compte rendu</p>
+                    <p class="text-xs text-gray-500">Modèle Word uploadé</p>
                 </div>
-                @if($isWriter || $isValidator)
+                <div class="flex gap-2 shrink-0">
+                    @if($isWriter || $isValidator || $isOrganizer)
+                    <button type="button" id="btn-analyze-tpl" onclick="analyzeTemplate()"
+                            class="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 whitespace-nowrap">
+                        <i class="fas fa-robot mr-1"></i> Analyser le modèle
+                    </button>
+                    @endif
+                    @if($isWriter || $isValidator)
                     <button type="button" onclick="openTemplateInOO()"
                             class="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#2453d6] text-white text-xs font-semibold hover:bg-[#1f47bb] whitespace-nowrap">
-                        <i class="fas fa-edit mr-1"></i> Ouvrir dans OnlyOffice
+                        <i class="fas fa-edit mr-1"></i> OnlyOffice
                     </button>
-                @endif
+                    @endif
+                </div>
             </div>
+
+            {{-- Panneau Agent IA --}}
+            <div id="tpl-analysis-panel"
+                 class="{{ ($meeting->template_variables && count($meeting->template_variables)) ? '' : 'hidden' }} rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-4">
+
+                <div class="flex items-center justify-between flex-wrap gap-2">
+                    <span class="flex items-center gap-2 text-sm font-semibold text-emerald-800">
+                        <i class="fas fa-robot text-emerald-600"></i> Agent IA — Analyse du modèle
+                    </span>
+                    <span id="tpl-seal-badge"
+                          class="text-xs font-semibold px-2 py-0.5 rounded-full {{ $meeting->template_sealed_path ? 'bg-blue-100 text-blue-700' : 'hidden' }}">
+                        <i class="fas fa-lock mr-1"></i> Zones de signature scellées
+                    </span>
+                </div>
+
+                {{-- Badges des variables --}}
+                <div>
+                    <p class="text-xs font-semibold text-gray-600 mb-2 uppercase tracking-wide">
+                        <i class="fas fa-code text-gray-400 mr-1"></i>
+                        Variables détectées (<span id="tpl-var-count">{{ $meeting->template_variables ? count($meeting->template_variables) : 0 }}</span>)
+                    </p>
+                    <div id="tpl-var-tags" class="flex flex-wrap gap-2">
+                        @if($meeting->template_variables)
+                            @foreach($meeting->template_variables as $var)
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-blue-300 text-blue-700 text-xs font-mono">
+                                <i class="fas fa-at text-blue-400 text-[10px]"></i>{{ $var }}
+                            </span>
+                            @endforeach
+                        @endif
+                    </div>
+                </div>
+
+                {{-- Formulaire de remplissage --}}
+                <div>
+                    <p class="text-xs font-semibold text-gray-600 mb-3 uppercase tracking-wide">
+                        <i class="fas fa-pen text-gray-400 mr-1"></i>
+                        Renseigner les variables
+                    </p>
+                    <div id="tpl-var-inputs" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        @if($meeting->template_variables)
+                            @foreach($meeting->template_variables as $var)
+                            <div class="flex flex-col gap-1">
+                                <label class="text-xs font-semibold text-gray-700 font-mono">{{ '{{ ' . $var . ' }}' }}</label>
+                                <input type="text" data-varname="{{ $var }}"
+                                       class="tpl-var-input border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:border-blue-400 focus:ring-1 focus:ring-blue-200"
+                                       placeholder="{{ $var }}">
+                            </div>
+                            @endforeach
+                        @endif
+                    </div>
+                </div>
+
+                {{-- Bouton générer --}}
+                <div class="flex items-center gap-3 pt-1">
+                    <button type="button" onclick="generateDocument()"
+                            class="flex items-center gap-2 px-4 py-2 rounded-lg bg-[#2453d6] text-white text-sm font-semibold hover:bg-[#1f47bb] shadow">
+                        <i class="fas fa-file-download"></i> Générer le document final
+                    </button>
+                    <span id="tpl-generate-status" class="text-xs text-gray-500 hidden"></span>
+                </div>
+            </div>
+
+            {{-- Message avant première analyse --}}
+            <div id="tpl-not-analyzed"
+                 class="{{ ($meeting->template_variables && count($meeting->template_variables)) ? 'hidden' : '' }} text-xs text-gray-500 italic flex items-center gap-2 py-1">
+                <i class="fas fa-info-circle text-blue-400"></i>
+                Cliquez sur "Analyser le modèle" pour détecter les variables <code class="bg-gray-100 px-1 rounded">{{ '{{ variable }}' }}</code>
+                et sceller les zones de signature <code class="bg-gray-100 px-1 rounded">@@@</code>.
+            </div>
+
             @else
             <p class="text-sm text-gray-400 italic">Aucun modèle de compte rendu chargé pour cette réunion.</p>
             @endif
 
-            <form method="POST" action="{{ route('meetings.minutes.update', $meeting) }}" class="space-y-2">
+            {{-- Contenu libre --}}
+            <form method="POST" action="{{ route('meetings.minutes.update', $meeting) }}" class="space-y-2 border-t border-gray-100 pt-3">
                 @csrf
-                <textarea name="minutes_content" rows="8" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Rédiger le compte rendu...">{{ old('minutes_content', $meeting->minutes_content ?? '') }}</textarea>
+                <label class="block text-xs font-semibold text-gray-600 mb-1">Contenu libre du compte rendu</label>
+                <textarea name="minutes_content" rows="6" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Rédiger le compte rendu...">{{ old('minutes_content', $meeting->minutes_content ?? '') }}</textarea>
                 <input type="text" name="note" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Note de version (optionnel)">
                 <button class="px-3 py-2 rounded-lg bg-[#2453d6] text-white text-sm font-semibold hover:bg-[#1f47bb]">Enregistrer une version</button>
             </form>
         </div>
+
 
         <div class="border-t border-gray-100 pt-4 space-y-3">
             <h3 class="font-semibold text-gray-800">Validation et signature</h3>
@@ -105,7 +193,7 @@
                         @csrf
                         <input type="hidden" name="action" value="sign_writer">
                         <input type="hidden" name="signature" id="writer-signature-input">
-                        <button type="button" onclick="submitWriterSignature()" class="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold">Signature électronique du rédacteur</button>
+                        <button type="button" onclick="submitWriterSignature()" class="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold">Signature ├®lectronique du r├®dacteur</button>
                     </form>
                 @endif
 
@@ -115,15 +203,15 @@
             </div>
 
             <div class="rounded-lg border border-gray-200 p-3">
-                <p class="text-xs text-gray-500 mb-2">Zone de signature du rédacteur</p>
+                <p class="text-xs text-gray-500 mb-2">Zone de signature du r├®dacteur</p>
                 <canvas id="writer-signature-pad" width="520" height="120" class="w-full border border-gray-300 rounded bg-white"></canvas>
                 <button type="button" onclick="clearWriterSignature()" class="mt-2 text-xs text-gray-600 hover:underline">Effacer la signature</button>
-                <p class="text-xs text-gray-500 mt-1">Signé le: {{ $meeting->writer_signed_at?->format('d/m/Y H:i') ?: '—' }}</p>
+                <p class="text-xs text-gray-500 mt-1">Sign├® le: {{ $meeting->writer_signed_at?->format('d/m/Y H:i') ?: 'ÔÇö' }}</p>
             </div>
 
             @if($meeting->review_requested)
                 <div class="rounded-lg border border-amber-200 bg-amber-50 text-amber-800 text-sm px-3 py-2">
-                    Relecture demandée: {{ $meeting->review_comment ?: 'Aucun commentaire' }}
+                    Relecture demand├®e: {{ $meeting->review_comment ?: 'Aucun commentaire' }}
                 </div>
             @endif
         </div>
@@ -135,26 +223,26 @@
                     <li class="border border-gray-200 rounded-lg px-3 py-2">
                         <div class="font-semibold text-gray-700">Version {{ $version->version_no }} - {{ $version->workflow_status ?: 'draft' }}</div>
                         <div class="text-xs text-gray-500">{{ $version->created_at?->format('d/m/Y H:i') }} par {{ $version->creator?->name ?: 'Utilisateur' }}</div>
-                        <div class="text-xs text-gray-600 mt-1">{{ $version->note ?: 'Mise à jour' }}</div>
+                        <div class="text-xs text-gray-600 mt-1">{{ $version->note ?: 'Mise ├á jour' }}</div>
                     </li>
                 @empty
-                    <li class="text-gray-400">Aucune version enregistrée.</li>
+                    <li class="text-gray-400">Aucune version enregistr├®e.</li>
                 @endforelse
             </ul>
         </div>
     </div>
 
     <div class="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-        <h3 class="font-semibold text-gray-800 mb-3">Émargement QR</h3>
-        <div class="text-xs text-gray-500 mb-3">Lien public pour scanner et signer la présence.</div>
+        <h3 class="font-semibold text-gray-800 mb-3">├ëmargement QR</h3>
+        <div class="text-xs text-gray-500 mb-3">Lien public pour scanner et signer la pr├®sence.</div>
 
         <div id="meeting-qr-print" class="mb-3 border border-gray-200 rounded-xl p-4 bg-gray-50 text-center">
-            <div class="text-xs text-gray-500">Scanner pour accéder au formulaire d'émargement</div>
+            <div class="text-xs text-gray-500">Scanner pour acc├®der au formulaire d'├®margement</div>
             @if(!empty($qrImageDataUri))
-                <img src="{{ $qrImageDataUri }}" alt="QR émargement" class="mx-auto mt-2 h-48 w-48 object-contain">
+                <img src="{{ $qrImageDataUri }}" alt="QR ├®margement" class="mx-auto mt-2 h-48 w-48 object-contain">
             @else
                 <div class="mt-2 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1">
-                    Aperçu QR indisponible. Utilisez le lien ci-dessous.
+                    Aper├ºu QR indisponible. Utilisez le lien ci-dessous.
                 </div>
             @endif
             <div class="mt-2 text-[11px] text-gray-600">{{ $meeting->title }}</div>
@@ -167,8 +255,8 @@
         </div>
 
         <div class="mt-4 pt-4 border-t border-gray-100">
-            <a href="{{ route('meetings.dashboard', $meeting) }}" class="text-sm text-[#2453d6] font-semibold hover:underline">Tableau de présence</a>
-            <div class="text-xs text-gray-500 mt-1">Présents: {{ $meeting->attendances->count() }}</div>
+            <a href="{{ route('meetings.dashboard', $meeting) }}" class="text-sm text-[#2453d6] font-semibold hover:underline">Tableau de pr├®sence</a>
+            <div class="text-xs text-gray-500 mt-1">Pr├®sents: {{ $meeting->attendances->count() }}</div>
         </div>
     </div>
 </div>
@@ -243,13 +331,13 @@
 })();
 </script>
 
-{{-- ===== Modal OnlyOffice – Modèle de compte rendu ===== --}}
+{{-- ===== Modal OnlyOffice ÔÇô Mod├¿le de compte rendu ===== --}}
 <div id="oo-tpl-modal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 hidden" role="dialog" aria-modal="true">
     <div class="bg-white rounded-2xl shadow-2xl flex flex-col w-full max-w-6xl mx-4" style="height:90vh">
         <div class="flex items-center justify-between px-5 py-3 border-b border-gray-100">
             <div>
-                <p class="font-bold text-gray-900 text-sm">Modèle de compte rendu – <span class="text-[#2453d6]">{{ $meeting->title }}</span></p>
-                <p class="text-xs text-gray-400">Éditeur OnlyOffice – les modifications sont sauvegardées automatiquement</p>
+                <p class="font-bold text-gray-900 text-sm">Mod├¿le de compte rendu ÔÇô <span class="text-[#2453d6]">{{ $meeting->title }}</span></p>
+                <p class="text-xs text-gray-400">├ëditeur OnlyOffice ÔÇô les modifications sont sauvegard├®es automatiquement</p>
             </div>
             <button onclick="closeOoTplModal()" class="text-gray-400 hover:text-gray-700 text-xl leading-none">&times;</button>
         </div>
@@ -258,7 +346,7 @@
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
             </svg>
-            Chargement de l'éditeur…
+            Chargement de l'├®diteurÔÇª
         </div>
         <iframe id="oo-tpl-frame" class="flex-1 hidden rounded-b-2xl" frameborder="0" allowfullscreen></iframe>
         <div id="oo-tpl-error" class="hidden px-5 py-4 text-sm text-red-700 bg-red-50 rounded-b-2xl"></div>
@@ -278,7 +366,7 @@ const OO_TPL_CSRF = '{{ csrf_token() }}';
 
 async function openTemplateInOO() {
     if (!OO_TPL_CONFIG_URL) {
-        alert('La route OnlyOffice n\'est pas disponible. Vérifiez le cache des routes côté serveur (php artisan route:cache).');
+        alert('La route OnlyOffice n\'est pas disponible. V├®rifiez le cache des routes c├┤t├® serveur (php artisan route:cache).');
         return;
     }
     const modal   = document.getElementById('oo-tpl-modal');
@@ -338,5 +426,104 @@ function closeOoTplModal() {
 document.getElementById('oo-tpl-modal')?.addEventListener('click', function (e) {
     if (e.target === this) closeOoTplModal();
 });
+
+    // ─── Agent IA : Analyser le modèle ──────────────────────────────────────────
+    @php
+        try { $tplAnalyzeUrl  = route('meetings.template.analyze',  $meeting); } catch (\Exception $e) { $tplAnalyzeUrl  = null; }
+        try { $tplGenerateUrl = route('meetings.template.generate', $meeting); } catch (\Exception $e) { $tplGenerateUrl = null; }
+    @endphp
+    const TPL_ANALYZE_URL  = @json($tplAnalyzeUrl);
+    const TPL_GENERATE_URL = @json($tplGenerateUrl);
+
+    async function analyzeTemplate() {
+        if (!TPL_ANALYZE_URL) { alert('Route analyse non disponible.'); return; }
+        const btn = document.getElementById('btn-analyze-tpl');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Analyse en cours…'; }
+
+        try {
+            const resp = await fetch(TPL_ANALYZE_URL, {
+                method: 'POST',
+                headers: { 'X-CSRF-TOKEN': OO_TPL_CSRF, 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            });
+            const data = await resp.json();
+            if (!resp.ok || data.error) throw new Error(data.error || 'Erreur analyse.');
+
+            // Afficher le panneau
+            document.getElementById('tpl-analysis-panel')?.classList.remove('hidden');
+            document.getElementById('tpl-not-analyzed')?.classList.add('hidden');
+            document.getElementById('tpl-var-count').textContent = data.variables.length;
+
+            // Générer les badges
+            const tagsEl = document.getElementById('tpl-var-tags');
+            tagsEl.innerHTML = data.variables.map(v =>
+                `<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white border border-blue-300 text-blue-700 text-xs font-mono"><i class="fas fa-at text-blue-400 text-[10px]"></i>${v}</span>`
+            ).join('');
+
+            // Générer les champs de saisie
+            const inputsEl = document.getElementById('tpl-var-inputs');
+            inputsEl.innerHTML = data.variables.map(v => `
+                <div class="flex flex-col gap-1">
+                    <label class="text-xs font-semibold text-gray-700 font-mono">{{ '{{ ' }}" + v + " {{ ' }}' }}</label>
+                    <input type="text" data-varname="${v}"
+                           class="tpl-var-input border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:border-blue-400"
+                           placeholder="${v}">
+                </div>`).join('');
+
+            // Sceau
+            const badge = document.getElementById('tpl-seal-badge');
+            if (badge && data.signatureZones > 0) {
+                badge.classList.remove('hidden');
+                badge.className = badge.className.replace('hidden', '') + ' bg-blue-100 text-blue-700';
+                badge.innerHTML = `<i class="fas fa-lock mr-1"></i> ${data.signatureZones} zone(s) de signature scellée(s)`;
+            }
+
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-check mr-1"></i> Analysé'; btn.classList.replace('bg-emerald-600','bg-gray-400'); }
+        } catch (err) {
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="fas fa-robot mr-1"></i> Analyser le modèle'; }
+            alert('Erreur : ' + err.message);
+        }
+    }
+
+    async function generateDocument() {
+        if (!TPL_GENERATE_URL) { alert('Route génération non disponible.'); return; }
+
+        // Collecter les valeurs des champs
+        const variables = {};
+        document.querySelectorAll('.tpl-var-input').forEach(input => {
+            const name = input.dataset.varname;
+            if (name) variables[name] = input.value;
+        });
+
+        const statusEl = document.getElementById('tpl-generate-status');
+        if (statusEl) { statusEl.textContent = 'Génération en cours…'; statusEl.classList.remove('hidden'); }
+
+        try {
+            const resp = await fetch(TPL_GENERATE_URL, {
+                method: 'POST',
+                headers: { 'X-CSRF-TOKEN': OO_TPL_CSRF, 'Content-Type': 'application/json', 'Accept': 'application/octet-stream, application/json' },
+                body: JSON.stringify({ variables }),
+            });
+
+            if (!resp.ok) {
+                const err = await resp.json().catch(() => ({ error: 'Erreur serveur.' }));
+                throw new Error(err.error || 'Erreur lors de la génération.');
+            }
+
+            // Déclencher le téléchargement
+            const blob = await resp.blob();
+            const cd   = resp.headers.get('Content-Disposition') || '';
+            const match = cd.match(/filename="?([^"]+)"?/);
+            const fileName = match ? match[1] : 'compte_rendu.docx';
+            const url = URL.createObjectURL(blob);
+            const a   = document.createElement('a');
+            a.href = url; a.download = fileName; a.click();
+            URL.revokeObjectURL(url);
+
+            if (statusEl) { statusEl.textContent = 'Document téléchargé !'; }
+        } catch (err) {
+            if (statusEl) { statusEl.textContent = ''; statusEl.classList.add('hidden'); }
+            alert('Erreur : ' + err.message);
+        }
+    }
 </script>
 @endsection

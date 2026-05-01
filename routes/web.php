@@ -230,6 +230,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/meetings/{meeting}/minutes', [MeetingController::class, 'updateMinutes'])->name('meetings.minutes.update');
     Route::post('/meetings/{meeting}/workflow', [MeetingController::class, 'workflow'])->name('meetings.workflow');
     Route::post('/meetings/{meeting}/template-oo-config', [MeetingController::class, 'templateOoConfig'])->name('meetings.template.oo.config');
+        Route::post('/meetings/{meeting}/template-analyze', [MeetingController::class, 'analyzeTemplate'])->name('meetings.template.analyze');
+        Route::post('/meetings/{meeting}/template-generate', [MeetingController::class, 'generateFromTemplate'])->name('meetings.template.generate');
     Route::get('/meetings-reporting', [MeetingController::class, 'reporting'])->name('meetings.reporting');
     Route::get('/meetings-export/csv', [MeetingController::class, 'exportCsv'])->name('meetings.export.csv');
     Route::get('/meetings-export/pdf-summary', [MeetingController::class, 'exportSummaryPdf'])->name('meetings.export.pdf.summary');

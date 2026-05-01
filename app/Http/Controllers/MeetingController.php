@@ -259,7 +259,12 @@ class MeetingController extends Controller
             $qrImageDataUri = null;
         }
 
-        return view('meetings.show', compact('meeting', 'qrUrl', 'qrImageDataUri'));
+        $currentUserId = (string) Auth::id();
+        $isWriter    = (string) ($meeting->minutes_writer_id ?? '') === $currentUserId;
+        $isValidator = (string) ($meeting->validator_id    ?? '') === $currentUserId;
+        $isOrganizer = (string) ($meeting->organizer_id   ?? '') === $currentUserId;
+
+        return view('meetings.show', compact('meeting', 'qrUrl', 'qrImageDataUri', 'isWriter', 'isValidator', 'isOrganizer'));
     }
 
     public function updateMinutes(Request $request, Meeting $meeting)
@@ -932,4 +937,225 @@ class MeetingController extends Controller
 
         return response()->json(['error' => 0]);
     }
+
+        // -------------------------------------------------------------------------
+        // Analyse du modèle DOCX : détection des variables {{ var }} et scellement
+        // des zones de signature @@@  (10 cm × 8 cm, centrées, encadrées).
+        // -------------------------------------------------------------------------
+
+        /**
+         * Analyse le DOCX uploadé : extrait les variables {{ var }}, scelle les
+         * zones @@@ (table centrée 10×8 cm encadrée), sauvegarde le DOCX modifié
+         * et stocke la liste des variables en base.
+         */
+        public function analyzeTemplate(Request $request, Meeting $meeting)
+        {
+            $this->abortIfMeetingOutsideScope($meeting);
+
+            $currentUserId = (string) Auth::id();
+            $isWriter    = (string) ($meeting->minutes_writer_id ?? '') === $currentUserId;
+            $isValidator = (string) ($meeting->validator_id    ?? '') === $currentUserId;
+            $isOrganizer = (string) ($meeting->organizer_id   ?? '') === $currentUserId;
+            if (!$isWriter && !$isValidator && !$isOrganizer) {
+                return response()->json(['error' => 'Accès refusé.'], 403);
+            }
+
+            $templatePath = (string) ($meeting->minutes_template ?? '');
+            if (!$templatePath || !str_starts_with($templatePath, '/storage/')) {
+                return response()->json(['error' => 'Aucun modèle DOCX uploadé pour cette réunion.'], 404);
+            }
+
+            $relative = ltrim(str_replace('/storage/', '', $templatePath), '/');
+            if (!Storage::disk('public')->exists($relative)) {
+                return response()->json(['error' => 'Fichier modèle introuvable sur le disque.'], 404);
+            }
+
+            $docxPath = Storage::disk('public')->path($relative);
+
+            // --- Lire le DOCX comme ZIP et extraire word/document.xml -------------
+            $zip = new \ZipArchive();
+            if ($zip->open($docxPath) !== true) {
+                return response()->json(['error' => 'Impossible d\'ouvrir le fichier DOCX.'], 500);
+            }
+            $xmlContent = $zip->getFromName('word/document.xml');
+            if ($xmlContent === false) {
+                $zip->close();
+                return response()->json(['error' => 'Structure DOCX invalide (word/document.xml manquant).'], 500);
+            }
+            $zip->close();
+
+            // --- Détecter les variables {{ nom_variable }} -----------------------
+            $textForScan = strip_tags($xmlContent);
+            preg_match_all('/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/', $textForScan, $varMatches);
+            $variables = array_values(array_unique($varMatches[1]));
+
+            // --- Sceller les zones @@@ -------------------------------------------
+            $signatureCount = substr_count($textForScan, '@@@');
+            $sealedXml      = $this->sealSignatureZones($xmlContent);
+
+            // --- Écrire le DOCX scellé (copie du fichier original) ---------------
+            $dir            = dirname($relative);
+            $baseName       = pathinfo($relative, PATHINFO_FILENAME);
+            $sealedRelative = $dir . '/' . $baseName . '_sealed.docx';
+            $sealedAbsPath  = Storage::disk('public')->path($sealedRelative);
+
+            copy($docxPath, $sealedAbsPath);
+
+            $zipOut = new \ZipArchive();
+            if ($zipOut->open($sealedAbsPath) !== true) {
+                return response()->json(['error' => 'Impossible de créer le fichier DOCX scellé.'], 500);
+            }
+            $zipOut->deleteName('word/document.xml');
+            $zipOut->addFromString('word/document.xml', $sealedXml);
+            $zipOut->close();
+
+            // --- Persister en base -----------------------------------------------
+            $meeting->update([
+                'template_variables'   => $variables,
+                'template_sealed_path' => '/storage/' . $sealedRelative,
+            ]);
+
+            return response()->json([
+                'variables'      => $variables,
+                'sealedPath'     => '/storage/' . $sealedRelative,
+                'signatureZones' => $signatureCount,
+            ]);
+        }
+
+        /**
+         * Remplace chaque paragraphe contenant @@@ par une table Word centrée
+         * 10 cm (largeur) × 8 cm (hauteur), encadrée, fond bleu pâle.
+         */
+        private function sealSignatureZones(string $xml): string
+        {
+            // Table OOXML : 1 ligne / 1 colonne — 10 cm = 5670 twips, 8 cm = 4536 twips
+            $signatureTableXml =
+                '<w:tbl>' .
+                '<w:tblPr>' .
+                '<w:jc w:val="center"/>' .
+                '<w:tblW w:w="5670" w:type="dxa"/>' .
+                '<w:tblBorders>' .
+                '<w:top    w:val="single" w:sz="12" w:space="0" w:color="2453D6"/>' .
+                '<w:left   w:val="single" w:sz="12" w:space="0" w:color="2453D6"/>' .
+                '<w:bottom w:val="single" w:sz="12" w:space="0" w:color="2453D6"/>' .
+                '<w:right  w:val="single" w:sz="12" w:space="0" w:color="2453D6"/>' .
+                '<w:insideH w:val="none"/><w:insideV w:val="none"/>' .
+                '</w:tblBorders>' .
+                '<w:tblCellMar>' .
+                '<w:top w:w="120" w:type="dxa"/><w:left w:w="120" w:type="dxa"/>' .
+                '<w:bottom w:w="120" w:type="dxa"/><w:right w:w="120" w:type="dxa"/>' .
+                '</w:tblCellMar>' .
+                '</w:tblPr>' .
+                '<w:tr>' .
+                '<w:trPr><w:trHeight w:val="4536" w:hRule="exact"/></w:trPr>' .
+                '<w:tc>' .
+                '<w:tcPr>' .
+                '<w:tcW w:w="5670" w:type="dxa"/>' .
+                '<w:vAlign w:val="center"/>' .
+                '<w:shd w:val="clear" w:color="auto" w:fill="EEF2FF"/>' .
+                '</w:tcPr>' .
+                '<w:p>' .
+                '<w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="0"/></w:pPr>' .
+                '<w:r>' .
+                '<w:rPr>' .
+                '<w:rFonts w:ascii="Arial" w:hAnsi="Arial"/>' .
+                '<w:sz w:val="24"/><w:szCs w:val="24"/>' .
+                '<w:color w:val="2453D6"/><w:b/>' .
+                '</w:rPr>' .
+                '<w:t>&#9312; Zone de signature</w:t>' .
+                '</w:r>' .
+                '</w:p>' .
+                '</w:tc>' .
+                '</w:tr>' .
+                '</w:tbl>' .
+                '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="0"/></w:pPr></w:p>';
+
+            // Trouver chaque <w:p>…</w:p> dont le texte contient @@@ et le remplacer
+            $sealed = preg_replace_callback(
+                '/<w:p[ >][\s\S]*?<\/w:p>/U',
+                static function (array $m) use ($signatureTableXml): string {
+                    if (str_contains(strip_tags($m[0]), '@@@')) {
+                        return $signatureTableXml;
+                    }
+                    return $m[0];
+                },
+                $xml
+            );
+
+            return $sealed ?? $xml;
+        }
+
+        /**
+         * Génère un DOCX final à partir du modèle scellé en remplaçant les
+         * variables {{ nom }} par les valeurs soumises via le formulaire.
+         * Retourne le fichier en téléchargement direct.
+         */
+        public function generateFromTemplate(Request $request, Meeting $meeting)
+        {
+            $this->abortIfMeetingOutsideScope($meeting);
+
+            $currentUserId = (string) Auth::id();
+            $isWriter    = (string) ($meeting->minutes_writer_id ?? '') === $currentUserId;
+            $isValidator = (string) ($meeting->validator_id    ?? '') === $currentUserId;
+            $isOrganizer = (string) ($meeting->organizer_id   ?? '') === $currentUserId;
+            if (!$isWriter && !$isValidator && !$isOrganizer) {
+                abort(403);
+            }
+
+            // Préférer le modèle scellé, sinon l'original
+            $sealedPath   = (string) ($meeting->template_sealed_path ?? '');
+            $templatePath = $sealedPath ?: (string) ($meeting->minutes_template ?? '');
+
+            if (!$templatePath || !str_starts_with($templatePath, '/storage/')) {
+                abort(404, 'Aucun modèle disponible pour cette réunion.');
+            }
+
+            $relative = ltrim(str_replace('/storage/', '', $templatePath), '/');
+            if (!Storage::disk('public')->exists($relative)) {
+                abort(404, 'Fichier modèle introuvable.');
+            }
+
+            $docxPath = Storage::disk('public')->path($relative);
+
+            $zip = new \ZipArchive();
+            if ($zip->open($docxPath) !== true) {
+                abort(500, 'Impossible d\'ouvrir le fichier DOCX.');
+            }
+            $xmlContent = $zip->getFromName('word/document.xml');
+            $zip->close();
+
+            if ($xmlContent === false) {
+                abort(500, 'Structure DOCX invalide.');
+            }
+
+            // --- Substituer les variables ----------------------------------------
+            $values = (array) $request->input('variables', []);
+            foreach ($values as $varName => $varValue) {
+                if (!preg_match('/^[a-zA-Z0-9_]+$/', (string) $varName)) {
+                    continue; // Ignorer les noms invalides (sécurité)
+                }
+                $safeValue = htmlspecialchars((string) $varValue, ENT_XML1 | ENT_QUOTES, 'UTF-8');
+                // Couvrir les variantes d'espacement
+                foreach (["{{ {$varName} }}", "{{{$varName}}}", "{{ {$varName}}}", "{{{$varName} }}"] as $placeholder) {
+                    $xmlContent = str_replace($placeholder, $safeValue, $xmlContent);
+                }
+            }
+
+            // --- Créer le DOCX final ---------------------------------------------
+            $tmpFile = tempnam(sys_get_temp_dir(), 'mtg_doc_') . '.docx';
+            copy($docxPath, $tmpFile);
+
+            $zipOut = new \ZipArchive();
+            if ($zipOut->open($tmpFile) === true) {
+                $zipOut->deleteName('word/document.xml');
+                $zipOut->addFromString('word/document.xml', $xmlContent);
+                $zipOut->close();
+            }
+
+            $fileName = 'compte_rendu_' . Str::slug($meeting->title) . '_' . now()->format('Ymd') . '.docx';
+
+            return response()->download($tmpFile, $fileName, [
+                'Content-Type' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            ])->deleteFileAfterSend(true);
+        }
 }
