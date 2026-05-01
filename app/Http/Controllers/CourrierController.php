@@ -476,6 +476,22 @@ class CourrierController extends Controller
         if ($assignment && $assignment->sub_entity_code) {
             return strtoupper(trim($assignment->sub_entity_code));
         }
+
+        // Fallback : chercher une sub_entity rattachée à l'administration du profil de l'utilisateur
+        $user = Auth::user();
+        if ($user && $user->profile_id) {
+            $adminId = $user->profile->administration_id ?? null;
+            if ($adminId) {
+                $rootEntity = \App\Models\SubEntity::where('scope_id', $adminId)
+                    ->where('is_active', true)
+                    ->whereNull('parent_code')
+                    ->first();
+                if ($rootEntity && $rootEntity->code) {
+                    return strtoupper(trim($rootEntity->code));
+                }
+            }
+        }
+
         return 'GEN'; // code générique si aucune entité assignée
     }
 
@@ -614,8 +630,12 @@ class CourrierController extends Controller
             ->where('type', 'arrive')
             ->where('statut', 'en_attente')
             ->when($adminId, fn($q) => $q->where('administration_id', $adminId))
-            // Seuls les courriers enregistrés dans l'entité du directeur connecté
-            ->when($subEntityCode, fn($q) => $q->whereRaw('UPPER(sub_entity_code) = ?', [$subEntityCode]))
+            // Courriers de l'entité du directeur OU sans entité identifiée (GEN/NULL) de la même administration
+            ->when($subEntityCode, fn($q) => $q->where(function ($q) use ($subEntityCode) {
+                $q->whereRaw('UPPER(sub_entity_code) = ?', [$subEntityCode])
+                  ->orWhereNull('sub_entity_code')
+                  ->orWhere('sub_entity_code', 'GEN');
+            }))
             ->when($imputFiltre === 'urgent', fn($q) => $q->whereIn('urgence', ['urgent', 'tres_urgent']))
             ->when($imputSearch !== '', fn($q) => $q->where(function ($q) use ($imputSearch) {
                 $q->where('objet', 'like', '%' . $imputSearch . '%')
