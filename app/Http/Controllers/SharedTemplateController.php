@@ -315,9 +315,34 @@ class SharedTemplateController extends Controller
 
                 // Injecter le pied de page Word avec numéro + QR code (docx uniquement)
                 if ($ext === 'docx' && $qrTempPath && file_exists($qrTempPath)) {
-                    $qrWptForDocx = $qrFromOnlyoffice ? max(20, $qrW) : 56.7;
-                    $qrHptForDocx = $qrFromOnlyoffice ? max(20, $qrH) : 56.7;
-                    $this->injectDocxFooterWithQr($absPath, $docNumber ?? '', $verifyUrl, $qrTempPath, $qrWptForDocx, $qrHptForDocx);
+                    $pageWidthPt  = 595.28; // A4 portrait
+                    $pageHeightPt = 841.89; // A4 portrait
+                    $mm = 2.8346;
+
+                    if ($qrFromOnlyoffice) {
+                        // Coordonnées en points absolus sur A4 (sous-onglet OnlyOffice)
+                        $qrWptForDocx = max(20, $qrW);
+                        $qrHptForDocx = max(20, $qrH);
+                        $qrXptForDocx = $qrX;
+                        $qrYptForDocx = $qrY;
+                    } else {
+                        // Paramètres historiques: marges en mm depuis droite/bas
+                        $qrWptForDocx = max(20, $qrW * $mm);
+                        $qrHptForDocx = max(20, $qrH * $mm);
+                        $qrXptForDocx = $pageWidthPt - ($qrX * $mm) - $qrWptForDocx;
+                        $qrYptForDocx = $pageHeightPt - ($qrY * $mm) - $qrHptForDocx;
+                    }
+
+                    $this->injectDocxFooterWithQr(
+                        $absPath,
+                        $docNumber ?? '',
+                        $verifyUrl,
+                        $qrTempPath,
+                        $qrWptForDocx,
+                        $qrHptForDocx,
+                        $qrXptForDocx,
+                        $qrYptForDocx
+                    );
                 }
 
                 // Le document Office (DOCX/XLSX/PPTX) est servi directement avec les variables remplacées.
@@ -663,7 +688,16 @@ class SharedTemplateController extends Controller
      * Fonctionne en manipulant le ZIP du docx directement.
      * N'écrase pas un footer existant — ajoute un nouveau footer "default".
      */
-    private function injectDocxFooterWithQr(string $absFilePath, string $docNumber, string $verifyUrl, string $qrPngPath, float $qrWidthPt = 56.7, float $qrHeightPt = 56.7): void
+    private function injectDocxFooterWithQr(
+        string $absFilePath,
+        string $docNumber,
+        string $verifyUrl,
+        string $qrPngPath,
+        float $qrWidthPt = 56.7,
+        float $qrHeightPt = 56.7,
+        ?float $qrXpt = null,
+        ?float $qrYpt = null
+    ): void
     {
         if (!class_exists('ZipArchive') || !file_exists($qrPngPath)) return;
 
@@ -718,6 +752,83 @@ class SharedTemplateController extends Controller
         $num = htmlspecialchars($docNumber, ENT_XML1, 'UTF-8');
         $url = htmlspecialchars($verifyUrl,  ENT_XML1, 'UTF-8');
 
+        // Par défaut, conserver le mode historique (inline dans la ligne de footer).
+        // Si des coordonnées X/Y sont fournies, utiliser un ancrage absolu sur la page.
+        if ($qrXpt !== null && $qrYpt !== null) {
+            $pageWidthPt  = 595.28; // A4 portrait
+            $pageHeightPt = 841.89; // A4 portrait
+
+            $xPt = max(0, min($pageWidthPt  - $qrWidthPt,  $qrXpt));
+            $yPt = max(0, min($pageHeightPt - $qrHeightPt, $qrYpt));
+
+            $xEmu = (int) round($xPt * 12700);
+            $yEmu = (int) round($yPt * 12700);
+
+            $qrDrawingXml =
+                '<w:r><w:rPr/>' .
+                '<w:drawing>' .
+                '<wp:anchor distT="0" distB="0" distL="0" distR="0" simplePos="0" relativeHeight="251659264" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1">' .
+                '<wp:simplePos x="0" y="0"/>' .
+                '<wp:positionH relativeFrom="page"><wp:posOffset>' . $xEmu . '</wp:posOffset></wp:positionH>' .
+                '<wp:positionV relativeFrom="page"><wp:posOffset>' . $yEmu . '</wp:posOffset></wp:positionV>' .
+                '<wp:extent cx="' . $cx . '" cy="' . $cy . '"/>' .
+                '<wp:effectExtent l="0" t="0" r="0" b="0"/>' .
+                '<wp:wrapNone/>' .
+                '<wp:docPr id="101" name="QR-eAdmin"/>' .
+                '<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>' .
+                '<a:graphic>' .
+                '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">' .
+                '<pic:pic>' .
+                '<pic:nvPicPr>' .
+                '<pic:cNvPr id="0" name="QR-eAdmin"/>' .
+                '<pic:cNvPicPr><a:picLocks noChangeAspect="1"/></pic:cNvPicPr>' .
+                '</pic:nvPicPr>' .
+                '<pic:blipFill>' .
+                '<a:blip r:embed="' . $imgRelId . '"/>' .
+                '<a:stretch><a:fillRect/></a:stretch>' .
+                '</pic:blipFill>' .
+                '<pic:spPr>' .
+                '<a:xfrm><a:off x="0" y="0"/><a:ext cx="' . $cx . '" cy="' . $cy . '"/></a:xfrm>' .
+                '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>' .
+                '</pic:spPr>' .
+                '</pic:pic>' .
+                '</a:graphicData>' .
+                '</a:graphic>' .
+                '</wp:anchor>' .
+                '</w:drawing>' .
+                '</w:r>';
+        } else {
+            $qrDrawingXml =
+                '<w:r><w:rPr/>' .
+                '<w:drawing>' .
+                '<wp:inline distT="0" distB="0" distL="0" distR="0">' .
+                '<wp:extent cx="' . $cx . '" cy="' . $cy . '"/>' .
+                '<wp:effectExtent l="0" t="0" r="0" b="0"/>' .
+                '<wp:docPr id="101" name="QR-eAdmin"/>' .
+                '<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>' .
+                '<a:graphic>' .
+                '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">' .
+                '<pic:pic>' .
+                '<pic:nvPicPr>' .
+                '<pic:cNvPr id="0" name="QR-eAdmin"/>' .
+                '<pic:cNvPicPr><a:picLocks noChangeAspect="1"/></pic:cNvPicPr>' .
+                '</pic:nvPicPr>' .
+                '<pic:blipFill>' .
+                '<a:blip r:embed="' . $imgRelId . '"/>' .
+                '<a:stretch><a:fillRect/></a:stretch>' .
+                '</pic:blipFill>' .
+                '<pic:spPr>' .
+                '<a:xfrm><a:off x="0" y="0"/><a:ext cx="' . $cx . '" cy="' . $cy . '"/></a:xfrm>' .
+                '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>' .
+                '</pic:spPr>' .
+                '</pic:pic>' .
+                '</a:graphicData>' .
+                '</a:graphic>' .
+                '</wp:inline>' .
+                '</w:drawing>' .
+                '</w:r>';
+        }
+
         $footerXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             . '<w:ftr xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
             . ' xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"'
@@ -741,37 +852,8 @@ class SharedTemplateController extends Controller
             . '<w:t>Authenticit\xc3\xa9 v\xc3\xa9rifiable par QR code</w:t></w:r>'
             // Tab → droite
             . '<w:r><w:tab/></w:r>'
-            // QR code image (droite, inline)
-            . '<w:r><w:rPr/>'
-            . '<w:drawing>'
-            . '<wp:inline distT="0" distB="0" distL="0" distR="0">'
-            . '<wp:extent cx="' . $cx . '" cy="' . $cy . '"/>'
-            . '<wp:effectExtent l="0" t="0" r="0" b="0"/>'
-            . '<wp:docPr id="101" name="QR-eAdmin"/>'
-            . '<wp:cNvGraphicFramePr>'
-            . '<a:graphicFrameLocks noChangeAspect="1"/>'
-            . '</wp:cNvGraphicFramePr>'
-            . '<a:graphic>'
-            . '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">'
-            . '<pic:pic>'
-            . '<pic:nvPicPr>'
-            . '<pic:cNvPr id="0" name="QR-eAdmin"/>'
-            . '<pic:cNvPicPr><a:picLocks noChangeAspect="1"/></pic:cNvPicPr>'
-            . '</pic:nvPicPr>'
-            . '<pic:blipFill>'
-            . '<a:blip r:embed="' . $imgRelId . '"/>'
-            . '<a:stretch><a:fillRect/></a:stretch>'
-            . '</pic:blipFill>'
-            . '<pic:spPr>'
-            . '<a:xfrm><a:off x="0" y="0"/><a:ext cx="' . $cx . '" cy="' . $cy . '"/></a:xfrm>'
-            . '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>'
-            . '</pic:spPr>'
-            . '</pic:pic>'
-            . '</a:graphicData>'
-            . '</a:graphic>'
-            . '</wp:inline>'
-            . '</w:drawing>'
-            . '</w:r>'
+            // QR code image (inline historique ou anchor absolu)
+            . $qrDrawingXml
             . '</w:p>'
             . '</w:ftr>';
 
