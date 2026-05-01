@@ -4,7 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Models\Document;
 use App\Models\DocumentShare;
+use App\Models\Notification;
 use App\Models\RecipientAdministration;
+use App\Models\SubEntity;
+use App\Models\User;
 use App\Models\UserDirectionAssignment;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Http\Request;
@@ -137,6 +140,116 @@ class ReceptionController extends Controller
             }
         }
 
-        return view('reception.index', compact('documents', 'search', 'sharesInfo'));
+        // Récupérer les sous-entités de l'administration destinataire
+        $subEntities = collect();
+        if ($profile && $profile->administration_type === 'recipient' && $profile->administration_id) {
+            try {
+                $subEntities = SubEntity::where('scope_type', 'recipient')
+                    ->where('scope_id', $profile->administration_id)
+                    ->where('is_active', true)
+                    ->orderBy('name')
+                    ->get(['id', 'code', 'name']);
+            } catch (\Throwable $e) {
+                Log::warning('Reception: cannot load sub_entities', ['message' => $e->getMessage()]);
+            }
+        }
+
+        return view('reception.index', compact('documents', 'search', 'sharesInfo', 'subEntities'));
+    }
+
+    public function forward(Request $request, Document $document)
+    {
+        $user = Auth::user();
+        $profile = $user?->profile;
+
+        if (!$profile || $profile->administration_type !== 'recipient' || !$profile->administration_id) {
+            return response()->json(['ok' => false, 'message' => 'Accès non autorisé.'], 403);
+        }
+
+        $recipientAdminId = $profile->administration_id;
+
+        // Vérifier que l'utilisateur a bien accès à ce document via un share
+        $hasAccess = DocumentShare::where('document_id', $document->id)
+            ->where(function ($q) use ($user, $recipientAdminId) {
+                $q->where('recipient_name', 'user:' . $user->id)
+                  ->orWhere('recipient_email', $user->email)
+                  ->orWhere('recipient_administration_id', $recipientAdminId);
+            })
+            ->exists();
+
+        if (!$hasAccess) {
+            return response()->json(['ok' => false, 'message' => 'Vous n\'avez pas accès à ce document.'], 403);
+        }
+
+        $request->validate([
+            'sub_entity_code' => 'required|string|max:60',
+        ]);
+
+        $subEntityCode = strtoupper(trim((string) $request->input('sub_entity_code')));
+
+        // Valider que ce sub_entity_code appartient à l'administration destinataire
+        $subEntity = SubEntity::where('scope_type', 'recipient')
+            ->where('scope_id', $recipientAdminId)
+            ->whereRaw('UPPER(code) = ?', [$subEntityCode])
+            ->where('is_active', true)
+            ->first();
+
+        if (!$subEntity) {
+            return response()->json(['ok' => false, 'message' => 'Entité sous tutelle introuvable.'], 422);
+        }
+
+        // Trouver les users actifs de cette entité, dans la même administration destinataire
+        $targetUserIds = UserDirectionAssignment::whereRaw('UPPER(sub_entity_code) = ?', [$subEntityCode])
+            ->pluck('user_id')
+            ->unique();
+
+        $targetUsers = User::whereIn('id', $targetUserIds)
+            ->where('status', 'active')
+            ->where('id', '!=', $user->id)
+            ->whereHas('profile', function ($q) use ($recipientAdminId) {
+                $q->where('administration_id', $recipientAdminId)
+                  ->where('administration_type', 'recipient');
+            })
+            ->get(['id', 'email']);
+
+        if ($targetUsers->isEmpty()) {
+            return response()->json(['ok' => false, 'message' => 'Aucun utilisateur actif trouvé pour cette entité sous tutelle.'], 422);
+        }
+
+        $created = 0;
+        foreach ($targetUsers as $targetUser) {
+            // Éviter les doublons
+            $alreadyShared = DocumentShare::where('document_id', $document->id)
+                ->where('recipient_name', 'user:' . $targetUser->id)
+                ->exists();
+
+            if (!$alreadyShared) {
+                DocumentShare::create([
+                    'document_id'   => $document->id,
+                    'shared_by'     => $user->id,
+                    'mode'          => 'internal',
+                    'permission'    => 'lecture',
+                    'has_delay'     => false,
+                    'recipient_name'  => 'sub_entity:' . $subEntityCode,
+                    'recipient_email' => $targetUser->email,
+                ]);
+
+                Notification::create([
+                    'recipient_id' => $targetUser->id,
+                    'title'        => 'Document transmis',
+                    'message'      => 'Le document "' . $document->title . '" vous a été transmis par votre administration.',
+                    'type'         => 'info',
+                    'action_url'   => route('reception.index'),
+                    'is_read'      => false,
+                ]);
+
+                $created++;
+            }
+        }
+
+        return response()->json([
+            'ok'      => true,
+            'message' => "Document transmis à {$created} utilisateur(s) de l'entité \"{$subEntity->name}\".",
+        ]);
     }
 }

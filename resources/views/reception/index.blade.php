@@ -94,12 +94,21 @@
                     </td>
                     <td class="px-5 py-4 text-gray-500 text-xs">{{ $doc->created_at?->format('d/m/Y H:i') }}</td>
                     <td class="px-5 py-4 text-right">
+                        <div class="flex items-center justify-end gap-2">
                         @if($doc->file_path)
                         <a href="{{ route('documents.download', $doc) }}"
                             class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition">
                             <i class="fas fa-download text-xs"></i> Télécharger
                         </a>
                         @endif
+                        @if($subEntities->isNotEmpty())
+                        <button type="button"
+                            onclick="openForwardModal('{{ $doc->id }}', '{{ addslashes($doc->title) }}')"
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 text-xs font-medium rounded-lg transition">
+                            <i class="fas fa-share text-xs"></i> Transmettre
+                        </button>
+                        @endif
+                        </div>
                     </td>
                 </tr>
                 @endforeach
@@ -115,3 +124,113 @@
 @endif
 
 @endsection
+
+@push('scripts')
+{{-- Modal Transmettre aux entités sous tutelle --}}
+<div id="forwardModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-md">
+        <div class="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+            <h3 class="text-base font-bold text-gray-800 flex items-center gap-2">
+                <i class="fas fa-share text-indigo-500"></i> Transmettre le document
+            </h3>
+            <button type="button" onclick="closeForwardModal()" class="text-gray-400 hover:text-gray-600 transition">
+                <i class="fas fa-times text-lg"></i>
+            </button>
+        </div>
+        <div class="px-6 py-5 space-y-4">
+            <p class="text-sm text-gray-500">Document : <span id="forwardDocTitle" class="font-semibold text-gray-700"></span></p>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Entité sous tutelle <span class="text-red-500">*</span></label>
+                <select id="forwardSubEntityCode" class="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="">-- Sélectionner une entité --</option>
+                    @foreach($subEntities as $se)
+                    <option value="{{ $se->code }}">{{ $se->name }} ({{ $se->code }})</option>
+                    @endforeach
+                </select>
+            </div>
+            <div id="forwardMsg" class="hidden text-sm rounded-lg px-3 py-2"></div>
+        </div>
+        <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
+            <button type="button" onclick="closeForwardModal()"
+                class="px-4 py-2 border border-gray-300 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 transition">
+                Annuler
+            </button>
+            <button type="button" id="forwardSubmitBtn" onclick="submitForward()"
+                class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-semibold transition flex items-center gap-2">
+                <i class="fas fa-share"></i> Transmettre
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+let _forwardDocId = null;
+
+function openForwardModal(docId, docTitle) {
+    _forwardDocId = docId;
+    document.getElementById('forwardDocTitle').textContent = docTitle;
+    document.getElementById('forwardSubEntityCode').value = '';
+    const msg = document.getElementById('forwardMsg');
+    msg.className = 'hidden text-sm rounded-lg px-3 py-2';
+    msg.textContent = '';
+    const modal = document.getElementById('forwardModal');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+function closeForwardModal() {
+    const modal = document.getElementById('forwardModal');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+    _forwardDocId = null;
+}
+
+async function submitForward() {
+    const subEntityCode = document.getElementById('forwardSubEntityCode').value;
+    const msg = document.getElementById('forwardMsg');
+    const btn = document.getElementById('forwardSubmitBtn');
+
+    if (!subEntityCode) {
+        showForwardMsg('Veuillez sélectionner une entité sous tutelle.', false);
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Transmission...';
+
+    try {
+        const res = await fetch(`/reception/${_forwardDocId}/forward`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+                'Accept': 'application/json',
+            },
+            body: JSON.stringify({ sub_entity_code: subEntityCode }),
+        });
+        const data = await res.json();
+        if (data.ok) {
+            showForwardMsg(data.message, true);
+            setTimeout(closeForwardModal, 1800);
+        } else {
+            showForwardMsg(data.message ?? 'Erreur lors de la transmission.', false);
+        }
+    } catch (e) {
+        showForwardMsg('Erreur réseau. Veuillez réessayer.', false);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-share"></i> Transmettre';
+    }
+}
+
+function showForwardMsg(text, success) {
+    const msg = document.getElementById('forwardMsg');
+    msg.textContent = text;
+    msg.className = 'text-sm rounded-lg px-3 py-2 ' + (success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600');
+}
+
+document.getElementById('forwardModal').addEventListener('click', function(e) {
+    if (e.target === this) closeForwardModal();
+});
+</script>
+@endpush
