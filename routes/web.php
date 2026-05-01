@@ -221,6 +221,11 @@ Route::middleware('auth')->group(function () {
     Route::get('/meetings/create', [MeetingController::class, 'create'])->name('meetings.create');
     Route::post('/meetings', [MeetingController::class, 'store'])->name('meetings.store');
     Route::get('/meetings/{meeting}', [MeetingController::class, 'show'])->name('meetings.show');
+    Route::post('/meetings/{meeting}/minutes', [MeetingController::class, 'updateMinutes'])->name('meetings.minutes.update');
+    Route::post('/meetings/{meeting}/workflow', [MeetingController::class, 'workflow'])->name('meetings.workflow');
+    Route::get('/meetings-reporting', [MeetingController::class, 'reporting'])->name('meetings.reporting');
+    Route::get('/meetings-export/csv', [MeetingController::class, 'exportCsv'])->name('meetings.export.csv');
+    Route::get('/meetings-export/pdf-summary', [MeetingController::class, 'exportSummaryPdf'])->name('meetings.export.pdf.summary');
     Route::get('/meetings/{meeting}/dashboard', [MeetingAttendanceController::class, 'dashboard'])->name('meetings.dashboard');
     Route::get('/meetings/{meeting}/attendance/download', [MeetingAttendanceController::class, 'downloadAttendance'])->name('meetings.attendance.download');
 

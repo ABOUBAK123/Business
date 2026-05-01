@@ -15,16 +15,28 @@ class Meeting extends Model
         'meeting_room_id',
         'starts_at',
         'ends_at',
+        'processing_deadline',
         'estimated_duration_minutes',
         'organizer_id',
         'minutes_writer_id',
         'issuing_administration_id',
         'sub_entity_code',
         'agenda',
+        'minutes_template',
+        'minutes_content',
         'attachments',
         'priority',
         'confidentiality',
         'status',
+        'workflow_status',
+        'review_requested',
+        'review_comment',
+        'writer_signature_path',
+        'writer_signed_at',
+        'published_at',
+        'diffusion_email_subject',
+        'diffusion_email_body',
+        'diffusion_ack_required',
         'recurrence_type',
         'recurrence_until',
         'recurrence_exceptions',
@@ -36,12 +48,17 @@ class Meeting extends Model
     protected $casts = [
         'starts_at' => 'datetime',
         'ends_at' => 'datetime',
+        'processing_deadline' => 'datetime',
         'recurrence_until' => 'date',
         'attachments' => 'array',
         'recurrence_exceptions' => 'array',
         'estimated_duration_minutes' => 'integer',
         'qr_valid_from' => 'datetime',
         'qr_valid_until' => 'datetime',
+        'review_requested' => 'boolean',
+        'writer_signed_at' => 'datetime',
+        'published_at' => 'datetime',
+        'diffusion_ack_required' => 'boolean',
     ];
 
     public function room()
@@ -72,5 +89,10 @@ class Meeting extends Model
     public function attendances()
     {
         return $this->hasMany(MeetingAttendance::class);
+    }
+
+    public function minutesVersions()
+    {
+        return $this->hasMany(MeetingMinutesVersion::class)->orderByDesc('version_no');
     }
 }

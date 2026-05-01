@@ -17,4 +17,9 @@
               {{ $currentRoute === 'meetings.create' ? 'bg-white border-gray-200 text-[#2453d6] -mb-px z-10' : 'border-transparent text-gray-500 hover:text-[#2453d6] hover:bg-gray-50' }}">
         + Nouvelle réunion
     </a>
+    <a href="{{ route('meetings.reporting') }}"
+       class="px-4 py-2 text-sm font-semibold rounded-t-lg border border-b-0 transition-colors
+              {{ Str::startsWith($currentRoute, 'meetings.reporting') ? 'bg-white border-gray-200 text-[#2453d6] -mb-px z-10' : 'border-transparent text-gray-500 hover:text-[#2453d6] hover:bg-gray-50' }}">
+        Reporting
+    </a>
 </div>

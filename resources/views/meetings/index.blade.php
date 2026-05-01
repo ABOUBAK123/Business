@@ -22,6 +22,7 @@
                 <th class="text-left px-4 py-3 font-semibold text-gray-700">Date</th>
                 <th class="text-left px-4 py-3 font-semibold text-gray-700">Organisateur</th>
                 <th class="text-left px-4 py-3 font-semibold text-gray-700">Statut</th>
+                <th class="text-left px-4 py-3 font-semibold text-gray-700">Validation</th>
                 <th class="text-left px-4 py-3 font-semibold text-gray-700">Actions</th>
             </tr>
         </thead>
@@ -33,13 +34,14 @@
                 <td class="px-4 py-3 text-gray-600">{{ $meeting->starts_at?->format('d/m/Y H:i') }}</td>
                 <td class="px-4 py-3 text-gray-600">{{ $meeting->organizer?->name }}</td>
                 <td class="px-4 py-3 text-gray-600">{{ $meeting->status }}</td>
+                <td class="px-4 py-3 text-gray-600">{{ $meeting->workflow_status ?? 'draft' }}</td>
                 <td class="px-4 py-3">
                     <a href="{{ route('meetings.show', $meeting) }}" class="text-[#2453d6] font-semibold hover:underline">Ouvrir</a>
                 </td>
             </tr>
             @empty
             <tr>
-                <td colspan="6" class="px-4 py-10 text-center text-gray-400">Aucune réunion trouvée.</td>
+                <td colspan="7" class="px-4 py-10 text-center text-gray-400">Aucune réunion trouvée.</td>
             </tr>
             @endforelse
         </tbody>

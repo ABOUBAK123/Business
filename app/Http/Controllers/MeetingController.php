@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Meeting;
+use App\Models\MeetingAttendance;
+use App\Models\MeetingMinutesVersion;
 use App\Models\MeetingParticipant;
 use App\Models\MeetingRoom;
 use App\Models\User;
@@ -11,7 +13,9 @@ use Endroid\QrCode\Writer\PngWriter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class MeetingController extends Controller
@@ -96,10 +100,15 @@ class MeetingController extends Controller
             'meeting_room_id' => 'required|uuid|exists:meeting_rooms,id',
             'starts_at' => 'required|date',
             'ends_at' => 'required|date|after:starts_at',
+            'processing_deadline' => 'nullable|date|after_or_equal:starts_at',
             'minutes_writer_id' => 'required|uuid|exists:users,id',
             'agenda' => 'nullable|string',
+            'minutes_template' => 'nullable|string',
             'priority' => 'required|in:low,normal,high,urgent',
             'confidentiality' => 'required|in:public,internal,confidential',
+            'diffusion_email_subject' => 'nullable|string|max:255',
+            'diffusion_email_body' => 'nullable|string|max:5000',
+            'diffusion_ack_required' => 'nullable|boolean',
             'recurrence_type' => 'nullable|in:none,daily,weekly,monthly,yearly',
             'recurrence_until' => 'nullable|date|after_or_equal:today',
             'participants' => 'nullable|array',
@@ -152,16 +161,24 @@ class MeetingController extends Controller
             'meeting_room_id' => $validated['meeting_room_id'],
             'starts_at' => $startsAt,
             'ends_at' => $endsAt,
+            'processing_deadline' => !empty($validated['processing_deadline']) ? now()->parse($validated['processing_deadline']) : null,
             'estimated_duration_minutes' => $startsAt->diffInMinutes($endsAt),
             'organizer_id' => Auth::id(),
             'minutes_writer_id' => $validated['minutes_writer_id'],
             'issuing_administration_id' => $scope['administration_id'],
             'sub_entity_code' => $scope['sub_entity_code'],
             'agenda' => $validated['agenda'] ?? null,
+            'minutes_template' => $validated['minutes_template'] ?? null,
+            'minutes_content' => $validated['minutes_template'] ?? null,
             'attachments' => $attachments,
             'priority' => $validated['priority'],
             'confidentiality' => $validated['confidentiality'],
             'status' => 'planned',
+            'workflow_status' => 'draft',
+            'review_requested' => false,
+            'diffusion_email_subject' => $validated['diffusion_email_subject'] ?? null,
+            'diffusion_email_body' => $validated['diffusion_email_body'] ?? null,
+            'diffusion_ack_required' => (bool) ($validated['diffusion_ack_required'] ?? false),
             'recurrence_type' => $validated['recurrence_type'] ?? 'none',
             'recurrence_until' => $validated['recurrence_until'] ?? null,
             'recurrence_exceptions' => [],
@@ -200,7 +217,7 @@ class MeetingController extends Controller
 
         $this->abortIfMeetingOutsideScope($meeting);
 
-        $meeting->load(['room', 'organizer', 'minutesWriter', 'participants.user', 'attendances']);
+        $meeting->load(['room', 'organizer', 'minutesWriter', 'participants.user', 'attendances', 'minutesVersions.creator']);
 
         $qrUrl = route('meetings.qr.show', ['token' => $meeting->qr_token]);
 
@@ -220,6 +237,321 @@ class MeetingController extends Controller
         }
 
         return view('meetings.show', compact('meeting', 'qrUrl', 'qrImageDataUri'));
+    }
+
+    public function updateMinutes(Request $request, Meeting $meeting)
+    {
+        $this->abortIfMeetingOutsideScope($meeting);
+
+        $validated = $request->validate([
+            'minutes_content' => 'required|string',
+            'minutes_template' => 'nullable|string',
+            'note' => 'nullable|string|max:255',
+        ]);
+
+        $meeting->minutes_content = $validated['minutes_content'];
+        if (array_key_exists('minutes_template', $validated)) {
+            $meeting->minutes_template = $validated['minutes_template'];
+        }
+        $meeting->save();
+
+        $this->appendMinutesVersion($meeting, $validated['note'] ?? 'Mise à jour du compte rendu');
+
+        return redirect()->route('meetings.show', $meeting)->with('success', 'Compte rendu mis à jour.');
+    }
+
+    public function workflow(Request $request, Meeting $meeting)
+    {
+        $this->abortIfMeetingOutsideScope($meeting);
+
+        $validated = $request->validate([
+            'action' => 'required|in:submit_validation,validate,publish,request_review,sign_writer',
+            'review_comment' => 'nullable|string|max:2000',
+            'signature' => 'nullable|string',
+        ]);
+
+        $action = (string) $validated['action'];
+
+        if ($action === 'submit_validation') {
+            if ($meeting->workflow_status !== 'draft') {
+                return back()->with('error', 'Cette transition n\'est pas autorisée depuis le statut actuel.');
+            }
+
+            $meeting->workflow_status = 'in_validation';
+            $meeting->review_requested = false;
+            $meeting->review_comment = null;
+            $meeting->save();
+            $this->appendMinutesVersion($meeting, 'Passage en validation');
+
+            return back()->with('success', 'Compte rendu envoyé en validation.');
+        }
+
+        if ($action === 'validate') {
+            if ($meeting->workflow_status !== 'in_validation') {
+                return back()->with('error', 'Le compte rendu doit être en validation.');
+            }
+
+            $meeting->workflow_status = 'validated';
+            $meeting->review_requested = false;
+            $meeting->review_comment = null;
+            $meeting->save();
+            $this->appendMinutesVersion($meeting, 'Compte rendu validé');
+
+            return back()->with('success', 'Compte rendu validé.');
+        }
+
+        if ($action === 'request_review') {
+            $meeting->workflow_status = 'draft';
+            $meeting->review_requested = true;
+            $meeting->review_comment = (string) ($validated['review_comment'] ?? 'Relecture demandée');
+            $meeting->save();
+            $this->appendMinutesVersion($meeting, 'Demande de relecture');
+
+            return back()->with('success', 'Demande de relecture enregistrée.');
+        }
+
+        if ($action === 'sign_writer') {
+            if ((string) $meeting->minutes_writer_id !== (string) Auth::id()) {
+                return back()->with('error', 'Seul le rédacteur peut signer le compte rendu.');
+            }
+
+            if (!empty($validated['signature']) && str_starts_with($validated['signature'], 'data:image/')) {
+                $raw = explode(',', $validated['signature'], 2)[1] ?? '';
+                $binary = base64_decode($raw, true);
+                if ($binary !== false) {
+                    $fileName = 'meetings/minutes-signatures/' . Str::uuid() . '.png';
+                    Storage::disk('public')->put($fileName, $binary);
+                    $meeting->writer_signature_path = '/storage/' . $fileName;
+                }
+            }
+
+            $meeting->writer_signed_at = now();
+            $meeting->save();
+            $this->appendMinutesVersion($meeting, 'Signature électronique du rédacteur');
+
+            return back()->with('success', 'Signature enregistrée.');
+        }
+
+        // publish
+        if ($meeting->workflow_status !== 'validated') {
+            return back()->with('error', 'Le compte rendu doit être validé avant publication.');
+        }
+
+        if (empty($meeting->writer_signed_at)) {
+            return back()->with('error', 'Le rédacteur doit signer avant publication.');
+        }
+
+        $meeting->workflow_status = 'published';
+        $meeting->published_at = now();
+        $meeting->save();
+
+        $this->appendMinutesVersion($meeting, 'Compte rendu publié');
+        $this->sendDiffusionEmails($meeting);
+
+        return back()->with('success', 'Compte rendu publié et diffusé automatiquement par email.');
+    }
+
+    public function reporting(Request $request)
+    {
+        if (!$this->isMeetingsModuleReady()) {
+            return redirect()->route('dashboard')
+                ->with('error', 'Le module Reunions n\'est pas encore initialise sur ce serveur. Lancez les migrations.');
+        }
+
+        $scope = $this->resolveCurrentUserScope();
+        $year = (int) ($request->get('year') ?: now()->year);
+
+        $meetingsQuery = Meeting::query()
+            ->when($scope !== null, function ($query) use ($scope) {
+                $query->where('issuing_administration_id', $scope['administration_id'])
+                    ->where('sub_entity_code', $scope['sub_entity_code']);
+            }, function ($query) {
+                $query->where('organizer_id', Auth::id());
+            })
+            ->whereYear('starts_at', $year);
+
+        $meetings = $meetingsQuery->with(['room'])->get();
+        $meetingIds = $meetings->pluck('id');
+
+        $participantsByMeeting = MeetingParticipant::query()
+            ->whereIn('meeting_id', $meetingIds)
+            ->selectRaw('meeting_id, COUNT(*) as total')
+            ->groupBy('meeting_id')
+            ->pluck('total', 'meeting_id');
+
+        $attendancesByMeeting = MeetingAttendance::query()
+            ->whereIn('meeting_id', $meetingIds)
+            ->selectRaw('meeting_id, COUNT(*) as total')
+            ->groupBy('meeting_id')
+            ->pluck('total', 'meeting_id');
+
+        $totalMeetings = $meetings->count();
+        $participationRates = $meetings->map(function ($m) use ($participantsByMeeting, $attendancesByMeeting) {
+            $p = (int) ($participantsByMeeting[$m->id] ?? 0);
+            $a = (int) ($attendancesByMeeting[$m->id] ?? 0);
+            if ($p <= 0) {
+                return 0;
+            }
+            return min(100, round(($a / $p) * 100, 2));
+        });
+        $avgParticipation = $participationRates->count() > 0 ? round($participationRates->avg(), 2) : 0;
+
+        $byType = $meetings->groupBy('meeting_type')->map->count();
+        $byRoom = $meetings->groupBy(fn ($m) => (string) ($m->room?->name ?: 'Sans salle'))->map->count();
+        $byMonth = $meetings->groupBy(fn ($m) => $m->starts_at?->format('Y-m') ?: 'N/A')->map->count();
+
+        $userStats = User::query()
+            ->whereIn('id', $meetings->pluck('organizer_id')->unique())
+            ->get(['id', 'name'])
+            ->map(function ($user) use ($meetings) {
+                $organized = $meetings->where('organizer_id', $user->id);
+                $count = $organized->count();
+                $durationMinutes = $organized->sum('estimated_duration_minutes');
+
+                return [
+                    'name' => $user->name,
+                    'organized_count' => $count,
+                    'participation_rate' => $count > 0 ? 100 : 0,
+                    'time_minutes' => (int) $durationMinutes,
+                ];
+            });
+
+        return view('meetings.reporting', compact(
+            'year',
+            'totalMeetings',
+            'avgParticipation',
+            'byType',
+            'byRoom',
+            'byMonth',
+            'userStats'
+        ));
+    }
+
+    public function exportCsv(Request $request)
+    {
+        $scope = $this->resolveCurrentUserScope();
+        $type = (string) $request->get('type', 'meetings');
+        if (!in_array($type, ['meetings', 'attendances', 'minutes'], true)) {
+            $type = 'meetings';
+        }
+
+        $filename = 'meetings_' . $type . '_' . now()->format('Ymd_His') . '.csv';
+
+        $headers = [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="' . $filename . '"',
+        ];
+
+        return response()->stream(function () use ($scope, $type) {
+            $out = fopen('php://output', 'w');
+            fputs($out, "\xEF\xBB\xBF");
+
+            if ($type === 'meetings') {
+                fputcsv($out, ['Titre', 'Type', 'Date debut', 'Date fin', 'Salle', 'Statut', 'Workflow'], ';');
+                Meeting::query()
+                    ->with('room')
+                    ->when($scope !== null, function ($q) use ($scope) {
+                        $q->where('issuing_administration_id', $scope['administration_id'])
+                          ->where('sub_entity_code', $scope['sub_entity_code']);
+                    }, function ($q) {
+                        $q->where('organizer_id', Auth::id());
+                    })
+                    ->latest('starts_at')
+                    ->chunk(200, function ($meetings) use ($out) {
+                        foreach ($meetings as $m) {
+                            fputcsv($out, [
+                                $m->title,
+                                $m->meeting_type,
+                                optional($m->starts_at)->format('d/m/Y H:i'),
+                                optional($m->ends_at)->format('d/m/Y H:i'),
+                                $m->room?->name,
+                                $m->status,
+                                $m->workflow_status,
+                            ], ';');
+                        }
+                    });
+            } elseif ($type === 'attendances') {
+                fputcsv($out, ['Reunion', 'Nom', 'Email', 'Telephone', 'Heure signature'], ';');
+                MeetingAttendance::query()
+                    ->whereIn('meeting_id', Meeting::query()
+                        ->when($scope !== null, function ($q) use ($scope) {
+                            $q->where('issuing_administration_id', $scope['administration_id'])
+                                ->where('sub_entity_code', $scope['sub_entity_code']);
+                        }, function ($q) {
+                            $q->where('organizer_id', Auth::id());
+                        })
+                        ->pluck('id'))
+                    ->with('meeting:id,title')
+                    ->latest('signed_at')
+                    ->chunk(200, function ($rows) use ($out) {
+                        foreach ($rows as $row) {
+                            fputcsv($out, [
+                                $row->meeting?->title,
+                                $row->full_name,
+                                $row->email,
+                                $row->phone,
+                                optional($row->signed_at)->format('d/m/Y H:i:s'),
+                            ], ';');
+                        }
+                    });
+            } else {
+                fputcsv($out, ['Reunion', 'Workflow', 'Date publication', 'Version courante'], ';');
+                Meeting::query()
+                    ->when($scope !== null, function ($q) use ($scope) {
+                        $q->where('issuing_administration_id', $scope['administration_id'])
+                            ->where('sub_entity_code', $scope['sub_entity_code']);
+                    }, function ($q) {
+                        $q->where('organizer_id', Auth::id());
+                    })
+                    ->withCount('minutesVersions')
+                    ->latest('starts_at')
+                    ->chunk(200, function ($rows) use ($out) {
+                        foreach ($rows as $row) {
+                            fputcsv($out, [
+                                $row->title,
+                                $row->workflow_status,
+                                optional($row->published_at)->format('d/m/Y H:i'),
+                                (int) $row->minutes_versions_count,
+                            ], ';');
+                        }
+                    });
+            }
+
+            fclose($out);
+        }, 200, $headers);
+    }
+
+    public function exportSummaryPdf(Request $request)
+    {
+        $scope = $this->resolveCurrentUserScope();
+        $mode = in_array($request->get('mode'), ['monthly', 'annual'], true) ? $request->get('mode') : 'monthly';
+        $year = (int) ($request->get('year') ?: now()->year);
+        $month = (int) ($request->get('month') ?: now()->month);
+
+        $query = Meeting::query()
+            ->when($scope !== null, function ($q) use ($scope) {
+                $q->where('issuing_administration_id', $scope['administration_id'])
+                    ->where('sub_entity_code', $scope['sub_entity_code']);
+            }, function ($q) {
+                $q->where('organizer_id', Auth::id());
+            })
+            ->whereYear('starts_at', $year);
+
+        if ($mode === 'monthly') {
+            $query->whereMonth('starts_at', $month);
+        }
+
+        $meetings = $query->with(['room', 'organizer'])->orderBy('starts_at')->get();
+
+        $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('meetings.summary_pdf', [
+            'meetings' => $meetings,
+            'mode' => $mode,
+            'year' => $year,
+            'month' => $month,
+        ]);
+        $pdf->setPaper('a4', 'landscape');
+
+        return $pdf->download('synthese_reunions_' . $mode . '_' . now()->format('Ymd_His') . '.pdf');
     }
 
     private function abortIfMeetingOutsideScope(Meeting $meeting): void
@@ -279,5 +611,97 @@ class MeetingController extends Controller
             ->unique()
             ->values()
             ->all();
+    }
+
+    private function appendMinutesVersion(Meeting $meeting, string $note): void
+    {
+        $lastVersion = MeetingMinutesVersion::query()
+            ->where('meeting_id', $meeting->id)
+            ->max('version_no');
+
+        MeetingMinutesVersion::create([
+            'meeting_id' => $meeting->id,
+            'version_no' => ((int) $lastVersion) + 1,
+            'content' => (string) ($meeting->minutes_content ?? ''),
+            'created_by' => Auth::id(),
+            'note' => $note,
+            'workflow_status' => (string) ($meeting->workflow_status ?? 'draft'),
+        ]);
+    }
+
+    private function sendDiffusionEmails(Meeting $meeting): void
+    {
+        $meeting->loadMissing(['participants.user', 'attendances', 'room']);
+
+        $emails = collect();
+        foreach ($meeting->participants as $participant) {
+            $email = trim((string) ($participant->email ?: $participant->user?->email ?: ''));
+            if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $emails->push($email);
+            }
+        }
+        foreach ($meeting->attendances as $attendance) {
+            $email = trim((string) ($attendance->email ?: ''));
+            if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $emails->push($email);
+            }
+        }
+
+        $emails = $emails->unique()->values();
+        if ($emails->isEmpty()) {
+            return;
+        }
+
+        $subject = trim((string) ($meeting->diffusion_email_subject ?: 'Compte rendu de réunion - ' . $meeting->title));
+        $bodyTemplate = (string) ($meeting->diffusion_email_body ?: "Bonjour,\n\nVeuillez trouver ci-joint le compte rendu de la réunion {meeting_title}.\nDate: {meeting_date}\nSalle: {meeting_room}\n\nCordialement.");
+        $body = strtr($bodyTemplate, [
+            '{meeting_title}' => (string) $meeting->title,
+            '{meeting_date}' => (string) optional($meeting->starts_at)->format('d/m/Y H:i'),
+            '{meeting_room}' => (string) ($meeting->room?->name ?: 'N/A'),
+        ]);
+        if ($meeting->diffusion_ack_required) {
+            $body .= "\n\nMerci de répondre à cet e-mail pour accusé de réception.";
+        }
+
+        $minutesPdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('meetings.minutes_pdf', ['meeting' => $meeting])->output();
+        $attendancePdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('meetings.attendance_list_pdf', [
+            'meeting' => $meeting,
+            'attendances' => $meeting->attendances,
+        ])->output();
+
+        Mail::raw($body, function ($message) use ($emails, $subject, $minutesPdf, $attendancePdf, $meeting) {
+            $to = $emails->first();
+            $bcc = $emails->slice(1)->all();
+
+            $message->to($to)->subject($subject);
+            if (!empty($bcc)) {
+                $message->bcc($bcc);
+            }
+
+            $message->attachData($minutesPdf, 'compte_rendu_' . Str::slug($meeting->title) . '.pdf', [
+                'mime' => 'application/pdf',
+            ]);
+            $message->attachData($attendancePdf, 'liste_presence_' . Str::slug($meeting->title) . '.pdf', [
+                'mime' => 'application/pdf',
+            ]);
+
+            foreach ((array) ($meeting->attachments ?? []) as $attachment) {
+                $publicPath = (string) ($attachment['path'] ?? '');
+                if (!str_starts_with($publicPath, '/storage/')) {
+                    continue;
+                }
+
+                $relativePath = ltrim(substr($publicPath, strlen('/storage/')), '/');
+                if (!Storage::disk('public')->exists($relativePath)) {
+                    continue;
+                }
+
+                $message->attachData(
+                    Storage::disk('public')->get($relativePath),
+                    (string) ($attachment['name'] ?? basename($relativePath)),
+                    ['mime' => (string) ($attachment['mime'] ?? Storage::disk('public')->mimeType($relativePath) ?? 'application/octet-stream')]
+                );
+            }
+        });
     }
 }

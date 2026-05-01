@@ -47,6 +47,11 @@
         </div>
 
         <div>
+            <label class="block text-xs font-semibold text-gray-700 mb-1">Délai fixé (traitement)</label>
+            <input type="datetime-local" name="processing_deadline" value="{{ old('processing_deadline') }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+
+        <div>
             <label class="block text-xs font-semibold text-gray-700 mb-1">Rédacteur du compte rendu</label>
             <select name="minutes_writer_id" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                 <option value="">Sélectionner</option>
@@ -97,6 +102,11 @@
         </div>
 
         <div class="md:col-span-2">
+            <label class="block text-xs font-semibold text-gray-700 mb-1">Modèle de compte rendu personnalisable</label>
+            <textarea name="minutes_template" rows="6" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Saisissez le modèle de compte rendu...">{{ old('minutes_template') }}</textarea>
+        </div>
+
+        <div class="md:col-span-2">
             <label class="block text-xs font-semibold text-gray-700 mb-1">Participants internes</label>
             <select name="participants[]" multiple class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm h-40">
                 @foreach($users as $u)
@@ -109,6 +119,26 @@
         <div class="md:col-span-2">
             <label class="block text-xs font-semibold text-gray-700 mb-1">Documents joints</label>
             <input type="file" name="attachments[]" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+        </div>
+
+        <div class="md:col-span-2 border-t border-gray-200 pt-4">
+            <h3 class="text-sm font-bold text-gray-800 mb-3">Diffusion automatique (email)</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="md:col-span-2">
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Objet personnalisable</label>
+                    <input type="text" name="diffusion_email_subject" value="{{ old('diffusion_email_subject') }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Ex: Compte rendu - Réunion hebdomadaire">
+                </div>
+                <div class="md:col-span-2">
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">Corps du message personnalisable</label>
+                    <textarea name="diffusion_email_body" rows="4" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" placeholder="Variables: {meeting_title}, {meeting_date}, {meeting_room}">{{ old('diffusion_email_body') }}</textarea>
+                </div>
+                <div class="md:col-span-2">
+                    <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+                        <input type="checkbox" name="diffusion_ack_required" value="1" {{ old('diffusion_ack_required') ? 'checked' : '' }}>
+                        Accusé de réception optionnel
+                    </label>
+                </div>
+            </div>
         </div>
     </div>
 
