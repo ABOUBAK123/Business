@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 namespace App\Http\Controllers;
 
@@ -929,7 +929,10 @@ class MeetingController extends Controller
                     if ($templatePath && str_starts_with($templatePath, '/storage/')) {
                         $relative = ltrim(str_replace('/storage/', '', $templatePath), '/');
                         Storage::disk('public')->put($relative, $content);
-                        $meeting->touch();
+                        // Le template source a été modifié: invalider l'analyse/scellé précédent.
+                        $meeting->template_sealed_path = null;
+                        $meeting->template_variables = null;
+                        $meeting->save();
                     }
                 }
             }
@@ -1102,9 +1105,30 @@ class MeetingController extends Controller
                 abort(403);
             }
 
-            // Préférer le modèle scellé, sinon l'original
-            $sealedPath   = (string) ($meeting->template_sealed_path ?? '');
-            $templatePath = $sealedPath ?: (string) ($meeting->minutes_template ?? '');
+            // Utiliser le modèle scellé seulement s'il est au moins aussi récent
+            // que le modèle source. Sinon, retomber sur l'original.
+            $minutesTemplatePath = (string) ($meeting->minutes_template ?? '');
+            $sealedPath          = (string) ($meeting->template_sealed_path ?? '');
+            $templatePath        = $minutesTemplatePath;
+
+            if ($sealedPath && str_starts_with($sealedPath, '/storage/') && $minutesTemplatePath && str_starts_with($minutesTemplatePath, '/storage/')) {
+                $sealedRelative  = ltrim(str_replace('/storage/', '', $sealedPath), '/');
+                $sourceRelative  = ltrim(str_replace('/storage/', '', $minutesTemplatePath), '/');
+                $sealedExists    = Storage::disk('public')->exists($sealedRelative);
+                $sourceExists    = Storage::disk('public')->exists($sourceRelative);
+
+                if ($sealedExists && $sourceExists) {
+                    $sealedAbs = Storage::disk('public')->path($sealedRelative);
+                    $sourceAbs = Storage::disk('public')->path($sourceRelative);
+
+                    $sealedMTime = @filemtime($sealedAbs) ?: 0;
+                    $sourceMTime = @filemtime($sourceAbs) ?: 0;
+
+                    if ($sealedMTime >= $sourceMTime) {
+                        $templatePath = $sealedPath;
+                    }
+                }
+            }
 
             if (!$templatePath || !str_starts_with($templatePath, '/storage/')) {
                 abort(404, 'Aucun modèle disponible pour cette réunion.');
