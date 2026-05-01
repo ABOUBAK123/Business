@@ -630,12 +630,8 @@ class CourrierController extends Controller
             ->where('type', 'arrive')
             ->where('statut', 'en_attente')
             ->when($adminId, fn($q) => $q->where('administration_id', $adminId))
-            // Courriers de l'entité du directeur OU sans entité identifiée (GEN/NULL) de la même administration
-            ->when($subEntityCode, fn($q) => $q->where(function ($q) use ($subEntityCode) {
-                $q->whereRaw('UPPER(sub_entity_code) = ?', [$subEntityCode])
-                  ->orWhereNull('sub_entity_code')
-                  ->orWhere('sub_entity_code', 'GEN');
-            }))
+                        // Seuls les courriers de la meme sous-entite que le directeur connecte
+                        ->when($subEntityCode, fn($q) => $q->whereRaw('UPPER(sub_entity_code) = ?', [$subEntityCode]))
             ->when($imputFiltre === 'urgent', fn($q) => $q->whereIn('urgence', ['urgent', 'tres_urgent']))
             ->when($imputSearch !== '', fn($q) => $q->where(function ($q) use ($imputSearch) {
                 $q->where('objet', 'like', '%' . $imputSearch . '%')
