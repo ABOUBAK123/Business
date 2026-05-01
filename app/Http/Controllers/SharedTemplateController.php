@@ -1070,6 +1070,36 @@ class SharedTemplateController extends Controller
                         $newContent
                     );
                 }
+
+                // ── Matching tolérant (accents/apostrophes/espaces) ───────
+                // Couvre les variantes fréquentes de templates Word:
+                // - universite / université
+                // - l universite / l'université / l’université
+                // - séparateurs multiples (espaces, _, -)
+                $candidates = array_values(array_unique(array_filter([
+                    (string) $original,
+                    (string) $slug,
+                    (string) ($docxOrig ?? ''),
+                    (string) $slugSpaces,
+                ], static fn ($v) => trim((string) $v) !== '')));
+
+                foreach ($candidates as $candidate) {
+                    $loose = $this->buildLooseTokenPattern($candidate);
+                    if ($loose === '') {
+                        continue;
+                    }
+
+                    $newContent = preg_replace(
+                        '#\[\s*' . $loose . '\s*\]#iu',
+                        $val,
+                        $newContent
+                    );
+                    $newContent = preg_replace(
+                        '#\{\{\s*' . $loose . '\s*\}\}#iu',
+                        $val,
+                        $newContent
+                    );
+                }
             }
 
             if ($newContent !== $xmlContent) {
@@ -1084,6 +1114,50 @@ class SharedTemplateController extends Controller
         \Log::info('replaceInOfficeFile files_updated=' . count($toUpdate) . ' keys=' . implode(',', array_keys($toUpdate)));
 
         $zip->close();
+    }
+
+    /**
+     * Construit un motif regex souple pour faire correspondre un token de variable
+     * malgré les accents, apostrophes typographiques et séparateurs variés.
+     */
+    private function buildLooseTokenPattern(string $token): string
+    {
+        $token = trim($token);
+        if ($token === '') {
+            return '';
+        }
+
+        $ascii = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $token);
+        $normalized = $ascii !== false && $ascii !== '' ? $ascii : $token;
+
+        $parts = preg_split('//u', $normalized, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $out = '';
+
+        foreach ($parts as $char) {
+            $lower = mb_strtolower($char, 'UTF-8');
+
+            // Séparateurs souples entre mots.
+            if (preg_match("/[\\s_\\-'’]/u", $char)) {
+                $out .= "(?:[\\s\\x{00A0}_\\-'’]+)";
+                continue;
+            }
+
+            switch ($lower) {
+                case 'a': $out .= '[aàáâäãå]'; break;
+                case 'c': $out .= '[cç]'; break;
+                case 'e': $out .= '[eèéêë]'; break;
+                case 'i': $out .= '[iìíîï]'; break;
+                case 'n': $out .= '[nñ]'; break;
+                case 'o': $out .= '[oòóôöõ]'; break;
+                case 'u': $out .= '[uùúûü]'; break;
+                case 'y': $out .= '[yýÿ]'; break;
+                default:
+                    $out .= preg_quote($char, '#');
+                    break;
+            }
+        }
+
+        return $out;
     }
 
     /**
