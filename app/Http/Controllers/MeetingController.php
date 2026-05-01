@@ -1075,7 +1075,7 @@ class MeetingController extends Controller
 
             // Trouver chaque <w:p>…</w:p> dont le texte contient @@@ et le remplacer
             $sealed = preg_replace_callback(
-                '/<w:p[ >][\s\S]*?<\/w:p>/U',
+                '/<w:p[ >][\s\S]*?<\/w:p>/',  // pas de /U : *? doit rester lazy
                 static function (array $m) use ($signatureTableXml): string {
                     if (str_contains(strip_tags($m[0]), '@@@')) {
                         return $signatureTableXml;
@@ -1209,7 +1209,7 @@ class MeetingController extends Controller
 
             // Traite chaque <w:p>…</w:p> individuellement sans re-sérialiser tout le DOM
             $result = preg_replace_callback(
-                '/<w:p[ >][\s\S]*?<\/w:p>/U',
+                '/<w:p[ >][\s\S]*?<\/w:p>/',  // pas de /U : *? doit rester lazy
                 static function (array $m) use ($normalizedValues): string {
                     $paraXml = $m[0];
 
