@@ -1118,7 +1118,8 @@ class SharedTemplateController extends Controller
 
     /**
      * Construit un motif regex souple pour faire correspondre un token de variable
-     * malgré les accents, apostrophes typographiques et séparateurs variés.
+        * malgré les accents, apostrophes typographiques, séparateurs variés
+        * et fragmentations XML Word (balises intercalées entre caractères).
      */
     private function buildLooseTokenPattern(string $token): string
     {
@@ -1132,27 +1133,29 @@ class SharedTemplateController extends Controller
 
         $parts = preg_split('//u', $normalized, -1, PREG_SPLIT_NO_EMPTY) ?: [];
         $out = '';
+        $xmlBridge = '(?:<[^>]+>|[\s\x{00A0}]|&nbsp;|&#160;)*';
+        $xmlSep = '(?:<[^>]+>|[\s\x{00A0}_\-\x27’]|&nbsp;|&#160;)+';
 
         foreach ($parts as $char) {
             $lower = mb_strtolower($char, 'UTF-8');
 
             // Séparateurs souples entre mots.
             if (preg_match("/[\\s_\\-'’]/u", $char)) {
-                $out .= "(?:[\\s\\x{00A0}_\\-'’]+)";
+                $out .= $xmlSep;
                 continue;
             }
 
             switch ($lower) {
-                case 'a': $out .= '[aàáâäãå]'; break;
-                case 'c': $out .= '[cç]'; break;
-                case 'e': $out .= '[eèéêë]'; break;
-                case 'i': $out .= '[iìíîï]'; break;
-                case 'n': $out .= '[nñ]'; break;
-                case 'o': $out .= '[oòóôöõ]'; break;
-                case 'u': $out .= '[uùúûü]'; break;
-                case 'y': $out .= '[yýÿ]'; break;
+                case 'a': $out .= '[aàáâäãå]' . $xmlBridge; break;
+                case 'c': $out .= '[cç]' . $xmlBridge; break;
+                case 'e': $out .= '[eèéêë]' . $xmlBridge; break;
+                case 'i': $out .= '[iìíîï]' . $xmlBridge; break;
+                case 'n': $out .= '[nñ]' . $xmlBridge; break;
+                case 'o': $out .= '[oòóôöõ]' . $xmlBridge; break;
+                case 'u': $out .= '[uùúûü]' . $xmlBridge; break;
+                case 'y': $out .= '[yýÿ]' . $xmlBridge; break;
                 default:
-                    $out .= preg_quote($char, '#');
+                    $out .= preg_quote($char, '#') . $xmlBridge;
                     break;
             }
         }

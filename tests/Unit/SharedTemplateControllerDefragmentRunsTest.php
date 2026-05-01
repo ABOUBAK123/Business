@@ -18,6 +18,16 @@ class SharedTemplateControllerDefragmentRunsTest extends TestCase
         return (string) $method->invoke($controller, $xml);
     }
 
+    private function callBuildLooseTokenPattern(string $token): string
+    {
+        $controller = new SharedTemplateController();
+        $ref = new ReflectionClass($controller);
+        $method = $ref->getMethod('buildLooseTokenPattern');
+        $method->setAccessible(true);
+
+        return (string) $method->invoke($controller, $token);
+    }
+
     public function test_defragment_runs_keeps_complex_paragraph_unchanged(): void
     {
         $xml = '<w:document><w:body>'
@@ -70,6 +80,15 @@ class SharedTemplateControllerDefragmentRunsTest extends TestCase
             'Variable fragmented by proofErr must be merged into a single text node.');
         $this->assertStringNotContainsString('<w:proofErr', $out,
             'proofErr markers must be removed in rebuilt paragraph.');
+    }
+
+    public function test_loose_token_pattern_matches_fragmented_xml_and_typographic_apostrophe(): void
+    {
+        $pattern = $this->callBuildLooseTokenPattern("nom de l universite");
+        $fragmented = "n</w:t></w:r><w:r><w:t>om de l’université";
+
+        $this->assertSame(1, preg_match('~' . $pattern . '~iu', $fragmented),
+            'Loose pattern must match token even when split by XML tags and typographic apostrophe.');
     }
 
 }
