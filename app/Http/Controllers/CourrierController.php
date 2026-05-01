@@ -604,15 +604,18 @@ class CourrierController extends Controller
             ]);
         }
 
-        $adminId     = $this->administrationId();
-        $imputFiltre = $request->get('imp_filtre', 'tous');
-        $imputSearch = trim($request->get('imp_q', ''));
+        $adminId        = $this->administrationId();
+        $subEntityCode  = $this->currentUserSubEntityCode(); // entité du directeur connecté
+        $imputFiltre    = $request->get('imp_filtre', 'tous');
+        $imputSearch    = trim($request->get('imp_q', ''));
 
         $archivalThreshold = $this->archivalThreshold();
         $query = Courrier::with(['enregistrePar'])
             ->where('type', 'arrive')
             ->where('statut', 'en_attente')
             ->when($adminId, fn($q) => $q->where('administration_id', $adminId))
+            // Seuls les courriers enregistrés dans l'entité du directeur connecté
+            ->when($subEntityCode, fn($q) => $q->whereRaw('UPPER(sub_entity_code) = ?', [$subEntityCode]))
             ->when($imputFiltre === 'urgent', fn($q) => $q->whereIn('urgence', ['urgent', 'tres_urgent']))
             ->when($imputSearch !== '', fn($q) => $q->where(function ($q) use ($imputSearch) {
                 $q->where('objet', 'like', '%' . $imputSearch . '%')
