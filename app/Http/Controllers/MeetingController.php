@@ -795,7 +795,7 @@ class MeetingController extends Controller
         $payload = [
             'document' => [
                 'fileType'    => $fileExt,
-                'key'         => 'meeting-tpl-' . $meeting->id . '-' . $meeting->updated_at->timestamp,
+                'key'         => 'meeting-tpl-' . $meeting->id . '-' . ($meeting->updated_at?->timestamp ?? time()),
                 'title'       => 'Modèle – ' . $meeting->title,
                 'url'         => $docUrl,
                 'permissions' => ['edit' => true, 'download' => true, 'print' => true],
@@ -805,7 +805,7 @@ class MeetingController extends Controller
                 'mode'        => 'edit',
                 'lang'        => 'fr',
                 'callbackUrl' => $callbackUrl,
-                'user'        => ['id' => 'u-' . Auth::id(), 'name' => Auth::user()->name ?? 'Utilisateur'],
+                'user'        => ['id' => 'u-' . Auth::id(), 'name' => Auth::user()?->name ?? 'Utilisateur'],
                 'customization' => [
                     'autosave'      => true,
                     'compactHeader' => true,

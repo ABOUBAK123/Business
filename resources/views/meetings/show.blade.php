@@ -245,10 +245,21 @@
 </div>
 
 <script>
-const OO_TPL_CONFIG_URL = '{{ route('meetings.template.oo.config', $meeting) }}';
+@php
+    try {
+        $tplOoConfigUrl = route('meetings.template.oo.config', $meeting);
+    } catch (\Exception $e) {
+        $tplOoConfigUrl = null;
+    }
+@endphp
+const OO_TPL_CONFIG_URL = @json($tplOoConfigUrl);
 const OO_TPL_CSRF = '{{ csrf_token() }}';
 
 async function openTemplateInOO() {
+    if (!OO_TPL_CONFIG_URL) {
+        alert('La route OnlyOffice n\'est pas disponible. Vérifiez le cache des routes côté serveur (php artisan route:cache).');
+        return;
+    }
     const modal   = document.getElementById('oo-tpl-modal');
     const loading = document.getElementById('oo-tpl-loading');
     const frame   = document.getElementById('oo-tpl-frame');
