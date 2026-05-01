@@ -232,6 +232,8 @@ Route::middleware('auth')->group(function () {
     // Salles de reunion
     Route::get('/meeting-rooms', [MeetingRoomController::class, 'index'])->name('meetings.rooms.index');
     Route::post('/meeting-rooms', [MeetingRoomController::class, 'store'])->name('meetings.rooms.store');
+    Route::put('/meeting-rooms/{room}', [MeetingRoomController::class, 'update'])->name('meetings.rooms.update');
+    Route::delete('/meeting-rooms/{room}', [MeetingRoomController::class, 'destroy'])->name('meetings.rooms.destroy');
 
     // Vérification QR
     Route::get('/qr-verification',        [QrVerificationController::class, 'index'])->name('qr-verification.index');
