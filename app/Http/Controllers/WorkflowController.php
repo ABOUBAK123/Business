@@ -167,8 +167,19 @@ class WorkflowController extends Controller
             return response()->json($workflows->map(fn($wf) => $this->formatWorkflow($wf))->values());
         }
 
-        $users = User::where('status', 'active')
-            ->where('role', 'signer')
+        $currentAdminId = Auth::user()?->profile?->administration_id;
+        $usersQuery = User::where('status', 'active')
+            ->where('role', 'signer');
+
+        if ($currentAdminId) {
+            $usersQuery->whereHas('profile', function ($query) use ($currentAdminId) {
+                $query->where('administration_id', $currentAdminId);
+            });
+        } else {
+            $usersQuery->whereRaw('1 = 0');
+        }
+
+        $users = $usersQuery
             ->orderBy('name')
             ->get(['id', 'name', 'full_name', 'email']);
 
@@ -182,10 +193,21 @@ class WorkflowController extends Controller
 
     public function create()
     {
-        $users = User::where('status', 'active')
-                     ->where('role', 'signer')
-                     ->orderBy('name')
-                     ->get(['id', 'name', 'email']);
+        $currentAdminId = Auth::user()?->profile?->administration_id;
+        $usersQuery = User::where('status', 'active')
+            ->where('role', 'signer');
+
+        if ($currentAdminId) {
+            $usersQuery->whereHas('profile', function ($query) use ($currentAdminId) {
+                $query->where('administration_id', $currentAdminId);
+            });
+        } else {
+            $usersQuery->whereRaw('1 = 0');
+        }
+
+        $users = $usersQuery
+            ->orderBy('name')
+            ->get(['id', 'name', 'email']);
         return view('workflows.create', compact('users'));
     }
 
