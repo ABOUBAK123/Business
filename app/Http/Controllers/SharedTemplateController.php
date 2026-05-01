@@ -1090,13 +1090,17 @@ class SharedTemplateController extends Controller
                         continue;
                     }
 
+                    // Tolère des décorations autour du token dans le template:
+                    // {{(MATRICULE_1)}}, {{« INTITULE »}}, etc.
+                    $decor = "(?:<[^>]+>|[\\s\\x{00A0}\\x{00AB}\\x{00BB}\"'()«»]|&nbsp;|&#160;)*";
+
                     $newContent = preg_replace(
-                        '~\[\s*' . $loose . '\s*\]~iu',
+                        '~\[\s*' . $decor . $loose . $decor . '\s*\]~iu',
                         $val,
                         $newContent
                     );
                     $newContent = preg_replace(
-                        '~\{\{\s*' . $loose . '\s*\}\}~iu',
+                        '~\{\{\s*' . $decor . $loose . $decor . '\s*\}\}~iu',
                         $val,
                         $newContent
                     );
@@ -1333,7 +1337,7 @@ class SharedTemplateController extends Controller
                 case 'u': $out .= '[uùúûü]' . $xmlBridge; break;
                 case 'y': $out .= '[yýÿ]' . $xmlBridge; break;
                 default:
-                    $out .= preg_quote($char, '#') . $xmlBridge;
+                    $out .= preg_quote($char, '~') . $xmlBridge;
                     break;
             }
         }
