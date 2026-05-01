@@ -51,16 +51,14 @@
                         <div class="flex items-center gap-2">
                             <button
                                 type="button"
-                                data-room='@json([
-                                    "id" => (string) $room->id,
-                                    "name" => (string) ($room->name ?? ""),
-                                    "capacity" => (string) ($room->capacity ?? ""),
-                                    "location" => (string) ($room->location ?? ""),
-                                    "description" => (string) ($room->description ?? ""),
-                                    "status" => (string) ($room->status ?? "active"),
-                                    "maintenance_status" => (string) ($room->maintenance_status ?? "operational"),
-                                    "equipments" => (array) ($room->equipments ?? []),
-                                ])'
+                                data-room-id="{{ (string) $room->id }}"
+                                data-room-name="{{ (string) ($room->name ?? '') }}"
+                                data-room-capacity="{{ (string) ($room->capacity ?? '') }}"
+                                data-room-location="{{ (string) ($room->location ?? '') }}"
+                                data-room-description="{{ (string) ($room->description ?? '') }}"
+                                data-room-status="{{ (string) ($room->status ?? 'active') }}"
+                                data-room-maintenance-status="{{ (string) ($room->maintenance_status ?? 'operational') }}"
+                                data-room-equipments="{{ collect($room->equipments ?? [])->join(', ') }}"
                                 class="js-open-edit-room px-2.5 py-1.5 rounded-lg bg-blue-100 text-blue-700 text-xs font-semibold hover:bg-blue-200"
                             >
                                 Modifier
@@ -148,12 +146,21 @@ function closeEditRoomModal() {
 
 document.querySelectorAll('.js-open-edit-room').forEach(function (button) {
     button.addEventListener('click', function () {
-        try {
-            const room = JSON.parse(this.dataset.room || '{}');
-            openEditRoomModal(room);
-        } catch (e) {
-            alert('Impossible d\'ouvrir le formulaire de modification.');
-        }
+        const room = {
+            id: this.dataset.roomId || '',
+            name: this.dataset.roomName || '',
+            capacity: this.dataset.roomCapacity || '',
+            location: this.dataset.roomLocation || '',
+            description: this.dataset.roomDescription || '',
+            status: this.dataset.roomStatus || 'active',
+            maintenance_status: this.dataset.roomMaintenanceStatus || 'operational',
+            equipments: (this.dataset.roomEquipments || '')
+                .split(',')
+                .map(v => v.trim())
+                .filter(Boolean),
+        };
+
+        openEditRoomModal(room);
     });
 });
 
