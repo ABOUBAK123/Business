@@ -4,10 +4,26 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 
 class ActRequestSubmission extends Model
 {
     use HasUuids;
+
+    protected static function booted(): void
+    {
+        static::updated(function (self $submission): void {
+            if (!$submission->wasChanged('status')) {
+                return;
+            }
+
+            $oldStatus = (string) $submission->getOriginal('status');
+            $newStatus = (string) $submission->status;
+
+            $submission->sendStatusChangeEmail($oldStatus, $newStatus);
+        });
+    }
 
     protected $fillable = [
         'tracking_number',
@@ -44,5 +60,64 @@ class ActRequestSubmission extends Model
     public function recipientAdministration()
     {
         return $this->belongsTo(RecipientAdministration::class, 'recipient_administration_id');
+    }
+
+    private function sendStatusChangeEmail(string $oldStatus, string $newStatus): void
+    {
+        $recipientEmail = trim((string) ($this->applicant_email ?? ''));
+        if ($recipientEmail === '' || !filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)) {
+            return;
+        }
+
+        $labels = [
+            'pending' => 'En attente',
+            'in_progress' => 'En cours de traitement',
+            'sent' => 'Envoyee',
+            'recu' => 'Recu',
+            'treated' => 'Terminee',
+            'rejected' => 'Refusee',
+        ];
+
+        $oldLabel = $labels[$oldStatus] ?? ucfirst(str_replace('_', ' ', $oldStatus));
+        $newLabel = $labels[$newStatus] ?? ucfirst(str_replace('_', ' ', $newStatus));
+
+        $trackingNumber = (string) ($this->tracking_number ?: '-');
+        $trackingUrl = '';
+
+        try {
+            if (!empty($this->tracking_token)) {
+                $trackingUrl = route('public.act-requests.track', ['tracking_token' => $this->tracking_token]);
+            }
+        } catch (\Throwable $e) {
+            $trackingUrl = '';
+        }
+
+        $subject = 'Evolution de votre demande d\'acte (' . $trackingNumber . ')';
+        $body = "Bonjour,\n\n"
+            . "Le statut de votre demande d'acte a change.\n"
+            . "Numero de traitement : {$trackingNumber}\n"
+            . "Ancien statut : {$oldLabel}\n"
+            . "Nouveau statut : {$newLabel}\n";
+
+        if ($trackingUrl !== '') {
+            $body .= "\nSuivi de votre demande : {$trackingUrl}\n";
+        }
+
+        $body .= "\nMerci.";
+
+        try {
+            Mail::raw($body, function ($message) use ($recipientEmail, $subject): void {
+                $message->to($recipientEmail)->subject($subject);
+            });
+        } catch (\Throwable $e) {
+            Log::warning('ActRequestSubmission status email failed', [
+                'submission_id' => (string) $this->id,
+                'tracking_number' => (string) $this->tracking_number,
+                'recipient_email' => $recipientEmail,
+                'from_status' => $oldStatus,
+                'to_status' => $newStatus,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }
