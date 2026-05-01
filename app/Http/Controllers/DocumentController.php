@@ -270,7 +270,7 @@ class DocumentController extends Controller
                         ->where('recipient_administration_id', $share->recipient_administration_id)
                         ->where('applicant_email', (string) ($share->applicant_email ?? ''))
                         ->where('applicant_full_name', (string) ($share->applicant_full_name ?? ''))
-                        ->whereIn('status', ['pending', 'in_progress', 'sent'])
+                        ->whereIn('status', ['pending', 'in_progress', 'sent', 'recu'])
                         ->latest()
                         ->first();
                 }
