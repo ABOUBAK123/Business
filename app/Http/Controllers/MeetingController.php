@@ -1189,73 +1189,95 @@ class MeetingController extends Controller
         /**
          * Remplace les placeholders {{ var }} en travaillant au niveau texte de
          * chaque paragraphe DOCX, pour gérer les placeholders split en plusieurs runs.
+         * Utilise exclusivement la manipulation de chaîne/regex pour éviter que
+         * DOMDocument::saveXML() ne corrompe ou ne supprime des paragraphes Word.
          */
         private function replaceTemplateVariablesInDocxXml(string $xml, array $values): string
         {
+            // Normalise les clés : espaces/tirets/underscores → underscore, minuscules
             $normalizedValues = [];
             foreach ($values as $k => $v) {
-                $name = trim((string) $k);
-                if (!preg_match('/^[a-zA-Z0-9_]+$/', $name)) {
-                    continue;
+                $key = strtolower(preg_replace('/[\s\-_]+/', '_', trim((string) $k)));
+                if ($key !== '') {
+                    $normalizedValues[$key] = (string) $v;
                 }
-                $normalizedValues[strtolower($name)] = (string) $v;
             }
 
             if (empty($normalizedValues)) {
                 return $xml;
             }
 
-            $dom = new \DOMDocument();
-            $prev = libxml_use_internal_errors(true);
-            $loaded = $dom->loadXML($xml, LIBXML_NONET | LIBXML_NOBLANKS);
-            libxml_clear_errors();
-            libxml_use_internal_errors($prev);
+            // Traite chaque <w:p>…</w:p> individuellement sans re-sérialiser tout le DOM
+            $result = preg_replace_callback(
+                '/<w:p[ >][\s\S]*?<\/w:p>/U',
+                static function (array $m) use ($normalizedValues): string {
+                    $paraXml = $m[0];
 
-            if (!$loaded) {
-                return $xml;
-            }
+                    // Concatène le contenu de tous les <w:t> du paragraphe
+                    if (!preg_match_all('/<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>/s', $paraXml, $tMatches)) {
+                        return $paraXml;
+                    }
 
-            $xp = new \DOMXPath($dom);
-            $xp->registerNamespace('w', 'http://schemas.openxmlformats.org/wordprocessingml/2006/main');
+                    $fullText = implode('', $tMatches[1]);
 
-            $paragraphs = $xp->query('//w:p');
-            foreach ($paragraphs as $p) {
-                $textNodes = $xp->query('.//w:t', $p);
-                if (!$textNodes || $textNodes->length === 0) {
-                    continue;
-                }
+                    if (!str_contains($fullText, '{{')) {
+                        return $paraXml;
+                    }
 
-                $joined = '';
-                foreach ($textNodes as $t) {
-                    $joined .= (string) $t->nodeValue;
-                }
+                    // Remplace {{ var }} — accepte espaces, underscores et tirets dans le nom
+                    $replaced = preg_replace_callback(
+                        '/\{\{\s*([a-zA-Z0-9_\s\-]+?)\s*\}\}/u',
+                        static function (array $mm) use ($normalizedValues): string {
+                            $raw  = trim((string) ($mm[1] ?? ''));
+                            // Normalisation identique aux clés
+                            $key  = strtolower(preg_replace('/[\s\-_]+/', '_', $raw));
+                            if (array_key_exists($key, $normalizedValues)) {
+                                return $normalizedValues[$key];
+                            }
+                            // Correspondance floue : ignore tous les séparateurs
+                            $flat = preg_replace('/[\s\-_]+/', '', strtolower($raw));
+                            foreach ($normalizedValues as $nk => $nv) {
+                                if (preg_replace('/[\s\-_]+/', '', $nk) === $flat) {
+                                    return $nv;
+                                }
+                            }
+                            return $mm[0]; // aucune valeur → laisser intact
+                        },
+                        $fullText
+                    );
 
-                if (!str_contains($joined, '{{')) {
-                    continue;
-                }
+                    if ($replaced === null || $replaced === $fullText) {
+                        return $paraXml;
+                    }
 
-                $replaced = preg_replace_callback(
-                    '/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/u',
-                    static function (array $m) use ($normalizedValues): string {
-                        $needle = strtolower((string) ($m[1] ?? ''));
-                        if (!array_key_exists($needle, $normalizedValues)) {
-                            return $m[0];
-                        }
-                        return $normalizedValues[$needle];
-                    },
-                    $joined
-                );
+                    // Réécrit dans le XML : premier <w:t> reçoit le texte complet,
+                    // les suivants sont vidés — la structure OOXML reste intacte.
+                    $firstDone = false;
+                    $newPara = preg_replace_callback(
+                        '/<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>/s',
+                        static function (array $tm) use ($replaced, &$firstDone): string {
+                            if (!$firstDone) {
+                                $firstDone = true;
+                                preg_match('/^<w:t([^>]*)>/', $tm[0], $tagM);
+                                $attrs = $tagM[1] ?? '';
+                                // Ajouter xml:space="preserve" si le texte a des espaces aux bords
+                                if (!str_contains($attrs, 'xml:space') &&
+                                    (str_starts_with($replaced, ' ') || str_ends_with($replaced, ' '))) {
+                                    $attrs .= ' xml:space="preserve"';
+                                }
+                                $safe = htmlspecialchars($replaced, ENT_XML1 | ENT_COMPAT, 'UTF-8');
+                                return "<w:t{$attrs}>{$safe}</w:t>";
+                            }
+                            return '<w:t/>';
+                        },
+                        $paraXml
+                    );
 
-                if ($replaced === null || $replaced === $joined) {
-                    continue;
-                }
+                    return $newPara ?? $paraXml;
+                },
+                $xml
+            );
 
-                $textNodes->item(0)->nodeValue = $replaced;
-                for ($i = 1; $i < $textNodes->length; $i++) {
-                    $textNodes->item($i)->nodeValue = '';
-                }
-            }
-
-            return $dom->saveXML() ?: $xml;
+            return $result ?? $xml;
         }
 }
