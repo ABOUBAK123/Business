@@ -31,7 +31,7 @@ class MeetingController extends Controller
         $q = trim((string) $request->get('q', ''));
         $scope = $this->resolveCurrentUserScope();
 
-        $meetings = Meeting::with(['room', 'organizer', 'minutesWriter'])
+        $meetings = Meeting::with(['room', 'organizer', 'minutesWriter', 'validator', 'validatedByUser'])
             ->when($scope !== null, function ($query) use ($scope) {
                 $query->where('issuing_administration_id', $scope['administration_id'])
                     ->where('sub_entity_code', $scope['sub_entity_code']);
@@ -103,6 +103,7 @@ class MeetingController extends Controller
             'ends_at' => 'required|date|after:starts_at',
             'processing_deadline' => 'nullable|date|after_or_equal:starts_at',
             'minutes_writer_id' => 'required|uuid|exists:users,id',
+            'validator_id' => 'required|uuid|exists:users,id',
             'agenda' => 'nullable|string',
             'minutes_template_file' => 'nullable|file|mimes:doc,docx|max:20480',
             'priority' => 'required|in:low,normal,high,urgent',
@@ -121,6 +122,12 @@ class MeetingController extends Controller
         $allowedUserIds = $this->resolveScopeUserIds($scope);
         if (!in_array((string) $validated['minutes_writer_id'], $allowedUserIds, true)) {
             return back()->withInput()->with('error', 'Le rédacteur doit appartenir à la même entité sous tutelle.');
+        }
+        if (!in_array((string) $validated['validator_id'], $allowedUserIds, true)) {
+            return back()->withInput()->with('error', 'Le validateur doit appartenir à la même entité sous tutelle.');
+        }
+        if ((string) $validated['validator_id'] === (string) $validated['minutes_writer_id']) {
+            return back()->withInput()->with('error', 'Le validateur doit être différent du rédacteur.');
         }
 
         $requestedParticipants = array_map('strval', (array) ($validated['participants'] ?? []));
@@ -177,6 +184,7 @@ class MeetingController extends Controller
             'estimated_duration_minutes' => $startsAt->diffInMinutes($endsAt),
             'organizer_id' => Auth::id(),
             'minutes_writer_id' => $validated['minutes_writer_id'],
+            'validator_id' => $validated['validator_id'],
             'issuing_administration_id' => $scope['administration_id'],
             'sub_entity_code' => $scope['sub_entity_code'],
             'agenda' => $validated['agenda'] ?? null,
@@ -188,6 +196,9 @@ class MeetingController extends Controller
             'status' => 'planned',
             'workflow_status' => 'draft',
             'review_requested' => false,
+            'validation_requested_at' => null,
+            'validated_by' => null,
+            'validated_at' => null,
             'diffusion_email_subject' => $validated['diffusion_email_subject'] ?? null,
             'diffusion_email_body' => $validated['diffusion_email_body'] ?? null,
             'diffusion_ack_required' => (bool) ($validated['diffusion_ack_required'] ?? false),
@@ -229,7 +240,7 @@ class MeetingController extends Controller
 
         $this->abortIfMeetingOutsideScope($meeting);
 
-        $meeting->load(['room', 'organizer', 'minutesWriter', 'participants.user', 'attendances', 'minutesVersions.creator']);
+        $meeting->load(['room', 'organizer', 'minutesWriter', 'validator', 'validatedByUser', 'participants.user', 'attendances', 'minutesVersions.creator']);
 
         $qrUrl = route('meetings.qr.show', ['token' => $meeting->qr_token]);
 
@@ -254,6 +265,13 @@ class MeetingController extends Controller
     public function updateMinutes(Request $request, Meeting $meeting)
     {
         $this->abortIfMeetingOutsideScope($meeting);
+
+        $currentUserId = (string) Auth::id();
+        $isWriter = (string) ($meeting->minutes_writer_id ?? '') === $currentUserId;
+        $isValidator = (string) ($meeting->validator_id ?? '') === $currentUserId;
+        if (!$isWriter && !$isValidator) {
+            return back()->with('error', 'Seul le rédacteur ou le validateur peut modifier le compte rendu.');
+        }
 
         $validated = $request->validate([
             'minutes_content' => 'required|string',
@@ -289,13 +307,25 @@ class MeetingController extends Controller
                 return back()->with('error', 'Cette transition n\'est pas autorisée depuis le statut actuel.');
             }
 
+            if ((string) $meeting->minutes_writer_id !== (string) Auth::id()) {
+                return back()->with('error', 'Seul le rédacteur peut envoyer le compte rendu en validation.');
+            }
+
+            if (empty($meeting->validator_id)) {
+                return back()->with('error', 'Aucun validateur n\'est défini pour cette réunion.');
+            }
+
             $meeting->workflow_status = 'in_validation';
             $meeting->review_requested = false;
             $meeting->review_comment = null;
+            $meeting->validation_requested_at = now();
+            $meeting->validated_by = null;
+            $meeting->validated_at = null;
             $meeting->save();
             $this->appendMinutesVersion($meeting, 'Passage en validation');
+            $this->sendValidationRequestEmail($meeting);
 
-            return back()->with('success', 'Compte rendu envoyé en validation.');
+            return back()->with('success', 'Compte rendu envoyé en validation et notification email transmise au validateur.');
         }
 
         if ($action === 'validate') {
@@ -303,19 +333,35 @@ class MeetingController extends Controller
                 return back()->with('error', 'Le compte rendu doit être en validation.');
             }
 
+            if ((string) $meeting->validator_id !== (string) Auth::id()) {
+                return back()->with('error', 'Seul le validateur désigné peut valider ce compte rendu.');
+            }
+
             $meeting->workflow_status = 'validated';
             $meeting->review_requested = false;
             $meeting->review_comment = null;
+            $meeting->validated_by = Auth::id();
+            $meeting->validated_at = now();
             $meeting->save();
-            $this->appendMinutesVersion($meeting, 'Compte rendu validé');
+            $this->appendMinutesVersion($meeting, 'Compte rendu validé par ' . (Auth::user()?->name ?? 'Validateur'));
 
             return back()->with('success', 'Compte rendu validé.');
         }
 
         if ($action === 'request_review') {
+            if ((string) $meeting->validator_id !== (string) Auth::id()) {
+                return back()->with('error', 'Seul le validateur désigné peut demander une relecture.');
+            }
+
+            if ($meeting->workflow_status !== 'in_validation') {
+                return back()->with('error', 'La relecture ne peut être demandée que pendant la validation.');
+            }
+
             $meeting->workflow_status = 'draft';
             $meeting->review_requested = true;
             $meeting->review_comment = (string) ($validated['review_comment'] ?? 'Relecture demandée');
+            $meeting->validated_by = null;
+            $meeting->validated_at = null;
             $meeting->save();
             $this->appendMinutesVersion($meeting, 'Demande de relecture');
 
@@ -694,6 +740,32 @@ class MeetingController extends Controller
                 'mime' => 'application/pdf',
             ]);
             $message->attachData($attendancePdf, 'liste_presence_' . Str::slug($meeting->title) . '.pdf', [
+
+        private function sendValidationRequestEmail(Meeting $meeting): void
+        {
+            $meeting->loadMissing(['validator', 'minutesWriter']);
+
+            $validatorEmail = trim((string) ($meeting->validator?->email ?? ''));
+            if ($validatorEmail === '' || !filter_var($validatorEmail, FILTER_VALIDATE_EMAIL)) {
+                return;
+            }
+
+            $showUrl = route('meetings.show', $meeting);
+            $writerName = (string) ($meeting->minutesWriter?->name ?: 'Rédacteur');
+            $subject = 'Validation requise - Compte rendu réunion: ' . $meeting->title;
+            $body = "Bonjour,\n\n"
+                . "Vous avez été désigné comme validateur pour le compte rendu de la réunion suivante:\n"
+                . "- Titre: {$meeting->title}\n"
+                . "- Date: " . (string) optional($meeting->starts_at)->format('d/m/Y H:i') . "\n"
+                . "- Rédacteur: {$writerName}\n\n"
+                . "Veuillez ouvrir la réunion pour corriger/valider le compte rendu:\n"
+                . "{$showUrl}\n\n"
+                . "Cordialement.";
+
+            Mail::raw($body, function ($message) use ($validatorEmail, $subject) {
+                $message->to($validatorEmail)->subject($subject);
+            });
+        }
                 'mime' => 'application/pdf',
             ]);
 
@@ -756,6 +828,13 @@ class MeetingController extends Controller
     public function templateOoConfig(Request $request, Meeting $meeting)
     {
         $this->abortIfMeetingOutsideScope($meeting);
+
+        $currentUserId = (string) Auth::id();
+        $isWriter = (string) ($meeting->minutes_writer_id ?? '') === $currentUserId;
+        $isValidator = (string) ($meeting->validator_id ?? '') === $currentUserId;
+        if (!$isWriter && !$isValidator) {
+            return response()->json(['error' => 'Seul le rédacteur ou le validateur peut ouvrir ce modèle dans OnlyOffice.'], 403);
+        }
 
         $templatePath = (string) ($meeting->minutes_template ?? '');
         if (!$templatePath || !str_starts_with($templatePath, '/storage/')) {

@@ -19,6 +19,7 @@ class Meeting extends Model
         'estimated_duration_minutes',
         'organizer_id',
         'minutes_writer_id',
+        'validator_id',
         'issuing_administration_id',
         'sub_entity_code',
         'agenda',
@@ -31,6 +32,9 @@ class Meeting extends Model
         'workflow_status',
         'review_requested',
         'review_comment',
+        'validation_requested_at',
+        'validated_by',
+        'validated_at',
         'writer_signature_path',
         'writer_signed_at',
         'published_at',
@@ -56,6 +60,8 @@ class Meeting extends Model
         'qr_valid_from' => 'datetime',
         'qr_valid_until' => 'datetime',
         'review_requested' => 'boolean',
+        'validation_requested_at' => 'datetime',
+        'validated_at' => 'datetime',
         'writer_signed_at' => 'datetime',
         'published_at' => 'datetime',
         'diffusion_ack_required' => 'boolean',
@@ -74,6 +80,16 @@ class Meeting extends Model
     public function minutesWriter()
     {
         return $this->belongsTo(User::class, 'minutes_writer_id');
+    }
+
+    public function validator()
+    {
+        return $this->belongsTo(User::class, 'validator_id');
+    }
+
+    public function validatedByUser()
+    {
+        return $this->belongsTo(User::class, 'validated_by');
     }
 
     public function administration()

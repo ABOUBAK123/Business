@@ -4,6 +4,11 @@
 @section('page-subtitle', 'Détails, participants et émargement')
 
 @section('content')
+@php
+    $currentUserId = (string) auth()->id();
+    $isWriter = (string) ($meeting->minutes_writer_id ?? '') === $currentUserId;
+    $isValidator = (string) ($meeting->validator_id ?? '') === $currentUserId;
+@endphp
 @include('meetings._nav')
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
     <div class="lg:col-span-2 bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
@@ -15,7 +20,10 @@
             <div><span class="text-gray-500">Délai fixé:</span> {{ $meeting->processing_deadline?->format('d/m/Y H:i') ?: '—' }}</div>
             <div><span class="text-gray-500">Organisateur:</span> {{ $meeting->organizer?->name }}</div>
             <div><span class="text-gray-500">Rédacteur:</span> {{ $meeting->minutesWriter?->name }}</div>
+            <div><span class="text-gray-500">Validateur:</span> {{ $meeting->validator?->name ?: '—' }}</div>
             <div><span class="text-gray-500">Workflow:</span> <span class="font-semibold">{{ $meeting->workflow_status ?? 'draft' }}</span></div>
+            <div><span class="text-gray-500">Validé par:</span> {{ $meeting->validatedByUser?->name ?: '—' }}</div>
+            <div><span class="text-gray-500">Date de validation:</span> {{ $meeting->validated_at?->format('d/m/Y H:i') ?: '—' }}</div>
         </div>
 
         <div>
@@ -56,10 +64,12 @@
                     <p class="text-sm font-semibold text-gray-800 truncate">{{ basename($meeting->minutes_template) }}</p>
                     <p class="text-xs text-gray-500">Modèle de compte rendu</p>
                 </div>
-                <button type="button" onclick="openTemplateInOO()"
-                        class="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#2453d6] text-white text-xs font-semibold hover:bg-[#1f47bb] whitespace-nowrap">
-                    <i class="fas fa-edit mr-1"></i> Ouvrir dans OnlyOffice
-                </button>
+                @if($isWriter || $isValidator)
+                    <button type="button" onclick="openTemplateInOO()"
+                            class="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#2453d6] text-white text-xs font-semibold hover:bg-[#1f47bb] whitespace-nowrap">
+                        <i class="fas fa-edit mr-1"></i> Ouvrir dans OnlyOffice
+                    </button>
+                @endif
             </div>
             @else
             <p class="text-sm text-gray-400 italic">Aucun modèle de compte rendu chargé pour cette réunion.</p>
@@ -76,21 +86,32 @@
         <div class="border-t border-gray-100 pt-4 space-y-3">
             <h3 class="font-semibold text-gray-800">Validation et signature</h3>
             <div class="flex flex-wrap gap-2">
-                <form method="POST" action="{{ route('meetings.workflow', $meeting) }}">@csrf<input type="hidden" name="action" value="submit_validation"><button class="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold">Envoyer en validation</button></form>
-                <form method="POST" action="{{ route('meetings.workflow', $meeting) }}">@csrf<input type="hidden" name="action" value="validate"><button class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold">Valider</button></form>
-                <form method="POST" action="{{ route('meetings.workflow', $meeting) }}" class="flex items-center gap-2">
-                    @csrf
-                    <input type="hidden" name="action" value="request_review">
-                    <input type="text" name="review_comment" placeholder="Commentaire de relecture" class="border border-gray-300 rounded-lg px-2 py-1 text-xs">
-                    <button class="px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-semibold">Demander relecture</button>
-                </form>
-                <form method="POST" action="{{ route('meetings.workflow', $meeting) }}" id="sign-form">
-                    @csrf
-                    <input type="hidden" name="action" value="sign_writer">
-                    <input type="hidden" name="signature" id="writer-signature-input">
-                    <button type="button" onclick="submitWriterSignature()" class="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold">Signature électronique du rédacteur</button>
-                </form>
-                <form method="POST" action="{{ route('meetings.workflow', $meeting) }}">@csrf<input type="hidden" name="action" value="publish"><button class="px-3 py-1.5 rounded-lg bg-purple-600 text-white text-xs font-semibold">Publier et diffuser</button></form>
+                @if($isWriter && $meeting->workflow_status === 'draft')
+                    <form method="POST" action="{{ route('meetings.workflow', $meeting) }}">@csrf<input type="hidden" name="action" value="submit_validation"><button class="px-3 py-1.5 rounded-lg bg-blue-600 text-white text-xs font-semibold">Envoyer en validation</button></form>
+                @endif
+
+                @if($isValidator && $meeting->workflow_status === 'in_validation')
+                    <form method="POST" action="{{ route('meetings.workflow', $meeting) }}">@csrf<input type="hidden" name="action" value="validate"><button class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold">Valider</button></form>
+                    <form method="POST" action="{{ route('meetings.workflow', $meeting) }}" class="flex items-center gap-2">
+                        @csrf
+                        <input type="hidden" name="action" value="request_review">
+                        <input type="text" name="review_comment" placeholder="Commentaire de relecture" class="border border-gray-300 rounded-lg px-2 py-1 text-xs">
+                        <button class="px-3 py-1.5 rounded-lg bg-amber-500 text-white text-xs font-semibold">Demander relecture</button>
+                    </form>
+                @endif
+
+                @if($isWriter)
+                    <form method="POST" action="{{ route('meetings.workflow', $meeting) }}" id="sign-form">
+                        @csrf
+                        <input type="hidden" name="action" value="sign_writer">
+                        <input type="hidden" name="signature" id="writer-signature-input">
+                        <button type="button" onclick="submitWriterSignature()" class="px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-xs font-semibold">Signature électronique du rédacteur</button>
+                    </form>
+                @endif
+
+                @if($isWriter)
+                    <form method="POST" action="{{ route('meetings.workflow', $meeting) }}">@csrf<input type="hidden" name="action" value="publish"><button class="px-3 py-1.5 rounded-lg bg-purple-600 text-white text-xs font-semibold">Publier et diffuser</button></form>
+                @endif
             </div>
 
             <div class="rounded-lg border border-gray-200 p-3">
