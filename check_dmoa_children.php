@@ -65,9 +65,9 @@ if ($assignments->isEmpty()) {
     foreach ($assignments as $a) {
         $user = DB::table('users')->where('id', $a->user_id)->first(['email']);
         $profile = DB::table('users')
-            ->join('profiles', 'users.profile_id', '=', 'profiles.id')
+            ->join('administration_profiles', 'users.profile_id', '=', 'administration_profiles.id')
             ->where('users.id', $a->user_id)
-            ->first(['profiles.name as profile_name', 'profiles.administration_id']);
+            ->first(['administration_profiles.name as profile_name', 'administration_profiles.administration_id']);
         echo "user={$user?->email} | sub_entity_code={$a->sub_entity_code} | profil={$profile?->profile_name} | admin_id={$profile?->administration_id}\n";
     }
 }
