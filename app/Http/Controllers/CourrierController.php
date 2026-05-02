@@ -522,10 +522,13 @@ class CourrierController extends Controller
      * Exemple : A-DMOA-00001-2026
      * La séquence est par type + code entité + année (00001 → 99999).
      */
-    private function prochainNumero(string $type): string
+    private function prochainNumero(string $type, ?string $forcedCode = null): string
     {
         $prefix = $type === 'arrive' ? 'A' : 'D';
-        $code   = $this->subEntityCode();
+        $code   = strtoupper(trim((string) ($forcedCode ?? $this->subEntityCode())));
+        if ($code === '') {
+            $code = 'GEN';
+        }
         $annee  = date('Y');
 
         // Compter les courriers existants pour ce type, ce code et cette année
@@ -542,10 +545,12 @@ class CourrierController extends Controller
     {
         $this->guardPermission('courrier.enregistrement');
         $typeForm = $request->get('type_courrier', 'arrive');
+        $scope = $this->currentUserCourrierScope();
+        $scopeCode = $scope['sub_entity_code'] ?? null;
         return view('courrier.index', [
             'subtab'         => 'enregistrement',
             'subtabs'        => $this->visibleSubtabs(),
-            'prochainNumero' => $this->prochainNumero($typeForm),
+            'prochainNumero' => $this->prochainNumero($typeForm, $scopeCode),
         ]);
     }
 
@@ -1256,7 +1261,7 @@ class CourrierController extends Controller
 
         $adminId = $scope['administration_id'];
         $subEntityCode = $scope['sub_entity_code'];
-        $numero  = $this->prochainNumero($type);
+        $numero  = $this->prochainNumero($type, $subEntityCode);
 
         // Gestion fichiers joints
         $pjPaths = [];
