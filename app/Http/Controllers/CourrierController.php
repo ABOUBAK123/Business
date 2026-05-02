@@ -183,19 +183,9 @@ class CourrierController extends Controller
             return collect();
         }
 
-        $base = SubEntity::query()
+        return SubEntity::query()
             ->where('scope_id', $adminId)
-            ->where('is_active', true);
-
-        $parent = (clone $base)
-            ->whereRaw('UPPER(code) = ?', [$parentCode])
-            ->first();
-
-        if ($parent) {
-            $base->where('scope_type', $parent->scope_type);
-        }
-
-        return $base
+            ->where('is_active', true)
             ->whereRaw('UPPER(parent_code) = ?', [$parentCode])
             ->orderBy('name')
             ->get(['id', 'code', 'name']);
