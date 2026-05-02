@@ -133,6 +133,16 @@ class CourrierController extends Controller
             return null;
         }
 
+        // Verrou de coherence: l'entite doit appartenir a l'administration du profil.
+        $entityBelongsToAdmin = SubEntity::query()
+            ->where('scope_id', $adminId)
+            ->whereRaw('UPPER(code) = ?', [$subEntityCode])
+            ->exists();
+
+        if (!$entityBelongsToAdmin) {
+            return null;
+        }
+
         return [
             'administration_id' => $adminId,
             'sub_entity_code' => $subEntityCode,
