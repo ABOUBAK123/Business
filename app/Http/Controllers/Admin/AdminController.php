@@ -760,6 +760,70 @@ class AdminController extends Controller
         return back()->with('success', 'Paramètres enregistrés.')->withInput(['tab' => $request->input('tab', 'settings')]);
     }
 
+    // ── Test SMTP ─────────────────────────────────────────────────────────────
+    public function testSmtp(Request $request)
+    {
+        abort_if(
+            !auth()->check() || auth()->user()->role !== 'admin',
+            403,
+            'Accès réservé aux administrateurs.'
+        );
+
+        $settings = AppSetting::whereIn('key', [
+            'mail_host', 'mail_port', 'mail_username', 'mail_password',
+            'mail_encryption', 'mail_from_address', 'mail_from_name',
+        ])->get()->keyBy('key');
+
+        $host       = $settings['mail_host']->value        ?? null;
+        $port       = (int) ($settings['mail_port']->value ?? 587);
+        $username   = $settings['mail_username']->value    ?? null;
+        $password   = $settings['mail_password']->value    ?? null;
+        $encryption = $settings['mail_encryption']->value  ?? 'tls';
+        $fromAddr   = $settings['mail_from_address']->value ?? null;
+        $fromName   = $settings['mail_from_name']->value    ?? config('app.name', 'E-Parapheur');
+
+        if (!$host || !$fromAddr) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Configuration SMTP incomplète (hôte ou adresse expéditeur manquant).',
+            ], 422);
+        }
+
+        // Override the mailer config at runtime
+        config([
+            'mail.default'                         => 'smtp',
+            'mail.mailers.smtp.host'               => $host,
+            'mail.mailers.smtp.port'               => $port,
+            'mail.mailers.smtp.username'           => $username,
+            'mail.mailers.smtp.password'           => $password,
+            'mail.mailers.smtp.encryption'         => $encryption ?: null,
+            'mail.mailers.smtp.timeout'            => 10,
+            'mail.from.address'                    => $fromAddr,
+            'mail.from.name'                       => $fromName,
+        ]);
+
+        try {
+            \Illuminate\Support\Facades\Mail::raw(
+                "Ceci est un e-mail de test envoyé depuis " . config('app.name', 'E-Parapheur') . ".\n\nSi vous recevez ce message, la configuration SMTP est correcte.",
+                function ($message) use ($fromAddr, $fromName) {
+                    $message->to($fromAddr, $fromName)
+                            ->subject('Test SMTP — ' . config('app.name', 'E-Parapheur'));
+                }
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => "E-mail de test envoyé avec succès à {$fromAddr}.",
+            ]);
+        } catch (\Exception $e) {
+            Log::error('SMTP test failed: ' . $e->getMessage());
+            return response()->json([
+                'success' => false,
+                'message' => 'Échec de l\'envoi : ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
     // ── API Signature ─────────────────────────────────────────────────────────
     public function saveSignatureProvider(Request $request)
     {

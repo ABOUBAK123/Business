@@ -4988,6 +4988,11 @@ function themingToggleDisable() {
             <button type="submit" class="px-6 py-2.5 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl text-sm transition flex items-center gap-2">
                 <i class="fas fa-save"></i> Enregistrer la configuration e-mail
             </button>
+            <button type="button" id="smtpTestBtn"
+                class="mt-3 px-6 py-2.5 bg-white border border-red-400 text-red-500 hover:bg-red-50 font-semibold rounded-xl text-sm transition flex items-center gap-2">
+                <i class="fas fa-paper-plane"></i> Tester la configuration SMTP
+            </button>
+            <div id="smtpTestResult" class="mt-3 hidden text-sm rounded-xl px-4 py-3 font-medium"></div>
         </div>
     </form>
 </div>
@@ -6485,6 +6490,50 @@ function editModalHandleChild(childCb) {
 })();
 </script>
 @endverbatim
+@endpush
+
+@push('scripts')
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const btn    = document.getElementById('smtpTestBtn');
+    const result = document.getElementById('smtpTestResult');
+    if (!btn) return;
+
+    btn.addEventListener('click', function () {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Envoi en cours…';
+        result.className = 'mt-3 text-sm rounded-xl px-4 py-3 font-medium hidden';
+        result.textContent = '';
+
+        fetch('{{ route('admin.smtp.test') }}', {
+            method: 'POST',
+            headers: {
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({}),
+        })
+        .then(r => r.json())
+        .then(data => {
+            result.textContent = data.message;
+            if (data.success) {
+                result.className = 'mt-3 text-sm rounded-xl px-4 py-3 font-medium bg-green-50 border border-green-300 text-green-700';
+            } else {
+                result.className = 'mt-3 text-sm rounded-xl px-4 py-3 font-medium bg-red-50 border border-red-300 text-red-700';
+            }
+        })
+        .catch(err => {
+            result.textContent = 'Erreur réseau : ' + err.message;
+            result.className = 'mt-3 text-sm rounded-xl px-4 py-3 font-medium bg-red-50 border border-red-300 text-red-700';
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-paper-plane"></i> Tester la configuration SMTP';
+        });
+    });
+});
+</script>
 @endpush
 
 @endsection
