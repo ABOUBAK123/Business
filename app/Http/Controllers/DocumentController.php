@@ -26,7 +26,59 @@ class DocumentController extends Controller
 {
     public function index(Request $request)
     {
-        $documents = Document::where('owner_id', Auth::id())
+        $user = Auth::user();
+        $userId = (string) ($user?->id ?? '');
+        $userEmail = (string) ($user?->email ?? '');
+
+        $subEntityCodes = UserDirectionAssignment::query()
+            ->where('user_id', $userId)
+            ->whereNotNull('sub_entity_code')
+            ->pluck('sub_entity_code')
+            ->map(fn ($code) => strtoupper(trim((string) $code)))
+            ->filter()
+            ->values();
+
+        $profile = $user?->profile;
+        $recipientAdminIds = collect();
+        if ($profile && $profile->administration_type === 'recipient' && $profile->administration_id) {
+            $recipientAdminIds = collect([$profile->administration_id]);
+        } else {
+            $adminCode = strtoupper(trim((string) ($profile?->administration?->code ?? '')));
+            if ($adminCode !== '') {
+                $recipientAdminIds = RecipientAdministration::query()
+                    ->whereRaw('UPPER(code) = ?', [$adminCode])
+                    ->pluck('id');
+            }
+        }
+
+        $sharedDocumentIds = DocumentShare::query()
+            ->where('mode', 'internal')
+            ->where(function ($q) {
+                $q->whereNull('expires_at')
+                  ->orWhere('expires_at', '>', now());
+            })
+            ->where(function ($q) use ($userId, $userEmail, $subEntityCodes, $recipientAdminIds) {
+                $q->where('recipient_name', 'user:' . $userId);
+
+                if ($userEmail !== '') {
+                    $q->orWhere('recipient_email', $userEmail);
+                }
+
+                foreach ($subEntityCodes as $code) {
+                    $q->orWhere('recipient_name', 'sub_entity:' . $code);
+                }
+
+                if ($recipientAdminIds->isNotEmpty()) {
+                    $q->orWhereIn('recipient_administration_id', $recipientAdminIds);
+                }
+            })
+            ->pluck('document_id')
+            ->unique()
+            ->values();
+
+        $documents = Document::query()
+            ->where('owner_id', $userId)
+            ->orWhereIn('id', $sharedDocumentIds)
             ->latest()
             ->get();
 
@@ -439,6 +491,8 @@ class DocumentController extends Controller
 
     public function toggleFavorite(Request $request, Document $document)
     {
+        abort_if(!$this->userCanAccessDocument($document), 403);
+
         $pref = DocumentUserPreference::firstOrCreate(
             ['user_id' => Auth::id(), 'document_id' => $document->id],
             ['is_favorite' => false, 'label_codes' => []]
@@ -449,6 +503,8 @@ class DocumentController extends Controller
 
     public function updateLabels(Request $request, Document $document)
     {
+        abort_if(!$this->userCanAccessDocument($document), 403);
+
         $codes = collect(explode(',', $request->input('codes', '')))
             ->map(fn($c) => strtoupper(trim($c)))
             ->filter()
@@ -466,6 +522,8 @@ class DocumentController extends Controller
 
     public function rename(Request $request, Document $document)
     {
+        abort_if(Auth::id() !== $document->owner_id, 403);
+
         $request->validate(['title' => 'required|string|max:500']);
         $document->update(['title' => $request->title]);
         return response()->json(['title' => $document->title]);
@@ -473,6 +531,8 @@ class DocumentController extends Controller
 
     public function move(Request $request, Document $document)
     {
+        abort_if(Auth::id() !== $document->owner_id, 403);
+
         $folder = $request->input('folder', '');
         $document->update(['description' => $folder ? "Dossier: {$folder}" : null]);
         return response()->json(['ok' => true]);
@@ -544,9 +604,11 @@ class DocumentController extends Controller
                     'title' => 'Nouveau document partagé',
                     'message' => 'Le document "' . $document->title . '" vous a été partagé.',
                     'type' => 'info',
-                    'action_url' => route('reception.index'),
+                    'action_url' => route('documents.index'),
                     'is_read' => false,
                 ]);
+
+                $this->sendInternalShareEmail($targetUser->email, $document->title);
             } else {
                 $subEntityCode = strtoupper(trim((string) $request->input('internalSubEntityCode', '')));
                 if ($subEntityCode === '') {
@@ -588,9 +650,11 @@ class DocumentController extends Controller
                         'title' => 'Nouveau document partagé',
                         'message' => 'Le document "' . $document->title . '" a été partagé à votre entité sous tutelle.',
                         'type' => 'info',
-                        'action_url' => route('reception.index'),
+                        'action_url' => route('documents.index'),
                         'is_read' => false,
                     ]);
+
+                    $this->sendInternalShareEmail($targetUser->email, $document->title);
                 }
             }
         } elseif ($mode === 'external') {
@@ -655,12 +719,6 @@ class DocumentController extends Controller
                 ->get(['id', 'email']);
 
             foreach ($targetUsers as $targetUser) {
-                $createdShares->push(DocumentShare::create($basePayload + [
-                    'recipient_name' => 'user:' . $targetUser->id,
-                    'recipient_email' => $targetUser->email,
-                    'recipient_administration_id' => $recipientAdministration->id,
-                ]));
-
                 Notification::create([
                     'recipient_id' => $targetUser->id,
                     'title' => 'Document recu (administration)',
@@ -717,6 +775,30 @@ class DocumentController extends Controller
         ]);
     }
 
+    private function sendInternalShareEmail(string $recipientEmail, string $documentTitle): void
+    {
+        if ($recipientEmail === '' || !filter_var($recipientEmail, FILTER_VALIDATE_EMAIL)) {
+            return;
+        }
+
+        $documentsUrl = route('documents.index');
+
+        try {
+            Mail::raw(
+                "Bonjour,\n\nUn document vous a ete partage en interne.\nTitre: {$documentTitle}\nAcces: {$documentsUrl}\n\nConnectez-vous pour le consulter dans l'onglet Mes documents.",
+                function ($message) use ($recipientEmail, $documentTitle) {
+                    $message->to($recipientEmail)->subject('Nouveau document partage: ' . $documentTitle);
+                }
+            );
+        } catch (\Throwable $e) {
+            Log::error('Echec envoi email partage interne', [
+                'recipient_email' => $recipientEmail,
+                'document_title' => $documentTitle,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
     public function lookupActRequestByTracking(Request $request)
     {
         $request->validate([
@@ -753,6 +835,7 @@ class DocumentController extends Controller
                 'recipient_administration_code' => (string) ($submission->recipientAdministration?->code ?? ''),
                 'applicant_full_name' => (string) ($submission->applicant_full_name ?? ''),
                 'applicant_email' => (string) ($submission->applicant_email ?? ''),
+                'applicant_phone' => (string) ($submission->applicant_phone ?? ''),
             ],
         ]);
     }

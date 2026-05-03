@@ -7,6 +7,8 @@
     // Sérialisation JSON des données pour JS
     $docsJson = $documents->map(fn($d) => [
         'id'           => $d->id,
+        'owner_id'     => $d->owner_id,
+        'is_owner'     => (string) $d->owner_id === (string) auth()->id(),
         'title'        => $d->title,
         'description'  => $d->description,
         'file_path'    => $d->file_path,
@@ -256,7 +258,7 @@
             </div>
 
             <!-- Changer le statut -->
-            <div class="mb-5 p-3 bg-gray-50 rounded-xl border border-gray-100">
+            <div id="detailsStatusActions" class="mb-5 p-3 bg-gray-50 rounded-xl border border-gray-100">
                 <p class="text-xs font-semibold text-gray-700 mb-2">Changer le statut</p>
                 <div class="flex gap-2 flex-wrap">
                     <button onclick="handleChangeStatus('draft')" class="px-3 py-1 text-xs rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 font-semibold border border-gray-200">Brouillon</button>
@@ -770,6 +772,7 @@ function renderTable() {
 
     tbody.innerHTML = docs.map(doc => {
         const labels = getLabels(doc.id);
+        const canManage = !!doc.is_owner;
         const labelsHtml = labels.slice(0, 3).map(c =>
             `<span class="inline-flex items-center rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 text-[10px] font-semibold">${c}</span>`
         ).join('') + (labels.length > 3 ? `<span class="inline-flex items-center rounded-md bg-gray-50 text-gray-600 border border-gray-200 px-1.5 py-0.5 text-[10px] font-semibold">+${labels.length - 3}</span>` : '');
@@ -780,6 +783,7 @@ function renderTable() {
                     <i class="${iconClass(doc)} text-lg"></i>
                     <div class="min-w-0">
                         <span class="font-medium text-gray-800 block truncate">${doc.title}</span>
+                        ${canManage ? '' : '<span class="inline-flex items-center rounded-md bg-slate-100 text-slate-700 border border-slate-200 px-1.5 py-0.5 text-[10px] font-semibold">Partage avec moi</span>'}
                         ${labels.length > 0 ? `<div class="mt-1 flex flex-wrap gap-1">${labelsHtml}</div>` : ''}
                     </div>
                 </div>
@@ -794,12 +798,12 @@ function renderTable() {
             </td>
             <td class="py-3 px-4">
                 <div data-row-actions="true" class="relative flex items-center justify-end gap-1">
-                    <button onclick="event.stopPropagation(); openShareModal('${doc.id}')"
+                    ${canManage ? `<button onclick="event.stopPropagation(); openShareModal('${doc.id}')"
                             title="Partager ${doc.shares_count > 0 ? '('+doc.shares_count+')' : ''}"
                             class="h-8 px-2 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 flex items-center gap-1 transition text-xs">
                         <i class="fas fa-user-plus text-sm"></i>
                         ${doc.shares_count > 0 ? `<span class="bg-blue-100 text-blue-700 rounded-full px-1.5 py-0.5 text-[10px] font-bold">${doc.shares_count}</span>` : ''}
-                    </button>
+                    </button>` : ''}
                     <button onclick="event.stopPropagation(); toggleActions('${doc.id}')"
                             title="Plus d'actions"
                             class="h-8 w-8 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-100 grid place-items-center transition">
@@ -816,21 +820,21 @@ function renderTable() {
                         <button onclick="handleLabels('${doc.id}')" class="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
                             <i class="fas fa-tag text-gray-400 w-4"></i> Gérer les étiquettes
                         </button>
-                        <hr class="my-1 border-gray-100">
-                        <button onclick="handleRename('${doc.id}')" class="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                        ${canManage ? '<hr class="my-1 border-gray-100">' : ''}
+                        ${canManage ? `<button onclick="handleRename('${doc.id}')" class="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
                             <i class="fas fa-pencil-alt text-gray-400 w-4"></i> Renommer
                         </button>
                         <button onclick="handleMove('${doc.id}')" class="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
                             <i class="fas fa-folder-open text-gray-400 w-4"></i> Déplacer ou copier
                         </button>
-                        <hr class="my-1 border-gray-100">
+                        <hr class="my-1 border-gray-100">` : ''}
                         <a href="${ROUTES.download(doc.id)}" class="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
                             <i class="fas fa-download text-gray-400 w-4"></i> Télécharger
                         </a>
-                        <hr class="my-1 border-gray-100">
-                        <button onclick="handleDelete('${doc.id}')" class="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50">
+                        ${canManage ? '<hr class="my-1 border-gray-100">' : ''}
+                        ${canManage ? `<button onclick="handleDelete('${doc.id}')" class="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50">
                             <i class="fas fa-trash-alt text-red-400 w-4"></i> Supprimer
-                        </button>
+                        </button>` : ''}
                     </div>
                 </div>
             </td>
@@ -1020,6 +1024,7 @@ async function handleDetails(id) {
     toggleActions(id);
     _detailsDocId = id;
     const doc = allDocs.find(d => d.id === id);
+    const statusActions = document.getElementById('detailsStatusActions');
     document.getElementById('detailsDocTitle').textContent = doc.title;
     document.getElementById('details-type').textContent = isFolder(doc) ? 'Dossier' : (ext(doc).toUpperCase() || 'Fichier');
     document.getElementById('details-size').textContent = fmtSize(doc.file_size);
@@ -1028,7 +1033,13 @@ async function handleDetails(id) {
     document.getElementById('details-created').textContent = new Date(doc.created_at).toLocaleString('fr-FR');
     document.getElementById('details-updated').textContent = new Date(doc.updated_at || doc.created_at).toLocaleString('fr-FR');
     document.getElementById('detailsVersions').innerHTML = '<div class="text-xs text-gray-400 italic">Chargement…</div>';
+    statusActions.classList.toggle('hidden', !doc.is_owner);
     document.getElementById('detailsModal').classList.remove('hidden');
+
+    if (!doc.is_owner) {
+        document.getElementById('detailsVersions').innerHTML = '<div class="text-xs text-gray-400 italic">Historique des versions disponible uniquement pour le proprietaire.</div>';
+        return;
+    }
 
     // Charger les versions
     try {
@@ -1056,8 +1067,12 @@ async function handleDetails(id) {
 // ---- Changer statut (depuis modal détails) ----
 async function handleChangeStatus(status) {
     if (!_detailsDocId) return;
-    const data = await post(ROUTES.status(_detailsDocId), { status });
     const doc = allDocs.find(d => d.id === _detailsDocId);
+    if (!doc || !doc.is_owner) {
+        showToast('Seul le proprietaire peut modifier le statut.');
+        return;
+    }
+    const data = await post(ROUTES.status(_detailsDocId), { status });
     doc.status = data.status;
     document.getElementById('details-status').textContent = statusLabel[data.status] || data.status;
     renderTable();
@@ -1212,6 +1227,10 @@ document.getElementById('fileInput').addEventListener('change', async (e) => {
 function openShareModal(id) {
     shareDocId = id;
     const doc = allDocs.find(d => d.id === id);
+    if (!doc || !doc.is_owner) {
+        showToast('Seul le proprietaire peut partager ce document.');
+        return;
+    }
     document.getElementById('shareDocTitle').textContent = doc.title;
     document.getElementById('shareStatus').classList.add('hidden');
     document.getElementById('shareExternalEmail').value = '';
