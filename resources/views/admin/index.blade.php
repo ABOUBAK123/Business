@@ -4953,48 +4953,83 @@ function themingToggleDisable() {
         </div>
         <div>
             <h2 class="text-base font-bold text-gray-800">Notifications E-mail (SMTP)</h2>
-            <p class="text-xs text-gray-400">Configuration du serveur d'envoi d'e-mails</p>
+            <p class="text-xs text-gray-400">Configuration du serveur d'envoi d'e-mails par administration</p>
         </div>
     </div>
-    <form method="POST" action="{{ route('admin.settings.save') }}" class="p-6 space-y-5">
-        @csrf @method('PUT')
-        <input type="hidden" name="tab" value="email-notifications">
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            @foreach([
-                ['mail_host',        'Hôte SMTP',           'smtp.example.com',    'text'],
-                ['mail_port',        'Port SMTP',           '587',                 'number'],
-                ['mail_username',    'Identifiant SMTP',    'user@example.com',    'text'],
-                ['mail_password',    'Mot de passe SMTP',   '',                    'password'],
-                ['mail_from_address','Adresse expéditeur',  'noreply@example.com', 'email'],
-                ['mail_from_name',   'Nom expéditeur',      'E-Parapheur',         'text'],
-            ] as [$key, $label, $placeholder, $type])
-            <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-1.5">{{ $label }}</label>
-                <input type="{{ $type }}" name="{{ $key }}" value="{{ old($key, $settings[$key]->value ?? '') }}"
-                    placeholder="{{ $placeholder }}"
-                    class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
-            </div>
-            @endforeach
-        </div>
+    <div class="p-6 space-y-5">
+        {{-- Sélecteur d'administration --}}
         <div>
-            <label class="block text-sm font-semibold text-gray-700 mb-1.5">Encryption</label>
-            <select name="mail_encryption" class="border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
-                @foreach(['tls'=>'TLS', 'ssl'=>'SSL', ''=>'Aucune'] as $val => $lbl)
-                <option value="{{ $val }}" {{ ($settings['mail_encryption']->value ?? 'tls') === $val ? 'selected' : '' }}>{{ $lbl }}</option>
+            <label class="block text-sm font-semibold text-gray-700 mb-1.5">Administration</label>
+            <select id="smtpAdminSelect" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
+                <option value="">— Choisir une administration —</option>
+                @foreach($emitters as $e)
+                <option value="{{ $e->id }}" data-type="emitter">{{ $e->name }}{{ $e->code ? ' ('.$e->code.')' : '' }}</option>
+                @endforeach
+                @foreach($recipients as $r)
+                <option value="{{ $r->id }}" data-type="recipient">{{ $r->name }}{{ $r->code ? ' ('.$r->code.')' : '' }} [dest.]</option>
                 @endforeach
             </select>
         </div>
-        <div class="pt-2">
-            <button type="submit" class="px-6 py-2.5 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl text-sm transition flex items-center gap-2">
-                <i class="fas fa-save"></i> Enregistrer la configuration e-mail
-            </button>
-            <button type="button" id="smtpTestBtn"
-                class="mt-3 px-6 py-2.5 bg-white border border-red-400 text-red-500 hover:bg-red-50 font-semibold rounded-xl text-sm transition flex items-center gap-2">
-                <i class="fas fa-paper-plane"></i> Tester la configuration SMTP
-            </button>
-            <div id="smtpTestResult" class="mt-3 hidden text-sm rounded-xl px-4 py-3 font-medium"></div>
+
+        {{-- Formulaire SMTP (caché tant qu'aucune administration n'est sélectionnée) --}}
+        <div id="smtpFormWrap" class="hidden space-y-5">
+            <input type="hidden" id="smtpAdminId" value="">
+            <input type="hidden" id="smtpAdminType" value="">
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">Hôte SMTP</label>
+                    <input type="text" id="smtp_mail_host" placeholder="smtp.example.com"
+                        class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">Port SMTP</label>
+                    <input type="number" id="smtp_mail_port" placeholder="587"
+                        class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">Identifiant SMTP</label>
+                    <input type="text" id="smtp_mail_username" placeholder="user@example.com"
+                        class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">Mot de passe SMTP</label>
+                    <input type="password" id="smtp_mail_password" placeholder="Laisser vide pour conserver"
+                        class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">Adresse expéditeur</label>
+                    <input type="email" id="smtp_mail_from_address" placeholder="noreply@example.com"
+                        class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">Nom expéditeur</label>
+                    <input type="text" id="smtp_mail_from_name" placeholder="E-Parapheur"
+                        class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
+                </div>
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1.5">Encryption</label>
+                <select id="smtp_mail_encryption" class="border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-400">
+                    <option value="tls">TLS</option>
+                    <option value="ssl">SSL</option>
+                    <option value="">Aucune</option>
+                </select>
+            </div>
+
+            <div class="pt-2 flex flex-wrap gap-3 items-center">
+                <button type="button" id="smtpSaveBtn"
+                    class="px-6 py-2.5 bg-red-500 hover:bg-red-600 text-white font-semibold rounded-xl text-sm transition flex items-center gap-2">
+                    <i class="fas fa-save"></i> Enregistrer
+                </button>
+                <button type="button" id="smtpTestBtn"
+                    class="px-6 py-2.5 bg-white border border-red-400 text-red-500 hover:bg-red-50 font-semibold rounded-xl text-sm transition flex items-center gap-2">
+                    <i class="fas fa-paper-plane"></i> Tester la configuration SMTP
+                </button>
+            </div>
+            <div id="smtpTestResult" class="hidden text-sm rounded-xl px-4 py-3 font-medium"></div>
         </div>
-    </form>
+    </div>
 </div>
 
 {{-- ══════ PARAMÈTRES DU CHAT ══════ --}}
@@ -6495,43 +6530,92 @@ function editModalHandleChild(childCb) {
 @push('scripts')
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    const btn    = document.getElementById('smtpTestBtn');
-    const result = document.getElementById('smtpTestResult');
-    if (!btn) return;
+  const adminSelect = document.getElementById('smtpAdminSelect');
+  const formWrap    = document.getElementById('smtpFormWrap');
+  const saveBtn     = document.getElementById('smtpSaveBtn');
+  const testBtn     = document.getElementById('smtpTestBtn');
+  const result      = document.getElementById('smtpTestResult');
+  if (!adminSelect) return;
 
-    btn.addEventListener('click', function () {
-        btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Envoi en cours…';
-        result.className = 'mt-3 text-sm rounded-xl px-4 py-3 font-medium hidden';
-        result.textContent = '';
+  const csrf = () => document.querySelector('meta[name="csrf-token"]').content;
+  const fields = ['mail_host','mail_port','mail_username','mail_password','mail_from_address','mail_from_name','mail_encryption'];
 
-        fetch('{{ route('admin.smtp.test') }}', {
-            method: 'POST',
-            headers: {
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').content,
-                'Accept': 'application/json',
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({}),
-        })
-        .then(r => r.json())
-        .then(data => {
-            result.textContent = data.message;
-            if (data.success) {
-                result.className = 'mt-3 text-sm rounded-xl px-4 py-3 font-medium bg-green-50 border border-green-300 text-green-700';
-            } else {
-                result.className = 'mt-3 text-sm rounded-xl px-4 py-3 font-medium bg-red-50 border border-red-300 text-red-700';
-            }
-        })
-        .catch(err => {
-            result.textContent = 'Erreur réseau : ' + err.message;
-            result.className = 'mt-3 text-sm rounded-xl px-4 py-3 font-medium bg-red-50 border border-red-300 text-red-700';
-        })
-        .finally(() => {
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-paper-plane"></i> Tester la configuration SMTP';
-        });
+  function showResult(msg, ok) {
+    result.textContent = msg;
+    result.className = 'text-sm rounded-xl px-4 py-3 font-medium ' +
+      (ok ? 'bg-green-50 border border-green-300 text-green-700'
+        : 'bg-red-50 border border-red-300 text-red-700');
+  }
+
+  function getPayload() {
+    const p = {
+      administration_id:   document.getElementById('smtpAdminId').value,
+      administration_type: document.getElementById('smtpAdminType').value,
+    };
+    fields.forEach(f => {
+      const el = document.getElementById('smtp_' + f);
+      if (el) p[f] = el.value;
     });
+    return p;
+  }
+
+  adminSelect.addEventListener('change', function () {
+    const opt  = this.options[this.selectedIndex];
+    const id   = opt.value;
+    const type = opt.dataset.type || 'emitter';
+    formWrap.classList.add('hidden');
+    result.className = 'hidden';
+    fields.forEach(f => { const el = document.getElementById('smtp_' + f); if (el) el.value = ''; });
+    if (!id) return;
+    document.getElementById('smtpAdminId').value   = id;
+    document.getElementById('smtpAdminType').value = type;
+    fetch(`{{ url('admin/smtp-settings') }}/${type}/${id}`, {
+      headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf() }
+    })
+    .then(r => r.json())
+    .then(data => {
+      fields.forEach(f => {
+        const el = document.getElementById('smtp_' + f);
+        if (el && f !== 'mail_password') el.value = data[f] ?? '';
+      });
+      const enc = document.getElementById('smtp_mail_encryption');
+      if (enc) enc.value = data['mail_encryption'] ?? 'tls';
+      formWrap.classList.remove('hidden');
+    })
+    .catch(() => { formWrap.classList.remove('hidden'); });
+  });
+
+  if (saveBtn) saveBtn.addEventListener('click', function () {
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Enregistrement…';
+    fetch('{{ route('admin.smtp.settings.save') }}', {
+      method: 'POST',
+      headers: { 'X-CSRF-TOKEN': csrf(), 'Accept': 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(getPayload()),
+    })
+    .then(r => r.json())
+    .then(data => showResult(data.message, data.success))
+    .catch(err => showResult('Erreur réseau : ' + err.message, false))
+    .finally(() => { saveBtn.disabled = false; saveBtn.innerHTML = '<i class="fas fa-save"></i> Enregistrer'; });
+  });
+
+  if (testBtn) testBtn.addEventListener('click', function () {
+    testBtn.disabled = true;
+    testBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Envoi en cours…';
+    result.className = 'hidden';
+    fetch('{{ route('admin.smtp.test') }}', {
+      method: 'POST',
+      headers: { 'X-CSRF-TOKEN': csrf(), 'Accept': 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        administration_id:   document.getElementById('smtpAdminId').value,
+        administration_type: document.getElementById('smtpAdminType').value,
+      }),
+    })
+    .then(r => r.json())
+    .then(data => showResult(data.message, data.success))
+    .catch(err => showResult('Erreur réseau : ' + err.message, false))
+    .finally(() => { testBtn.disabled = false; testBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Tester la configuration SMTP'; });
+  });
 });
 </script>
 @endpush

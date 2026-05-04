@@ -19,6 +19,7 @@ use App\Models\RequestedAct;
 use App\Models\Instruction;
 use App\Models\UserDirectionAssignment;
 use App\Models\SignatureProviderConfig;
+use App\Models\AdministrationSmtpSetting;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -761,60 +762,113 @@ class AdminController extends Controller
         return back()->with('success', 'Paramètres enregistrés.')->withInput(['tab' => $request->input('tab', 'settings')]);
     }
 
-    // ── Test SMTP ─────────────────────────────────────────────────────────────
+    // ── SMTP par administration ────────────────────────────────────────────────
+
+    /** GET /admin/smtp-settings/{type}/{id} — charge les réglages SMTP d'une administration. */
+    public function getAdminSmtp(string $type, string $id)
+    {
+        abort_if(!auth()->check() || auth()->user()->role !== 'admin', 403);
+
+        $smtp = AdministrationSmtpSetting::forAdministration($id, $type);
+
+        return response()->json($smtp ? [
+            'mail_host'         => $smtp->mail_host,
+            'mail_port'         => $smtp->mail_port,
+            'mail_username'     => $smtp->mail_username,
+            'mail_password'     => '', // never expose stored password
+            'mail_encryption'   => $smtp->mail_encryption,
+            'mail_from_address' => $smtp->mail_from_address,
+            'mail_from_name'    => $smtp->mail_from_name,
+        ] : []);
+    }
+
+    /** POST /admin/smtp-settings — enregistre les réglages SMTP d'une administration. */
+    public function saveAdminSmtp(Request $request)
+    {
+        abort_if(!auth()->check() || auth()->user()->role !== 'admin', 403);
+
+        $adminId   = $request->input('administration_id');
+        $adminType = $request->input('administration_type', 'emitter');
+
+        if (!$adminId) {
+            return response()->json(['success' => false, 'message' => 'Administration non sélectionnée.'], 422);
+        }
+
+        $data = $request->only([
+            'mail_host', 'mail_port', 'mail_username',
+            'mail_encryption', 'mail_from_address', 'mail_from_name',
+        ]);
+
+        // Only update password if a new value was provided
+        $newPassword = $request->input('mail_password');
+        if ($newPassword !== null && $newPassword !== '') {
+            $data['mail_password'] = $newPassword;
+        }
+
+        $smtp = AdministrationSmtpSetting::where('administration_id', $adminId)
+            ->where('administration_type', $adminType)
+            ->first();
+
+        if ($smtp) {
+            // Fill manually to trigger mutator only when password changes
+            foreach ($data as $key => $value) {
+                $smtp->$key = $value;
+            }
+            $smtp->save();
+        } else {
+            $data['administration_id']   = $adminId;
+            $data['administration_type'] = $adminType;
+            $smtp = AdministrationSmtpSetting::create($data);
+        }
+
+        return response()->json(['success' => true, 'message' => 'Configuration SMTP enregistrée.']);
+    }
+
+    /** POST /admin/smtp-test — envoie un e-mail de test avec les réglages d'une administration. */
     public function testSmtp(Request $request)
     {
-        abort_if(
-            !auth()->check() || auth()->user()->role !== 'admin',
-            403,
-            'Accès réservé aux administrateurs.'
-        );
+        abort_if(!auth()->check() || auth()->user()->role !== 'admin', 403);
 
-        $settings = AppSetting::whereIn('key', [
-            'mail_host', 'mail_port', 'mail_username', 'mail_password',
-            'mail_encryption', 'mail_from_address', 'mail_from_name',
-        ])->get()->keyBy('key');
+        $adminId   = $request->input('administration_id');
+        $adminType = $request->input('administration_type', 'emitter');
 
-        $host       = $settings['mail_host']->value        ?? null;
-        $port       = (int) ($settings['mail_port']->value ?? 587);
-        $username   = $settings['mail_username']->value    ?? null;
-        $password   = $settings['mail_password']->value    ?? null;
-        $encryption = $settings['mail_encryption']->value  ?? 'tls';
-        $fromAddr   = $settings['mail_from_address']->value ?? null;
-        $fromName   = $settings['mail_from_name']->value    ?? config('app.name', 'E-Parapheur');
+        if (!$adminId) {
+            return response()->json(['success' => false, 'message' => 'Administration non sélectionnée.'], 422);
+        }
 
-        if (!$host || !$fromAddr) {
+        $smtp = AdministrationSmtpSetting::forAdministration($adminId, $adminType);
+
+        if (!$smtp || !$smtp->mail_host || !$smtp->mail_from_address) {
             return response()->json([
                 'success' => false,
-                'message' => 'Configuration SMTP incomplète (hôte ou adresse expéditeur manquant).',
+                'message' => 'Configuration SMTP incomplète pour cette administration (hôte ou adresse expéditeur manquant).',
             ], 422);
         }
 
-        // Override the mailer config at runtime
         config([
-            'mail.default'                         => 'smtp',
-            'mail.mailers.smtp.host'               => $host,
-            'mail.mailers.smtp.port'               => $port,
-            'mail.mailers.smtp.username'           => $username,
-            'mail.mailers.smtp.password'           => $password,
-            'mail.mailers.smtp.encryption'         => $encryption ?: null,
-            'mail.mailers.smtp.timeout'            => 10,
-            'mail.from.address'                    => $fromAddr,
-            'mail.from.name'                       => $fromName,
+            'mail.default'                 => 'smtp',
+            'mail.mailers.smtp.host'       => $smtp->mail_host,
+            'mail.mailers.smtp.port'       => $smtp->mail_port ?? 587,
+            'mail.mailers.smtp.username'   => $smtp->mail_username,
+            'mail.mailers.smtp.password'   => $smtp->mail_password,
+            'mail.mailers.smtp.encryption' => $smtp->mail_encryption ?: null,
+            'mail.mailers.smtp.timeout'    => 10,
+            'mail.from.address'            => $smtp->mail_from_address,
+            'mail.from.name'               => $smtp->mail_from_name ?? config('app.name'),
         ]);
 
         try {
             \Illuminate\Support\Facades\Mail::raw(
                 "Ceci est un e-mail de test envoyé depuis " . config('app.name', 'E-Parapheur') . ".\n\nSi vous recevez ce message, la configuration SMTP est correcte.",
-                function ($message) use ($fromAddr, $fromName) {
-                    $message->to($fromAddr, $fromName)
+                function ($message) use ($smtp) {
+                    $message->to($smtp->mail_from_address, $smtp->mail_from_name)
                             ->subject('Test SMTP — ' . config('app.name', 'E-Parapheur'));
                 }
             );
 
             return response()->json([
                 'success' => true,
-                'message' => "E-mail de test envoyé avec succès à {$fromAddr}.",
+                'message' => "E-mail de test envoyé avec succès à {$smtp->mail_from_address}.",
             ]);
         } catch (\Exception $e) {
             Log::error('SMTP test failed: ' . $e->getMessage());

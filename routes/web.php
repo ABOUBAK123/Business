@@ -267,6 +267,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/settings',  [AppSettingController::class, 'index'])->name('settings');
         Route::post('/settings', [AppSettingController::class, 'update'])->name('settings.update');
         Route::put('/settings',  [AdminController::class, 'updateSettings'])->name('settings.save');
+        Route::post('/smtp-settings',           [AdminController::class, 'saveAdminSmtp'])->name('smtp.settings.save');
+        Route::get('/smtp-settings/{type}/{id}',[AdminController::class, 'getAdminSmtp'])->name('smtp.settings.get');
         Route::post('/smtp-test', [AdminController::class, 'testSmtp'])->name('smtp.test');
         Route::post('/theming',  [AdminController::class, 'saveTheming'])->name('theming.save');
         Route::post('/signature-provider', [AdminController::class, 'saveSignatureProvider'])->name('signature-provider.save');
