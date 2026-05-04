@@ -89,6 +89,17 @@ class UserPermissionsService
             'administration.user-profiles'      => 'Rôles & profils',
         ]],
         'qrcode'                  => ['label' => 'Vérification QR',        'children' => []],
+        'personnel'               => ['label' => 'Gestion du personnel',   'children' => [
+            'personnel.dashboard' => 'Tableau de bord personnel',
+            'personnel.employees' => 'Employés',
+            'personnel.agent-space' => 'Espace agent',
+            'personnel.leave' => 'Congés & permissions',
+            'personnel.leave.validation' => 'Congés - Validation',
+            'personnel.leave.parameters' => 'Congés - Paramètres',
+            'personnel.leave.recent' => 'Congés - Demandes récentes',
+            'personnel.training' => 'Formation',
+            'personnel.career' => 'Carrière',
+        ]],
     ];
 
     /**

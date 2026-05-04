@@ -292,8 +292,11 @@ Route::middleware('auth')->group(function () {
         Route::post('/personnel/employee-skills', [AdminController::class, 'storePersonnelEmployeeSkill'])->name('personnel.employees.skills.store');
         Route::get('/personnel/documents/{document}/download', [AdminController::class, 'downloadPersonnelEmployeeDocument'])->name('personnel.documents.download');
         Route::post('/personnel/leave-types', [AdminController::class, 'storePersonnelLeaveType'])->name('personnel.leave-types.store');
+        Route::get('/personnel/leave-types/{leaveType}/justification-zip', [AdminController::class, 'downloadPersonnelLeaveTypeJustificationZip'])->name('personnel.leave-types.justification-zip.download');
         Route::post('/personnel/leave-requests', [AdminController::class, 'storePersonnelLeaveRequest'])->name('personnel.leave-requests.store');
+        Route::get('/personnel/leave-requests/{leaveRequest}/attachment', [AdminController::class, 'downloadPersonnelLeaveRequestAttachment'])->name('personnel.leave-requests.attachment.download');
         Route::patch('/personnel/leave-requests/{leaveRequest}/status', [AdminController::class, 'updatePersonnelLeaveRequestStatus'])->name('personnel.leave-requests.status');
+        Route::post('/personnel/job-references', [AdminController::class, 'storePersonnelJobReference'])->name('personnel.job-references.store');
         Route::post('/personnel/trainings', [AdminController::class, 'storePersonnelTraining'])->name('personnel.trainings.store');
         Route::post('/personnel/training-enrollments', [AdminController::class, 'storePersonnelTrainingEnrollment'])->name('personnel.training-enrollments.store');
         Route::post('/personnel/goals', [AdminController::class, 'storePersonnelGoal'])->name('personnel.goals.store');

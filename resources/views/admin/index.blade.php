@@ -222,6 +222,7 @@ $_oc = [
       <h2 class="text-xl font-bold text-gray-800">{{ __('personnel.ui.module.title') }}</h2>
       <p class="text-sm text-gray-500 mt-1">{{ __('personnel.ui.module.description') }}</p>
     </div>
+    @if($personnelTab === 'dashboard')
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 min-w-0">
       <div class="rounded-xl bg-teal-50 border border-teal-100 px-4 py-3">
         <div class="text-xs uppercase tracking-wide text-teal-700">{{ __('personnel.ui.stats.employees') }}</div>
@@ -240,6 +241,7 @@ $_oc = [
         <div class="text-2xl font-black text-gray-800">{{ number_format($personnelStats['newThisYear'] ?? 0) }}</div>
       </div>
     </div>
+    @endif
   </div>
 </div>
 
@@ -635,6 +637,15 @@ $_oc = [
   if (!$agentSpaceEmployee && request('selected_employee')) {
     $agentSpaceEmployee = $personnelEmployeeDirectory->firstWhere('id', request('selected_employee'));
   }
+  if (!$agentSpaceEmployee && request('selected_employee_number')) {
+    $_selectedEmployeeNumber = trim((string) request('selected_employee_number'));
+    if ($_selectedEmployeeNumber !== '') {
+      $agentSpaceEmployee = $personnelEmployeeDirectory->first(function ($employee) use ($_selectedEmployeeNumber) {
+        return strcasecmp(trim((string) ($employee->employee_number ?? '')), $_selectedEmployeeNumber) === 0;
+      });
+    }
+  }
+  $agentSpaceEmployeeNumberInput = trim((string) request('selected_employee_number', $agentSpaceEmployee?->employee_number ?? ''));
   $agentSpaceLeaveRequests = collect();
   $agentSpaceTrainingEnrollments = collect();
   $agentSpaceCareerHistory = collect();
@@ -678,13 +689,15 @@ $_oc = [
       <input type="hidden" name="tab" value="personnel">
       <input type="hidden" name="personnel_tab" value="agent-space">
       <input type="hidden" name="agent_space_tab" value="{{ $agentSpaceTab }}">
-      <label class="text-sm font-semibold text-gray-700">{{ __('personnel.ui.agent_space.agent_label') }}</label>
-      <select name="selected_employee" class="border border-gray-300 rounded-xl px-3 py-2 text-sm" onchange="this.form.submit()">
-        <option value="">{{ __('personnel.ui.agent_space.select') }}</option>
-        @foreach($personnelEmployeeDirectory as $employee)
-        <option value="{{ $employee->id }}" {{ ($agentSpaceEmployee?->id === $employee->id) ? 'selected' : '' }}>{{ $employee->full_name }}</option>
-        @endforeach
-      </select>
+      <label class="text-sm font-semibold text-gray-700">{{ __('personnel.ui.agent_space.employee_number_label') }}</label>
+      <input
+        type="text"
+        name="selected_employee_number"
+        value="{{ $agentSpaceEmployeeNumberInput }}"
+        placeholder="{{ __('personnel.ui.agent_space.employee_number_placeholder') }}"
+        class="border border-gray-300 rounded-xl px-3 py-2 text-sm"
+      >
+      <button type="submit" class="px-3 py-2 rounded-xl bg-[#2453d6] text-white text-sm font-semibold">{{ __('personnel.ui.agent_space.search_btn') }}</button>
     </form>
   </div>
 </div>
@@ -692,7 +705,7 @@ $_oc = [
 <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-3 mb-5">
   <div class="flex flex-wrap gap-2">
     @foreach($agentSpaceTabs as $key => [$icon, $label])
-    <a href="{{ route('admin.index', array_merge(['tab' => 'personnel', 'personnel_tab' => 'agent-space', 'agent_space_tab' => $key], $agentSpaceEmployee ? ['selected_employee' => $agentSpaceEmployee->id] : [])) }}"
+    <a href="{{ route('admin.index', array_merge(['tab' => 'personnel', 'personnel_tab' => 'agent-space', 'agent_space_tab' => $key], $agentSpaceEmployee ? ['selected_employee' => $agentSpaceEmployee->id, 'selected_employee_number' => $agentSpaceEmployee->employee_number] : ($agentSpaceEmployeeNumberInput !== '' ? ['selected_employee_number' => $agentSpaceEmployeeNumberInput] : []))) }}"
        class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition {{ $agentSpaceTab === $key ? 'bg-[#2453d6] text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200' }}">
       <i class="{{ $icon }} text-xs"></i>
       <span>{{ $label }}</span>
@@ -703,7 +716,11 @@ $_oc = [
 
 @if(!$agentSpaceEmployee)
 <div class="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800 mb-5">
-  {{ __('personnel.ui.agent_space.select_employee_hint') }}
+  @if($agentSpaceEmployeeNumberInput !== '')
+    {{ __('personnel.ui.agent_space.employee_number_not_found') }}
+  @else
+    {{ __('personnel.ui.agent_space.select_employee_hint') }}
+  @endif
 </div>
 @else
 
@@ -1043,49 +1060,33 @@ $_oc = [
 
         <div>
           <label class="block text-sm font-semibold text-gray-700 mb-1.5">
-            <i class="fas fa-layer-group mr-1 text-blue-400"></i> Nombre de sections
+            <i class="fas fa-hashtag mr-1 text-blue-400"></i> Nombre de jours demandés <span class="text-red-500">*</span>
           </label>
-          <select id="annual-sections-count"
-            class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
-            <option value="1" selected>1 section</option>
-            <option value="2">2 sections</option>
-            <option value="3">3 sections</option>
-            <option value="4">4 sections</option>
-          </select>
-          <p class="text-xs text-gray-400 mt-1">Vous pouvez fractionner le congé annuel en 1, 2, 3 ou 4 sections.</p>
+          <input type="number" id="annual-days-count" name="requested_days"
+            value="{{ max(1, (int) $annualRemaining) }}"
+            min="1" max="{{ $annualRemaining }}" required
+            class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-400">
+          <p class="text-xs text-gray-400 mt-1">Vous pouvez fractionner vos 30 jours en plusieurs demandes. Solde disponible : <strong class="text-blue-700">{{ $annualRemaining }} jour(s)</strong>.</p>
         </div>
 
-        <div class="space-y-3">
-          @for($i = 1; $i <= 4; $i++)
-          <div class="annual-segment-row rounded-xl border border-gray-200 p-3 {{ $i > 1 ? 'hidden' : '' }}" data-segment="{{ $i }}">
-            <div class="text-xs font-semibold text-gray-500 mb-2">Section {{ $i }}</div>
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-1.5">
-                  <i class="fas fa-calendar mr-1 text-blue-400"></i> Date de début
-                  @if($i === 1)<span class="text-red-500">*</span>@else<span class="text-gray-400 font-normal">(optionnel)</span>@endif
-                </label>
-                <input type="date"
-                  name="annual_segment_start_{{ $i }}"
-                  id="annual-start-{{ $i }}"
-                  {{ $i === 1 ? 'required' : '' }}
-                  class="annual-start w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
-              </div>
-              <div>
-                <label class="block text-sm font-semibold text-gray-700 mb-1.5">
-                  <i class="fas fa-calendar mr-1 text-blue-400"></i> Date de fin
-                  @if($i === 1)<span class="text-red-500">*</span>@else<span class="text-gray-400 font-normal">(optionnel)</span>@endif
-                </label>
-                <input type="date"
-                  name="annual_segment_end_{{ $i }}"
-                  id="annual-end-{{ $i }}"
-                  {{ $i === 1 ? 'required' : '' }}
-                  class="annual-end w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
-              </div>
-            </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1.5">
+              <i class="fas fa-calendar mr-1 text-blue-400"></i> Date de départ <span class="text-red-500">*</span>
+            </label>
+            <input type="date" id="annual-start-input" required
+              class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
           </div>
-          @endfor
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1.5">
+              <i class="fas fa-calendar mr-1 text-blue-400"></i> Date de fin (automatique)
+            </label>
+            <input type="date" id="annual-end-input" readonly
+              class="w-full border border-gray-200 bg-gray-50 rounded-xl px-4 py-2.5 text-sm font-semibold text-gray-700 cursor-not-allowed">
+          </div>
+        </div>
 
+        <div>
           <input type="hidden" name="start_date" id="annual-start" value="{{ old('start_date') }}">
           <input type="hidden" name="end_date" id="annual-end" value="{{ old('end_date') }}">
         </div>
@@ -1155,10 +1156,10 @@ $_oc = [
         </button>
       </div>
 
-      @if($empLeaveTypes->isEmpty())
+      @if($otherLeaveTypes->isEmpty())
       <div class="rounded-xl bg-amber-50 border border-amber-200 px-4 py-4 text-sm text-amber-800">
         <i class="fas fa-exclamation-triangle mr-2"></i>
-        Aucun type de congé configuré pour cette administration.
+        Aucun autre type de congé configuré pour cette administration.
       </div>
       @else
       <form method="POST" action="{{ route('admin.personnel.leave-requests.store') }}" enctype="multipart/form-data" class="space-y-4">
@@ -1175,7 +1176,7 @@ $_oc = [
           <select name="leave_type_id" id="other-leave-type" required
             class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400">
             <option value="">Sélectionner un type</option>
-            @foreach($empLeaveTypes as $lt)
+            @foreach($otherLeaveTypes as $lt)
             <option value="{{ $lt->id }}"
               data-requires-attachment="{{ $lt->requires_attachment ? '1' : '0' }}"
               data-default-days="{{ (int) $lt->default_days }}">
@@ -1183,6 +1184,15 @@ $_oc = [
             </option>
             @endforeach
           </select>
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1.5">
+            Nombre de jours <span class="text-red-500">*</span>
+          </label>
+          <input type="number" name="requested_days" id="other-days" min="1" required
+            class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-emerald-400">
+          <p class="text-xs text-gray-400 mt-1">Saisissez le nombre de jours, la date de fin sera calculée automatiquement.</p>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1196,21 +1206,11 @@ $_oc = [
           </div>
           <div>
             <label class="block text-sm font-semibold text-gray-700 mb-1.5">
-              Date de fin <span class="text-red-500">*</span>
+              Date de fin <span class="text-gray-400 font-normal text-xs">(automatique)</span>
             </label>
-            <input type="date" name="end_date" id="other-end" required
-              value="{{ old('end_date') }}"
-              class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400">
+            <input type="date" name="end_date" id="other-end" readonly
+              class="w-full border border-gray-200 bg-gray-50 rounded-xl px-4 py-2.5 text-sm font-semibold text-gray-700 cursor-not-allowed">
           </div>
-        </div>
-
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1.5">
-            Nombre de jours <span class="text-red-500">*</span>
-          </label>
-          <input type="number" name="requested_days" id="other-days" readonly
-            class="w-full border border-gray-200 bg-gray-50 rounded-xl px-4 py-2.5 text-sm font-semibold text-gray-700 cursor-not-allowed">
-          <p class="text-xs text-gray-400 mt-1">Calculé automatiquement selon le type</p>
         </div>
 
         <div>
@@ -1249,118 +1249,74 @@ $_oc = [
 @push('scripts')
 <script>
 (function () {
-  // Annual leave — segmentation (1..4) + total days preview
+  // Annual leave — fixed days (remaining balance) + auto end date from start date
   var annualStart = document.getElementById('annual-start');
-  var annualEnd   = document.getElementById('annual-end');
+  var annualEnd = document.getElementById('annual-end');
+  var annualStartInput = document.getElementById('annual-start-input');
+  var annualEndInput = document.getElementById('annual-end-input');
+  var annualDaysCount = document.getElementById('annual-days-count');
   var annualPreview = document.getElementById('annual-days-preview');
   var annualSegmentsJson = document.getElementById('annual-segments-json');
-  var annualSectionsCount = document.getElementById('annual-sections-count');
-  var annualRows = Array.prototype.slice.call(document.querySelectorAll('.annual-segment-row'));
-  var annualStarts = Array.prototype.slice.call(document.querySelectorAll('.annual-start'));
-  var annualEnds = Array.prototype.slice.call(document.querySelectorAll('.annual-end'));
 
   var annualQuota = {{ $annualQuota }};
   var annualAlreadyApproved = {{ (int) $annualApproved }};
+  var annualMaxAllowed = {{ $annualRemaining }};
   var annualPreviewText = document.getElementById('annual-days-preview-text');
   var annualPreviewUsed = document.getElementById('annual-preview-used');
   var annualPreviewRemaining = document.getElementById('annual-preview-remaining');
 
-  function setAnnualVisibleRows() {
-    if (!annualSectionsCount) return;
-    var count = parseInt(annualSectionsCount.value || '1', 10);
-    if (isNaN(count) || count < 1) count = 1;
-    if (count > 4) count = 4;
-
-    annualRows.forEach(function (row, idx) {
-      var visible = idx < count;
-      var s = row.querySelector('.annual-start');
-      var e = row.querySelector('.annual-end');
-      row.classList.toggle('hidden', !visible);
-      // Only section 1 (idx 0) stays required; others are always optional
-      if (s) {
-        if (!visible) { s.removeAttribute('required'); s.value = ''; }
-        else if (idx === 0) s.setAttribute('required', 'required');
-        else s.removeAttribute('required');
-      }
-      if (e) {
-        if (!visible) { e.removeAttribute('required'); e.value = ''; }
-        else if (idx === 0) e.setAttribute('required', 'required');
-        else e.removeAttribute('required');
-      }
-    });
+  function addDaysIso(isoDate, days) {
+    var base = new Date(isoDate + 'T00:00:00');
+    if (isNaN(base.getTime())) return '';
+    base.setDate(base.getDate() + days);
+    var y = base.getFullYear();
+    var m = String(base.getMonth() + 1).padStart(2, '0');
+    var d = String(base.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + d;
   }
 
-  function buildAnnualSegments() {
-    var segments = [];
-    annualRows.forEach(function (row) {
-      if (row.classList.contains('hidden')) return;
-      var s = row.querySelector('.annual-start');
-      var e = row.querySelector('.annual-end');
-      if (!s || !e || !s.value || !e.value || e.value < s.value) return;
-      var days = Math.round((new Date(e.value) - new Date(s.value)) / 86400000) + 1;
-      segments.push({ start_date: s.value, end_date: e.value, days: days });
-    });
-    return segments;
-  }
+  function updateAnnualAutoRange() {
+    if (!annualStartInput || !annualDaysCount || !annualEndInput) return;
 
-  function updateAnnualPreview() {
-    if (!annualPreview) return;
-    var segments = buildAnnualSegments();
-    if (!segments.length) {
-      annualPreview.classList.add('hidden');
-      if (annualSegmentsJson) annualSegmentsJson.value = '';
+    var s = annualStartInput.value;
+    var days = parseInt(annualDaysCount.value || '0', 10);
+
+    // Clamp days to valid range
+    if (days < 1) days = 1;
+    if (days > annualMaxAllowed) {
+      days = annualMaxAllowed;
+      annualDaysCount.value = days;
+    }
+
+    if (!s || isNaN(days) || days <= 0) {
+      annualEndInput.value = '';
       if (annualStart) annualStart.value = '';
       if (annualEnd) annualEnd.value = '';
+      if (annualSegmentsJson) annualSegmentsJson.value = '';
+      if (annualPreview) annualPreview.classList.add('hidden');
       return;
     }
 
-    segments.sort(function (a, b) {
-      return a.start_date.localeCompare(b.start_date);
-    });
+    var e = addDaysIso(s, days - 1);
+    annualEndInput.value = e;
+    if (annualStart) annualStart.value = s;
+    if (annualEnd) annualEnd.value = e;
+    if (annualSegmentsJson) {
+      annualSegmentsJson.value = JSON.stringify([{ start_date: s, end_date: e, days: days }]);
+    }
 
-    var total = segments.reduce(function (acc, x) { return acc + (x.days || 0); }, 0);
-    var used = annualAlreadyApproved + total;
+    var used = annualAlreadyApproved + days;
     var remaining = Math.max(0, annualQuota - used);
-    if (annualPreviewText) annualPreviewText.textContent = total + ' jour(s) demandé(s) sur ' + segments.length + ' section(s)';
+    if (annualPreviewText) annualPreviewText.textContent = days + ' jour(s) demandé(s) — après approbation il restera ' + remaining + ' jour(s)';
     if (annualPreviewUsed) annualPreviewUsed.textContent = used;
     if (annualPreviewRemaining) annualPreviewRemaining.textContent = remaining;
-    annualPreview.classList.remove('hidden');
-
-    if (annualSegmentsJson) annualSegmentsJson.value = JSON.stringify(segments);
-    if (annualStart) annualStart.value = segments[0].start_date;
-    if (annualEnd) annualEnd.value = segments[segments.length - 1].end_date;
+    if (annualPreview) annualPreview.classList.remove('hidden');
   }
 
-  if (annualSectionsCount) {
-    annualSectionsCount.addEventListener('change', function () {
-      setAnnualVisibleRows();
-      updateAnnualPreview();
-    });
-  }
-  annualStarts.forEach(function (el) { el.addEventListener('change', updateAnnualPreview); });
-  annualEnds.forEach(function (el) { el.addEventListener('change', updateAnnualPreview); });
-  setAnnualVisibleRows();
-  updateAnnualPreview();
-
-  // Ensure hidden fields are synchronized before submit
-  var annualForm = annualSectionsCount ? annualSectionsCount.closest('form') : null;
-  if (annualForm) {
-    annualForm.addEventListener('submit', function () {
-      updateAnnualPreview();
-    });
-  }
-
-  // Backward compatibility (if old inputs exist)
-  if (annualStart && annualEnd && !annualStarts.length) {
-    var s = annualStart.value, e = annualEnd.value;
-    if (s && e && e >= s) {
-      var days = Math.round((new Date(e) - new Date(s)) / 86400000) + 1;
-      annualPreview.textContent = days + ' jour(s) demandé(s)';
-      annualPreview.classList.remove('hidden');
-    } else {
-      annualPreview.classList.add('hidden');
-    }
-  }
+  if (annualStartInput) annualStartInput.addEventListener('change', updateAnnualAutoRange);
+  if (annualDaysCount) annualDaysCount.addEventListener('input', updateAnnualAutoRange);
+  if (annualDaysCount) annualDaysCount.addEventListener('change', updateAnnualAutoRange);
+  updateAnnualAutoRange();
 
   // Other leave — auto-compute days
   var otherStart = document.getElementById('other-start');
@@ -1370,18 +1326,20 @@ $_oc = [
   var otherAttachReq = document.getElementById('other-attachment-required');
   var otherAttachment = document.getElementById('other-attachment');
 
-  function updateOtherDays() {
+  // Other leave: end date = start date + days - 1 (auto computed)
+  function updateOtherEndDate() {
     if (!otherStart || !otherEnd || !otherDays) return;
-    var s = otherStart.value, e = otherEnd.value;
-    if (s && e && e >= s) {
-      var d = Math.round((new Date(e) - new Date(s)) / 86400000) + 1;
-      otherDays.value = d;
+    var s = otherStart.value;
+    var days = parseInt(otherDays.value || '0', 10);
+    if (s && days >= 1) {
+      otherEnd.value = addDaysIso(s, days - 1);
     } else {
-      otherDays.value = '';
+      otherEnd.value = '';
     }
   }
-  if (otherStart) otherStart.addEventListener('change', updateOtherDays);
-  if (otherEnd)   otherEnd.addEventListener('change',   updateOtherDays);
+  if (otherStart) otherStart.addEventListener('change', updateOtherEndDate);
+  if (otherDays)  otherDays.addEventListener('input',   updateOtherEndDate);
+  if (otherDays)  otherDays.addEventListener('change',  updateOtherEndDate);
 
   // Show required indicator when attachment needed
   if (otherType) {
@@ -1492,19 +1450,71 @@ $_oc = [
 @endif
 @endif
 @elseif($personnelTab === 'leave')
-<div class="grid grid-cols-1 xl:grid-cols-5 gap-5 mb-5">
-  <section class="xl:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+@php
+  $leaveSubtab = request('leave_subtab', 'validation');
+  $leaveSubtabsAll = [
+    'validation' => ['fas fa-user-check', 'Validation'],
+    'parameters' => ['fas fa-sliders', 'Paramètres'],
+    'recent' => ['fas fa-clock-rotate-left', 'Demandes récentes'],
+  ];
+  $_leaveParentPerm = 'personnel.leave';
+  $_leaveSubPermPrefix = 'personnel.leave.';
+  $_leavePermKeys = array_keys($permSetAdmin['permissions'] ?? []);
+  $_hasSpecificLeaveChildren = !empty(array_filter($_leavePermKeys, fn($k) => str_starts_with($k, $_leaveSubPermPrefix)));
+  $leaveSubtabs = array_filter($leaveSubtabsAll, function ($v, $k) use ($permSetAdmin, $_leaveParentPerm, $_hasSpecificLeaveChildren) {
+    if (($permSetAdmin['isElevated'] ?? false) === true) {
+      return true;
+    }
+    if ($_hasSpecificLeaveChildren) {
+      return isset($permSetAdmin['permissions']['personnel.leave.' . $k]);
+    }
+    return isset($permSetAdmin['permissions'][$_leaveParentPerm]);
+  }, ARRAY_FILTER_USE_BOTH);
+  if (empty($leaveSubtabs)) {
+    $leaveSubtabs = [];
+  }
+  if (!array_key_exists($leaveSubtab, $leaveSubtabs)) {
+    $leaveSubtab = array_key_first($leaveSubtabs) ?? 'validation';
+  }
+  $jobReferencesByType = collect($personnelJobReferences ?? [])->groupBy('reference_type');
+@endphp
+
+<div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-3 mb-5">
+  <div class="flex flex-wrap items-center gap-2">
+    @if(empty($leaveSubtabs))
+    <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+      Aucun sous-onglet Congés & permissions n'est autorisé pour ce rôle.
+    </div>
+    @endif
+    @foreach($leaveSubtabs as $key => [$icon, $label])
+    <a href="{{ route('admin.index', ['tab' => 'personnel', 'personnel_tab' => 'leave', 'leave_subtab' => $key]) }}"
+       class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition {{ $leaveSubtab === $key ? 'bg-[#2453d6] text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200' }}">
+      <i class="{{ $icon }} text-xs"></i>
+      <span>{{ $label }}</span>
+    </a>
+    @endforeach
+    @if($leaveGlobalVisibility)
+    <span class="ml-auto inline-flex items-center rounded-full bg-emerald-50 border border-emerald-100 text-emerald-700 text-xs font-semibold px-3 py-1">Visibilité globale AGENT RH / SUPER ADMIN</span>
+    @endif
+  </div>
+</div>
+
+@if(empty($leaveSubtabs))
+@elseif($leaveSubtab === 'parameters')
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-5 mb-5">
+  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
     <div class="flex items-center justify-between gap-3 mb-4">
       <div>
-        <h3 class="text-lg font-bold text-gray-800">{{ __('personnel.ui.leave.catalog_title') }}</h3>
-        <p class="text-sm text-gray-500">{{ __('personnel.ui.leave.catalog_description') }}</p>
+        <h3 class="text-lg font-bold text-gray-800">Catalogue des congés & permissions</h3>
+        <p class="text-sm text-gray-500">Configuration des types et ZIP des pièces justificatives.</p>
       </div>
       <span class="text-xs rounded-full bg-sky-50 text-sky-700 border border-sky-100 px-3 py-1">{{ $personnelLeaveTypes->count() }} type(s)</span>
     </div>
 
-    <form method="POST" action="{{ route('admin.personnel.leave-types.store') }}" class="space-y-4">
+    <form method="POST" enctype="multipart/form-data" action="{{ route('admin.personnel.leave-types.store') }}" class="space-y-4">
       @csrf
       <input type="hidden" name="personnel_tab" value="leave">
+      <input type="hidden" name="leave_subtab" value="parameters">
 
       @if($adminScope)
       <input type="hidden" name="administration_type" value="{{ $adminScope['type'] }}">
@@ -1554,196 +1564,251 @@ $_oc = [
           <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.form_default_days') }}</label>
           <input type="number" step="0.5" min="0" name="default_days" value="{{ old('default_days') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
         </div>
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.form_carry_over') }}</label>
-          <input type="number" step="0.5" min="0" name="carry_over_days" value="{{ old('carry_over_days', 0) }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
-        </div>
-        <div class="flex items-center gap-4 pt-7">
-          <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="requires_attachment" value="1" {{ old('requires_attachment') ? 'checked' : '' }}> {{ __('personnel.ui.leave.form_requires_attachment') }}</label>
-          <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="is_paid" value="1" {{ old('is_paid', '1') ? 'checked' : '' }}> {{ __('personnel.ui.leave.form_is_paid') }}</label>
-          <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="is_active" value="1" {{ old('is_active', '1') ? 'checked' : '' }}> {{ __('personnel.ui.leave.form_is_active') }}</label>
-        </div>
       </div>
 
       <div>
-        <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.form_description') }}</label>
-        <textarea name="description" rows="3" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">{{ old('description') }}</textarea>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">ZIP justificatifs</label>
+        <input type="file" name="justification_zip" accept=".zip" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+      </div>
+
+      <div class="flex items-center gap-4">
+        <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="requires_attachment" value="1" {{ old('requires_attachment') ? 'checked' : '' }}> {{ __('personnel.ui.leave.form_requires_attachment') }}</label>
+        <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="is_paid" value="1" {{ old('is_paid', '1') ? 'checked' : '' }}> {{ __('personnel.ui.leave.form_is_paid') }}</label>
+        <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="is_active" value="1" {{ old('is_active', '1') ? 'checked' : '' }}> {{ __('personnel.ui.leave.form_is_active') }}</label>
       </div>
 
       <button type="submit" class="px-6 py-2.5 bg-[#2453d6] text-white rounded-xl text-sm font-semibold">{{ __('personnel.ui.leave.btn_save_type') }}</button>
     </form>
+
+    <div class="mt-5 overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead>
+          <tr class="text-left text-gray-500 border-b border-gray-100">
+            <th class="py-2 pr-4">Type</th>
+            <th class="py-2 pr-4">Code</th>
+            <th class="py-2">ZIP</th>
+          </tr>
+        </thead>
+        <tbody>
+          @forelse($personnelLeaveTypes as $leaveType)
+          <tr class="border-b border-gray-100">
+            <td class="py-2 pr-4 text-gray-700 font-semibold">{{ $leaveType->name }}</td>
+            <td class="py-2 pr-4 text-gray-500">{{ $leaveType->code ?: '-' }}</td>
+            <td class="py-2">
+              @if($leaveType->justification_zip_path)
+              <a href="{{ route('admin.personnel.leave-types.justification-zip.download', $leaveType) }}" class="text-[#2453d6] text-xs font-semibold">Télécharger ZIP</a>
+              @else
+              <span class="text-xs text-gray-400">Non défini</span>
+              @endif
+            </td>
+          </tr>
+          @empty
+          <tr>
+            <td colspan="3" class="py-3 text-center text-gray-400">Aucun type configuré.</td>
+          </tr>
+          @endforelse
+        </tbody>
+      </table>
+    </div>
   </section>
 
-  <section class="xl:col-span-3 space-y-5">
-    <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-      <div class="flex items-center justify-between gap-3 mb-4">
-        <div>
-          <h3 class="text-lg font-bold text-gray-800">{{ __('personnel.ui.leave.new_request_title') }}</h3>
-          <p class="text-sm text-gray-500">{{ __('personnel.ui.leave.new_request_description') }}</p>
-        </div>
-        <div class="flex gap-2 text-xs">
-          <span class="rounded-full bg-amber-50 text-amber-700 border border-amber-100 px-3 py-1">{{ number_format($personnelStats['pendingLeaveRequests'] ?? 0) }} en attente</span>
-          <span class="rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 px-3 py-1">{{ number_format($personnelStats['leaveRequests'] ?? 0) }} demande(s)</span>
-        </div>
-      </div>
-
-      @if($personnelEmployeeDirectory->isEmpty() || $personnelLeaveTypes->isEmpty())
-      <div class="rounded-xl bg-amber-50 border border-amber-100 px-4 py-5 text-sm text-amber-800">{{ __('personnel.ui.leave.need_employee_and_type') }}</div>
-      @else
-      <form method="POST" enctype="multipart/form-data" action="{{ route('admin.personnel.leave-requests.store') }}" class="grid grid-cols-1 md:grid-cols-2 gap-3">
-        @csrf
-        <input type="hidden" name="personnel_tab" value="leave">
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.form_employee') }}</label>
-          <select name="employee_id" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
-            <option value="">{{ __('personnel.ui.leave.admin_select') }}</option>
-            @foreach($personnelEmployeeDirectory as $employee)
-            <option value="{{ $employee->id }}" {{ old('employee_id', $editingPersonnel->id ?? '') === $employee->id ? 'selected' : '' }}>{{ $employee->full_name }}{{ $employee->employee_number ? ' - ' . $employee->employee_number : '' }}</option>
-            @endforeach
-          </select>
-        </div>
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.form_leave_type') }}</label>
-          <select name="leave_type_id" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
-            <option value="">{{ __('personnel.ui.leave.admin_select') }}</option>
-            @foreach($personnelLeaveTypes as $leaveType)
-            <option value="{{ $leaveType->id }}" {{ old('leave_type_id') === $leaveType->id ? 'selected' : '' }}>{{ $leaveType->name }}{{ $leaveType->default_days !== null ? ' - quota ' . $leaveType->default_days : '' }}</option>
-            @endforeach
-          </select>
-        </div>
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.form_start') }}</label>
-          <input type="date" name="start_date" value="{{ old('start_date') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
-        </div>
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.form_end') }}</label>
-          <input type="date" name="end_date" value="{{ old('end_date') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
-        </div>
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.form_return') }}</label>
-          <input type="date" name="return_date" value="{{ old('return_date') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
-        </div>
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.form_requested_days') }}</label>
-          <input type="number" min="0" step="0.5" name="requested_days" value="{{ old('requested_days') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
-        </div>
-        <div class="md:col-span-2">
-          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.form_reason') }}</label>
-          <textarea name="reason" rows="3" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">{{ old('reason') }}</textarea>
-        </div>
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.form_attachment') }}</label>
-          <input type="file" name="attachment" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
-        </div>
-        <div class="flex items-center gap-3 pt-7">
-          <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="unexpected_absence" value="1" {{ old('unexpected_absence') ? 'checked' : '' }}> {{ __('personnel.ui.leave.form_unexpected') }}</label>
-          <button type="submit" class="px-6 py-2.5 bg-teal-600 text-white rounded-xl text-sm font-semibold">{{ __('personnel.ui.leave.btn_save_request') }}</button>
-        </div>
-      </form>
-      @endif
+  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <div class="mb-4">
+      <h3 class="text-lg font-bold text-gray-800">Référentiel Grades / Emplois / Fonctions</h3>
+      <p class="text-sm text-gray-500">Formulaire de création des grades, emplois et fonctions.</p>
     </div>
 
-    <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-      <h3 class="text-lg font-bold text-gray-800 mb-4">{{ __('personnel.ui.leave.table_title') }}</h3>
-      <div class="overflow-x-auto">
-        <table class="min-w-full text-sm">
-          <thead>
-            <tr class="text-left text-gray-500 border-b border-gray-100">
-              <th class="py-3 pr-4">{{ __('personnel.ui.leave.table_col_employee') }}</th>
-              <th class="py-3 pr-4">{{ __('personnel.ui.leave.table_col_type') }}</th>
-              <th class="py-3 pr-4">{{ __('personnel.ui.leave.table_col_period') }}</th>
-              <th class="py-3 pr-4">{{ __('personnel.ui.leave.table_col_duration') }}</th>
-              <th class="py-3 pr-4">{{ __('personnel.ui.leave.table_col_status') }}</th>
-              <th class="py-3 pr-4">Circuit de validation</th>
-              <th class="py-3">{{ __('personnel.ui.leave.table_col_action') }}</th>
-            </tr>
-          </thead>
-          <tbody>
-            @forelse($personnelLeaveRequests as $leaveRequest)
-            @php
-              $wf = data_get($leaveRequest->metadata, 'approval_workflow');
-              $wfSteps = collect(data_get($wf, 'steps', []))->filter(fn($s) => !empty($s['user_id']))->values();
-              $wfCurrentIndex = (int) data_get($wf, 'current_step_index', 0);
-              $wfCurrentApproverId = data_get($wf, 'current_approver_user_id');
-              $wfCurrentApprover = $wfCurrentApproverId ? ($personnelLeaveApprovers[$wfCurrentApproverId] ?? null) : null;
-              $wfTotal = $wfSteps->count();
-              $wfCurrentStepHuman = $wfTotal > 0 ? min($wfCurrentIndex + 1, $wfTotal) : null;
-              $currentUser = auth()->user();
-              $isSuperAdminBypass = $currentUser && $currentUser->role === 'admin' && !$currentUser->profile_id;
-              $isWorkflowPending = $wfTotal > 0 && $leaveRequest->status === 'pending';
-              $canApproveReject = !$isWorkflowPending
-                || $isSuperAdminBypass
-                || ((string) ($currentUser?->id ?? '') !== '' && (string) ($currentUser?->id ?? '') === (string) ($wfCurrentApproverId ?? ''));
-            @endphp
-            <tr class="border-b border-gray-100 align-top">
-              <td class="py-3 pr-4">
-                <div class="font-semibold text-gray-800">{{ $leaveRequest->employee?->full_name ?? 'Employé supprimé' }}</div>
-                <div class="text-xs text-gray-500">{{ $leaveRequest->employee?->employee_number ?: __('personnel.ui.leave.table_no_employee_number') }}</div>
-              </td>
-              <td class="py-3 pr-4 text-gray-600">{{ $leaveRequest->leaveType?->name ?? 'Type supprimé' }}</td>
-              <td class="py-3 pr-4 text-gray-600">{{ optional($leaveRequest->start_date)->format('d/m/Y') }} → {{ optional($leaveRequest->end_date)->format('d/m/Y') }}</td>
-              <td class="py-3 pr-4 text-gray-600">{{ $leaveRequest->requested_days }}</td>
-              <td class="py-3 pr-4">
-                <span class="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold {{ $leaveRequest->status === 'approved' ? 'bg-emerald-50 text-emerald-700' : ($leaveRequest->status === 'rejected' ? 'bg-rose-50 text-rose-700' : ($leaveRequest->status === 'cancelled' ? 'bg-gray-100 text-gray-700' : 'bg-amber-50 text-amber-700')) }}">{{ __('personnel.ui.statuses.' . $leaveRequest->status) }}</span>
-              </td>
-              <td class="py-3 pr-4">
-                @if($wfTotal > 0)
-                <div class="space-y-1">
-                  <div class="inline-flex items-center gap-2 rounded-full bg-blue-50 border border-blue-100 text-blue-700 text-xs font-semibold px-2.5 py-1">
-                    <i class="fas fa-diagram-project text-[10px]"></i>
-                    Étape {{ $wfCurrentStepHuman }}/{{ $wfTotal }}
-                  </div>
-                  @if($leaveRequest->status === 'pending')
-                  <div class="text-xs text-gray-700">
-                    <span class="font-semibold">Valideur courant :</span>
-                    {{ $wfCurrentApprover?->name ?? 'Non défini' }}
-                  </div>
-                  <div class="text-[11px] text-gray-500">
-                    {{ $wfCurrentApprover?->profile?->name ?? 'Profil non défini' }}
-                  </div>
-                  @elseif($leaveRequest->status === 'approved')
-                  <div class="text-xs text-emerald-700 font-semibold">Circuit terminé</div>
-                  @elseif($leaveRequest->status === 'rejected')
-                  <div class="text-xs text-rose-700 font-semibold">Arrêté à l'étape {{ $wfCurrentStepHuman }}/{{ $wfTotal }}</div>
-                  @endif
-                </div>
-                @else
-                <span class="text-xs text-gray-400">Validation simple</span>
-                @endif
-              </td>
-              <td class="py-3">
-                <div class="flex flex-wrap gap-2">
-                  @foreach(['approved' => __('personnel.ui.leave.btn_approve'), 'rejected' => __('personnel.ui.leave.btn_reject'), 'pending' => __('personnel.ui.leave.btn_set_pending')] as $status => $label)
-                  @if(in_array($status, ['approved', 'rejected'], true) && !$canApproveReject)
-                    @continue
-                  @endif
-                  <form method="POST" action="{{ route('admin.personnel.leave-requests.status', $leaveRequest) }}">
-                    @csrf
-                    @method('PATCH')
-                    <input type="hidden" name="personnel_tab" value="leave">
-                    <input type="hidden" name="status" value="{{ $status }}">
-                    <button type="submit" class="px-3 py-1.5 rounded-lg border border-gray-300 text-xs font-semibold text-gray-700 hover:bg-gray-50">{{ $label }}</button>
-                  </form>
-                  @endforeach
-                </div>
-                @if($isWorkflowPending && !$canApproveReject)
-                <div class="mt-2 text-[11px] text-gray-500">
-                  Action réservée au valideur courant.
-                </div>
-                @endif
-              </td>
-            </tr>
-            @empty
-            <tr>
-              <td colspan="7" class="py-8 text-center text-sm text-gray-400">{{ __('personnel.ui.leave.table_empty') }}</td>
-            </tr>
-            @endforelse
-          </tbody>
-        </table>
+    <form method="POST" action="{{ route('admin.personnel.job-references.store') }}" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      @csrf
+      <input type="hidden" name="personnel_tab" value="leave">
+      <input type="hidden" name="leave_subtab" value="parameters">
+      @if($adminScope)
+      <input type="hidden" name="administration_type" value="{{ $adminScope['type'] }}">
+      <input type="hidden" name="administration_id" value="{{ $adminScope['id'] }}">
+      @else
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.admin_type_label') }}</label>
+        <select name="administration_type" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm" required>
+          <option value="emitter">{{ __('personnel.ui.leave.admin_emitter') }}</option>
+          <option value="recipient">{{ __('personnel.ui.leave.admin_recipient') }}</option>
+        </select>
       </div>
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">Administration</label>
+        <select name="administration_id" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm" required>
+          @foreach($emitters as $e)
+          <option value="{{ $e->id }}">{{ $e->name }} {{ __('personnel.ui.leave.admin_emitter_bracket') }}</option>
+          @endforeach
+          @foreach($recipients as $r)
+          <option value="{{ $r->id }}">{{ $r->name }} {{ __('personnel.ui.leave.admin_recipient_bracket') }}</option>
+          @endforeach
+        </select>
+      </div>
+      @endif
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">Type de référence</label>
+        <select name="reference_type" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm" required>
+          <option value="grade">Grade</option>
+          <option value="employment">Emploi</option>
+          <option value="function">Fonction</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">Libellé</label>
+        <input type="text" name="label" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm" required>
+      </div>
+      <div class="md:col-span-2">
+        <button type="submit" class="px-6 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold">Enregistrer la référence</button>
+      </div>
+    </form>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+      @foreach(['grade' => 'Grades', 'employment' => 'Emplois', 'function' => 'Fonctions'] as $refType => $refLabel)
+      <div class="rounded-xl border border-gray-200 p-3">
+        <h4 class="text-sm font-bold text-gray-800 mb-2">{{ $refLabel }}</h4>
+        <ul class="space-y-1 text-sm text-gray-600">
+          @forelse(($jobReferencesByType[$refType] ?? collect()) as $ref)
+          <li>{{ $ref->label }}</li>
+          @empty
+          <li class="text-gray-400">Aucune valeur</li>
+          @endforelse
+        </ul>
+      </div>
+      @endforeach
     </div>
   </section>
 </div>
+@elseif($leaveSubtab === 'recent')
+@php
+  $recentValidatedOrRejected = collect($personnelLeaveRequests)->filter(fn($r) => in_array($r->status, ['approved', 'rejected'], true))->values();
+@endphp
+<div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-5">
+  <div class="flex items-center justify-between gap-3 mb-4">
+    <div>
+      <h3 class="text-lg font-bold text-gray-800">Historique des demandes</h3>
+      <p class="text-sm text-gray-500">Demandes validées ou rejetées par la hiérarchie.</p>
+    </div>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="min-w-full text-sm">
+      <thead>
+        <tr class="text-left text-gray-500 border-b border-gray-100">
+          <th class="py-3 pr-4">Date</th>
+          <th class="py-3 pr-4">Matricule</th>
+          <th class="py-3 pr-4">Nom & prénoms</th>
+          <th class="py-3 pr-4">Type</th>
+          <th class="py-3 pr-4">Statut</th>
+          <th class="py-3">Supérieur valideur</th>
+        </tr>
+      </thead>
+      <tbody>
+        @forelse($recentValidatedOrRejected as $leaveRequest)
+        <tr class="border-b border-gray-100">
+          <td class="py-3 pr-4 text-gray-600">{{ optional($leaveRequest->updated_at)->format('d/m/Y H:i') }}</td>
+          <td class="py-3 pr-4 text-gray-600">{{ $leaveRequest->employee?->employee_number ?: '-' }}</td>
+          <td class="py-3 pr-4 text-gray-800 font-semibold">{{ $leaveRequest->employee?->full_name ?? __('personnel.ui.leave.table_deleted_employee') }}</td>
+          <td class="py-3 pr-4 text-gray-600">{{ $leaveRequest->leaveType?->name ?? __('personnel.ui.leave.table_deleted_type') }}</td>
+          <td class="py-3 pr-4">
+            <span class="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold {{ $leaveRequest->status === 'approved' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700' }}">{{ __('personnel.ui.statuses.' . $leaveRequest->status) }}</span>
+          </td>
+          <td class="py-3 text-gray-600">{{ $leaveRequest->approvedBy?->name ?? 'Non renseigné' }}</td>
+        </tr>
+        @empty
+        <tr>
+          <td colspan="6" class="py-8 text-center text-sm text-gray-400">{{ __('personnel.ui.leave.table_empty') }}</td>
+        </tr>
+        @endforelse
+      </tbody>
+    </table>
+  </div>
+</div>
+@else
+@php
+  $validationRows = collect($personnelLeaveRequests)->where('status', 'pending')->values();
+@endphp
+<div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-5">
+  <div class="flex items-center justify-between gap-3 mb-4">
+    <div>
+      <h3 class="text-lg font-bold text-gray-800">Validation hiérarchique des demandes</h3>
+      <p class="text-sm text-gray-500">Le supérieur hiérarchique valide ou rejette les demandes des agents.</p>
+    </div>
+    <span class="text-xs rounded-full bg-amber-50 text-amber-700 border border-amber-100 px-3 py-1">{{ $validationRows->count() }} en attente</span>
+  </div>
+
+  <div class="overflow-x-auto">
+    <table class="min-w-full text-sm">
+      <thead>
+        <tr class="text-left text-gray-500 border-b border-gray-100">
+          <th class="py-3 pr-4">Matricule</th>
+          <th class="py-3 pr-4">Nom & prénoms</th>
+          <th class="py-3 pr-4">Grade</th>
+          <th class="py-3 pr-4">Emploi / Fonction</th>
+          <th class="py-3 pr-4">Pièce justificative</th>
+          <th class="py-3 pr-4">Supérieur valideur</th>
+          <th class="py-3">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        @forelse($validationRows as $leaveRequest)
+        @php
+          $wf = data_get($leaveRequest->metadata, 'approval_workflow');
+          $wfSteps = collect(data_get($wf, 'steps', []))->filter(fn($s) => !empty($s['user_id']))->values();
+          $wfCurrentApproverId = data_get($wf, 'current_approver_user_id');
+          $wfCurrentApprover = $wfCurrentApproverId ? ($personnelLeaveApprovers[$wfCurrentApproverId] ?? null) : null;
+          $employeeMeta = is_array($leaveRequest->employee?->metadata) ? $leaveRequest->employee->metadata : [];
+          $agentGrade = $employeeMeta['grade'] ?? '-';
+          $agentEmployment = $employeeMeta['employment'] ?? ($employeeMeta['emploi'] ?? '-');
+          $agentFunction = $leaveRequest->employee?->job_title ?: ($employeeMeta['function'] ?? '-');
+          $currentUser = auth()->user();
+          $isSuperAdminBypass = $currentUser && $currentUser->role === 'admin' && !$currentUser->profile_id;
+          $canApproveReject = $wfSteps->isEmpty()
+            || $isSuperAdminBypass
+            || ((string) ($currentUser?->id ?? '') !== '' && (string) ($currentUser?->id ?? '') === (string) ($wfCurrentApproverId ?? ''));
+        @endphp
+        <tr class="border-b border-gray-100 align-top">
+          <td class="py-3 pr-4 text-gray-600">{{ $leaveRequest->employee?->employee_number ?: __('personnel.ui.leave.table_no_employee_number') }}</td>
+          <td class="py-3 pr-4 text-gray-800 font-semibold">{{ $leaveRequest->employee?->full_name ?? __('personnel.ui.leave.table_deleted_employee') }}</td>
+          <td class="py-3 pr-4 text-gray-600">{{ $agentGrade }}</td>
+          <td class="py-3 pr-4 text-gray-600">{{ $agentEmployment }} / {{ $agentFunction }}</td>
+          <td class="py-3 pr-4">
+            @if($leaveRequest->attachment_path)
+            <a href="{{ route('admin.personnel.leave-requests.attachment.download', $leaveRequest) }}" class="text-[#2453d6] text-xs font-semibold">ZIP / justificatif</a>
+            @else
+            <span class="text-xs text-gray-400">Aucun fichier</span>
+            @endif
+          </td>
+          <td class="py-3 pr-4 text-gray-600">{{ $wfCurrentApprover?->name ?? 'Non défini' }}</td>
+          <td class="py-3">
+            <div class="flex flex-wrap gap-2">
+              @foreach(['approved' => __('personnel.ui.leave.btn_approve'), 'rejected' => __('personnel.ui.leave.btn_reject')] as $status => $label)
+              @if(!$canApproveReject)
+                @continue
+              @endif
+              <form method="POST" action="{{ route('admin.personnel.leave-requests.status', $leaveRequest) }}">
+                @csrf
+                @method('PATCH')
+                <input type="hidden" name="personnel_tab" value="leave">
+                <input type="hidden" name="leave_subtab" value="validation">
+                <input type="hidden" name="status" value="{{ $status }}">
+                <button type="submit" class="px-3 py-1.5 rounded-lg border border-gray-300 text-xs font-semibold text-gray-700 hover:bg-gray-50">{{ $label }}</button>
+              </form>
+              @endforeach
+            </div>
+            @if(!$canApproveReject)
+            <div class="mt-2 text-[11px] text-gray-500">Action réservée au valideur courant.</div>
+            @endif
+          </td>
+        </tr>
+        @empty
+        <tr>
+          <td colspan="7" class="py-8 text-center text-sm text-gray-400">Aucune demande en attente de validation.</td>
+        </tr>
+        @endforelse
+      </tbody>
+    </table>
+  </div>
+</div>
+@endif
 @elseif($personnelTab === 'training')
 <div class="grid grid-cols-1 xl:grid-cols-6 gap-5 mb-5">
   <section class="xl:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
@@ -7621,6 +7686,9 @@ $permissionTree = [
         'personnel.employees'  => 'Employés',
         'personnel.agent-space'=> 'Espace agent',
         'personnel.leave'      => 'Congés',
+      'personnel.leave.validation' => 'Congés - Validation',
+      'personnel.leave.parameters' => 'Congés - Paramètres',
+      'personnel.leave.recent'     => 'Congés - Demandes récentes',
         'personnel.training'   => 'Formation',
         'personnel.career'     => 'Carrière',
     ]],

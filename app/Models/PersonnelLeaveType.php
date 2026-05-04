@@ -26,6 +26,10 @@ class PersonnelLeaveType extends Model
         'requires_attachment',
         'is_paid',
         'is_active',
+        'justification_zip_disk',
+        'justification_zip_path',
+        'justification_zip_name',
+        'justification_zip_size',
         'metadata',
     ];
 
@@ -35,6 +39,7 @@ class PersonnelLeaveType extends Model
         'requires_attachment' => 'boolean',
         'is_paid' => 'boolean',
         'is_active' => 'boolean',
+        'justification_zip_size' => 'integer',
         'metadata' => 'array',
     ];
 

@@ -11,6 +11,7 @@ use App\Models\PersonnelEmployeeSkill;
 use App\Models\PersonnelGoal;
 use App\Models\PersonnelLeaveRequest;
 use App\Models\PersonnelLeaveType;
+use App\Models\PersonnelJobReference;
 use App\Models\PersonnelPerformanceReview;
 use App\Models\PersonnelTraining;
 use App\Models\PersonnelTrainingEnrollment;
@@ -64,6 +65,32 @@ class AdminController extends Controller
         $normalized = preg_replace('/\s+/', ' ', $normalized) ?? $normalized;
 
         return $normalized === 'SUPER ADMIN';
+    }
+
+    private function isAgentRhProfile(?AdministrationProfile $profile): bool
+    {
+        if (!$profile || !is_string($profile->name)) {
+            return false;
+        }
+
+        $normalized = strtoupper(trim(str_replace(['_', '-'], ' ', $profile->name)));
+        $normalized = preg_replace('/\s+/', ' ', $normalized) ?? $normalized;
+
+        return str_contains($normalized, 'AGENT RH');
+    }
+
+    private function hasGlobalLeaveVisibility(?User $user): bool
+    {
+        if (!$user) {
+            return false;
+        }
+
+        if ($user->role === 'admin' && !$user->profile_id) {
+            return true;
+        }
+
+        $profile = $user->profile_id ? AdministrationProfile::find($user->profile_id) : null;
+        return $this->isSuperAdminProfile($profile) || $this->isAgentRhProfile($profile);
     }
 
     private function extractOrigin(?string $url): ?string
@@ -567,6 +594,8 @@ class AdminController extends Controller
         $personnelLeaveTypes = collect();
         $personnelLeaveRequests = collect();
         $personnelLeaveApprovers = collect();
+        $personnelJobReferences = collect();
+        $leaveGlobalVisibility = $this->hasGlobalLeaveVisibility(auth()->user());
         $personnelTrainings = collect();
         $personnelTrainingEnrollments = collect();
         $personnelEmployeeSkills = collect();
@@ -761,7 +790,9 @@ class AdminController extends Controller
 
             if (Schema::hasTable('personnel_leave_requests')) {
                 $leaveRequestQuery = PersonnelLeaveRequest::with(['employee', 'leaveType', 'approvedBy'])->latest();
-                $this->applyPersonnelScope($leaveRequestQuery, $adminScope);
+                if (!$leaveGlobalVisibility) {
+                    $this->applyPersonnelScope($leaveRequestQuery, $adminScope);
+                }
                 $personnelLeaveRequests = $leaveRequestQuery->limit(12)->get();
 
                 $currentApproverIds = $personnelLeaveRequests
@@ -778,10 +809,21 @@ class AdminController extends Controller
                         ->keyBy('id');
                 }
 
-                $personnelStats['leaveRequests'] = (clone $this->applyPersonnelScope(PersonnelLeaveRequest::query(), $adminScope))->count();
-                $personnelStats['pendingLeaveRequests'] = (clone $this->applyPersonnelScope(PersonnelLeaveRequest::query(), $adminScope))
-                    ->where('status', 'pending')
-                    ->count();
+                if ($leaveGlobalVisibility) {
+                    $personnelStats['leaveRequests'] = PersonnelLeaveRequest::query()->count();
+                    $personnelStats['pendingLeaveRequests'] = PersonnelLeaveRequest::query()->where('status', 'pending')->count();
+                } else {
+                    $personnelStats['leaveRequests'] = (clone $this->applyPersonnelScope(PersonnelLeaveRequest::query(), $adminScope))->count();
+                    $personnelStats['pendingLeaveRequests'] = (clone $this->applyPersonnelScope(PersonnelLeaveRequest::query(), $adminScope))
+                        ->where('status', 'pending')
+                        ->count();
+                }
+            }
+
+            if (Schema::hasTable('personnel_job_references')) {
+                $jobReferenceQuery = PersonnelJobReference::query()->where('is_active', true)->orderBy('reference_type')->orderBy('label');
+                $this->applyPersonnelScope($jobReferenceQuery, $adminScope);
+                $personnelJobReferences = $jobReferenceQuery->get();
             }
 
             if (Schema::hasTable('personnel_trainings')) {
@@ -912,7 +954,7 @@ class AdminController extends Controller
             'allUsers', 'shareMap', 'onlyofficeUrl', 'onlyofficeJwt', 'appPublicUrl', 'dirAssignments',
             'sigProviders', 'courrierArchivalDays', 'adminScope',
             'personnelEmployees', 'personnelEmployeeDirectory', 'selectedPersonnelEmployee', 'personnelStats',
-            'personnelLeaveTypes', 'personnelLeaveRequests', 'personnelLeaveApprovers', 'personnelTrainings', 'personnelTrainingEnrollments',
+            'personnelLeaveTypes', 'personnelLeaveRequests', 'personnelLeaveApprovers', 'personnelJobReferences', 'leaveGlobalVisibility', 'personnelTrainings', 'personnelTrainingEnrollments',
             'personnelEmployeeSkills', 'personnelGoals', 'personnelPerformanceReviews', 'personnelCareerEvents', 'personnelRecentActivity'
         ));
     }
@@ -1218,6 +1260,7 @@ class AdminController extends Controller
     {
         $validated = $request->validate([
             'personnel_tab' => ['nullable', 'string'],
+            'leave_subtab' => ['nullable', 'string'],
             'administration_type' => ['required', 'in:emitter,recipient'],
             'administration_id' => ['required', 'string'],
             'code' => ['nullable', 'string', 'max:100'],
@@ -1229,6 +1272,7 @@ class AdminController extends Controller
             'requires_attachment' => ['nullable', 'boolean'],
             'is_paid' => ['nullable', 'boolean'],
             'is_active' => ['nullable', 'boolean'],
+            'justification_zip' => ['nullable', 'file', 'mimes:zip', 'max:20480'],
         ]);
 
         $adminScope = $this->resolveAdminScope();
@@ -1253,7 +1297,7 @@ class AdminController extends Controller
             }
         }
 
-        PersonnelLeaveType::create([
+        $payload = [
             'administration_type' => $validated['administration_type'],
             'administration_id' => $validated['administration_id'],
             'code' => $validated['code'] ?: null,
@@ -1265,12 +1309,102 @@ class AdminController extends Controller
             'requires_attachment' => $request->boolean('requires_attachment'),
             'is_paid' => $request->boolean('is_paid', true),
             'is_active' => $request->boolean('is_active', true),
-        ]);
+        ];
+
+        if ($request->hasFile('justification_zip')) {
+            $file = $request->file('justification_zip');
+            $storedName = Str::uuid() . '_' . preg_replace('/[^A-Za-z0-9._-]/', '_', $file->getClientOriginalName());
+            $path = $file->storeAs('personnel-leave-type-zips/' . $validated['administration_type'] . '/' . $validated['administration_id'], $storedName, 'local');
+            $payload['justification_zip_disk'] = 'local';
+            $payload['justification_zip_path'] = $path;
+            $payload['justification_zip_name'] = $file->getClientOriginalName();
+            $payload['justification_zip_size'] = $file->getSize();
+        }
+
+        PersonnelLeaveType::create($payload);
 
         return redirect()->route('admin.index', [
             'tab' => 'personnel',
             'personnel_tab' => $request->input('personnel_tab', 'leave'),
+            'leave_subtab' => $request->input('leave_subtab', 'parameters'),
         ])->with('success', 'Type de congé enregistré.');
+    }
+
+    public function storePersonnelJobReference(Request $request)
+    {
+        $validated = $request->validate([
+            'personnel_tab' => ['nullable', 'string'],
+            'leave_subtab' => ['nullable', 'string'],
+            'administration_type' => ['required', 'in:emitter,recipient'],
+            'administration_id' => ['required', 'string'],
+            'reference_type' => ['required', 'in:grade,employment,function'],
+            'label' => ['required', 'string', 'max:191'],
+            'is_active' => ['nullable', 'boolean'],
+        ]);
+
+        $adminScope = $this->resolveAdminScope();
+        if ($adminScope) {
+            $validated['administration_type'] = $this->normalizeAdministrationType($adminScope['type'] ?? null);
+            $validated['administration_id'] = $adminScope['id'];
+        }
+
+        $this->ensurePersonnelAdministrationExists($validated['administration_type'], $validated['administration_id']);
+
+        PersonnelJobReference::query()->updateOrCreate(
+            [
+                'administration_type' => $validated['administration_type'],
+                'administration_id' => $validated['administration_id'],
+                'reference_type' => $validated['reference_type'],
+                'label' => trim($validated['label']),
+            ],
+            [
+                'is_active' => $request->boolean('is_active', true),
+            ]
+        );
+
+        return redirect()->route('admin.index', [
+            'tab' => 'personnel',
+            'personnel_tab' => $request->input('personnel_tab', 'leave'),
+            'leave_subtab' => $request->input('leave_subtab', 'parameters'),
+        ])->with('success', 'Référence métier enregistrée.');
+    }
+
+    public function downloadPersonnelLeaveTypeJustificationZip(PersonnelLeaveType $leaveType)
+    {
+        $this->abortIfPersonnelScopeMismatch(
+            $leaveType->administration_type,
+            $leaveType->administration_id,
+            'Ce type de congé est hors de votre périmètre d\'administration.'
+        );
+
+        abort_unless($leaveType->justification_zip_disk && $leaveType->justification_zip_path, 404);
+        abort_unless(Storage::disk($leaveType->justification_zip_disk)->exists($leaveType->justification_zip_path), 404);
+
+        return Storage::disk($leaveType->justification_zip_disk)->download(
+            $leaveType->justification_zip_path,
+            $leaveType->justification_zip_name ?: basename($leaveType->justification_zip_path)
+        );
+    }
+
+    public function downloadPersonnelLeaveRequestAttachment(PersonnelLeaveRequest $leaveRequest)
+    {
+        $leaveRequest->loadMissing('employee');
+
+        if (!$this->hasGlobalLeaveVisibility(auth()->user())) {
+            $this->abortIfPersonnelScopeMismatch(
+                $leaveRequest->administration_type,
+                $leaveRequest->administration_id,
+                'Cette demande est hors de votre périmètre d\'administration.'
+            );
+        }
+
+        abort_unless($leaveRequest->attachment_disk && $leaveRequest->attachment_path, 404);
+        abort_unless(Storage::disk($leaveRequest->attachment_disk)->exists($leaveRequest->attachment_path), 404);
+
+        return Storage::disk($leaveRequest->attachment_disk)->download(
+            $leaveRequest->attachment_path,
+            $leaveRequest->attachment_original_name ?: basename($leaveRequest->attachment_path)
+        );
     }
 
     public function storePersonnelLeaveRequest(Request $request)
@@ -1327,6 +1461,26 @@ class AdminController extends Controller
                 $metadata['annual_segment_count'] = count($segments);
             }
 
+            // Validation quota annuel : ≤ 30 jours/an et ≤ solde restant
+            $maxAnnualDays = 30;
+            $alreadyUsedDays = (float) PersonnelLeaveRequest::where('employee_id', $employee->id)
+                ->where('leave_type_id', $leaveType->id)
+                ->whereIn('status', ['approved', 'pending'])
+                ->whereYear('start_date', now()->year)
+                ->sum('requested_days');
+            $remainingDays = max(0, $maxAnnualDays - $alreadyUsedDays);
+
+            if ((float) $requestedDays > $maxAnnualDays) {
+                throw ValidationException::withMessages([
+                    'requested_days' => "Le congé annuel ne peut pas dépasser {$maxAnnualDays} jours par an.",
+                ]);
+            }
+            if ((float) $requestedDays > $remainingDays) {
+                throw ValidationException::withMessages([
+                    'requested_days' => "Solde insuffisant : il vous reste {$remainingDays} jour(s) de congé annuel disponible(s) pour cette année.",
+                ]);
+            }
+
             $workflowSteps = $this->buildAnnualApprovalWorkflow($employee);
             if (empty($workflowSteps)) {
                 throw ValidationException::withMessages([
@@ -1377,6 +1531,7 @@ class AdminController extends Controller
             'tab' => 'personnel',
             'personnel_tab' => $request->input('personnel_tab', 'agent-space'),
             'agent_space_tab' => $request->input('agent_space_tab', 'leave'),
+            'leave_subtab' => $request->input('leave_subtab', 'validation'),
         ];
         if ($request->input('selected_employee')) {
             $redirectParams['selected_employee'] = $request->input('selected_employee');
@@ -1389,6 +1544,7 @@ class AdminController extends Controller
     {
         $validated = $request->validate([
             'personnel_tab' => ['nullable', 'string'],
+            'leave_subtab' => ['nullable', 'string'],
             'status' => ['required', 'in:pending,approved,rejected,cancelled'],
             'approved_days' => ['nullable', 'numeric', 'min:0'],
             'comment' => ['nullable', 'string'],
@@ -1450,6 +1606,7 @@ class AdminController extends Controller
                         return redirect()->route('admin.index', [
                             'tab' => 'personnel',
                             'personnel_tab' => $request->input('personnel_tab', 'leave'),
+                            'leave_subtab' => $request->input('leave_subtab', 'validation'),
                         ])->with('success', 'Validation enregistrée et demande transmise au niveau suivant.');
                     }
 
@@ -1491,6 +1648,7 @@ class AdminController extends Controller
         return redirect()->route('admin.index', [
             'tab' => 'personnel',
             'personnel_tab' => $request->input('personnel_tab', 'leave'),
+            'leave_subtab' => $request->input('leave_subtab', 'validation'),
         ])->with('success', 'Statut de la demande mis à jour.');
     }
 
