@@ -7590,6 +7590,14 @@ $permissionTree = [
       'administration.instructions'        => 'Instructions',
         'administration.user-profiles'      => 'Profils & Rôles',
     ]],
+    'personnel'        => ['label' => 'Gestion du personnel', 'children' => [
+        'personnel.dashboard'  => 'Tableau de bord',
+        'personnel.employees'  => 'Employés',
+        'personnel.agent-space'=> 'Espace agent',
+        'personnel.leave'      => 'Congés',
+        'personnel.training'   => 'Formation',
+        'personnel.career'     => 'Carrière',
+    ]],
     'meetings'         => ['label' => 'Réunions', 'children' => [
         'meetings.view'           => 'Voir les réunions',
         'meetings.create'         => 'Créer / modifier',
