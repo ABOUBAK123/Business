@@ -801,6 +801,12 @@ class AdminController extends Controller
                     }
                 }
 
+                // Par défaut, ouvrir l'espace agent sur le dossier de l'utilisateur connecté
+                // (même pour les profils pouvant rechercher un autre agent).
+                if (!$selectedPersonnelEmployee && $connectedPersonnelEmployee) {
+                    $selectedPersonnelEmployee = $connectedPersonnelEmployee;
+                }
+
                 $personnelStats['employees'] = (clone $this->applyPersonnelScope(PersonnelEmployee::query(), $adminScope))->count();
                 $personnelStats['documents'] = PersonnelEmployeeDocument::whereIn(
                     'employee_id',

@@ -727,7 +727,7 @@ $_oc = [
   @if($agentSpaceEmployeeNumberInput !== '')
     {{ __('personnel.ui.agent_space.employee_number_not_found') }}
   @else
-    {{ __('personnel.ui.agent_space.select_employee_hint') }}
+    Votre compte utilisateur n'est associé à aucun dossier agent. Contactez les RH pour rattacher votre profil.
   @endif
 </div>
 @else
