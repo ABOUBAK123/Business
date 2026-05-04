@@ -42,9 +42,11 @@ $canManageAdministration = ($permSetAdmin['isElevated'] ?? false) || ((auth()->u
 $tabs = array_filter($allTabs, function($v) use ($permSetAdmin) {
     $perm = $v[3];
     if ($perm === null) return true;
-    if ($permSetAdmin['isElevated']) return true;
+    // L'onglet personnel requiert toujours une permission explicite, même pour les admins élevés
+    $requiresExplicit = ($perm === 'personnel' || str_starts_with((string)$perm, 'personnel.'));
+    if (!$requiresExplicit && $permSetAdmin['isElevated']) return true;
     if (isset($permSetAdmin['permissions'][$perm])) return true;
-    // Afficher l'onglet si au moins un sous-onglet est accordé (ex: personnel.dashboard → personnel)
+    // Afficher si au moins un sous-onglet est accordé (ex: personnel.dashboard → personnel)
     foreach ($permSetAdmin['permissions'] as $k => $_) {
         if (str_starts_with($k, $perm . '.')) return true;
     }
