@@ -34,7 +34,10 @@ $allTabs = [
     'user-profiles'      => ['fas fa-user-shield',       'Rôles',                 '#64748b', 'administration.user-profiles'],
     'instructions'       => ['fas fa-list-check',        'Instructions',          '#0891b2', 'administration.instructions'],
     'courrier-archiving' => ['fas fa-archive',           'Archivage courrier',    '#78716c', 'administration.courrier-archiving'],
-    'personnel'          => ['fas fa-users-cog',         'Gestion du personnel',  '#0d9488', 'personnel'],
+];
+// Onglets hors barre d'administration (accessibles via le menu principal uniquement)
+$standaloneTabPerms = [
+    'personnel' => 'personnel',
 ];
 $permSvcAdmin = app(\App\Services\UserPermissionsService::class);
 $permSetAdmin = $permSvcAdmin->permissionsSet(auth()->user());
@@ -54,7 +57,20 @@ $tabs = array_filter($allTabs, function($v) use ($permSetAdmin) {
 });
 
 if (!array_key_exists($tab, $tabs)) {
-  $tab = 'overview';
+  // Autoriser les onglets standalone (ex: personnel) accessibles depuis le menu principal
+  $isStandaloneTab = array_key_exists($tab, $standaloneTabPerms);
+  if ($isStandaloneTab) {
+    $standalonePerm = $standaloneTabPerms[$tab];
+    $allowed = isset($permSetAdmin['permissions'][$standalonePerm]);
+    if (!$allowed) {
+      foreach ($permSetAdmin['permissions'] as $k => $_) {
+        if (str_starts_with($k, $standalonePerm . '.')) { $allowed = true; break; }
+      }
+    }
+    if (!$allowed) $tab = 'overview';
+  } else {
+    $tab = 'overview';
+  }
 }
 @endphp
 

@@ -290,7 +290,7 @@
         </a>
         @endif
 
-        @if($canMenu('administration'))
+        @if($canMenu('personnel'))
         <a href="{{ route('admin.index', ['tab' => 'personnel']) }}"
            class="nav-link {{ request()->routeIs('admin.*') && request('tab') === 'personnel' ? 'active' : '' }}">
             <i class="fas fa-id-badge"></i> Gestion du personnel
