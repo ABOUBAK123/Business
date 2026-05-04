@@ -83,12 +83,21 @@ if ($tab !== 'personnel' && !array_key_exists($tab, $tabs)) {
     'training'  => ['fas fa-graduation-cap', __('personnel.ui.tabs.training')],
     'career'    => ['fas fa-ranking-star', __('personnel.ui.tabs.career')],
   ];
-  // Filtrer selon les permissions : si l'utilisateur a 'personnel' (parent), tout est accessible
-  // Sinon, uniquement les sous-onglets explicitement accordés (personnel.dashboard, etc.)
-  $_personnelHasParent = $permSetAdmin['isElevated'] || isset($permSetAdmin['permissions']['personnel']);
-  $_personnelNavTabsFiltered = array_filter($_personnelNavTabs, function($v, $k) use ($permSetAdmin, $_personnelHasParent) {
-      if ($_personnelHasParent) return true;
-      return isset($permSetAdmin['permissions']['personnel.' . $k]);
+  // Le parent 'personnel' est toujours ajouté automatiquement par le contrôleur quand
+  // un sous-onglet est coché — sa présence NE signifie PAS "accès total".
+  // Règle : s'il existe des sous-permissions spécifiques (personnel.xxx), n'afficher QUE celles-ci.
+  // S'il n'existe AUCUNE sous-permission spécifique (uniquement 'personnel'), afficher tout.
+  $_personnelAllPermsKeys = array_keys($permSetAdmin['permissions'] ?? []);
+  $_personnelSpecificChildren = array_filter($_personnelAllPermsKeys, fn($k) => str_starts_with($k, 'personnel.'));
+  $_personnelHasSpecificChildren = !empty($_personnelSpecificChildren);
+  $_personnelNavTabsFiltered = array_filter($_personnelNavTabs, function($v, $k) use ($permSetAdmin, $_personnelHasSpecificChildren) {
+      if ($permSetAdmin['isElevated'] ?? false) return true;
+      if ($_personnelHasSpecificChildren) {
+          // N'afficher que les sous-onglets explicitement cochés
+          return isset($permSetAdmin['permissions']['personnel.' . $k]);
+      }
+      // Pas de sous-permission spécifique : le parent seul = accès complet
+      return isset($permSetAdmin['permissions']['personnel']);
   }, ARRAY_FILTER_USE_BOTH);
   // Si l'onglet actif n'est pas accessible, rediriger vers le premier accessible
   if (!isset($_personnelNavTabsFiltered[$personnelTab])) {
