@@ -569,7 +569,8 @@ class DocumentController extends Controller
             'delay_value'                  => $delayValue > 0 ? $delayValue : null,
             'delay_unit'                   => $delayValue > 0 ? $delayUnit : null,
             'expires_at'                   => $expiresAt,
-            'recipient_administration_id'  => $request->input('recipientAdministrationId'),
+            // Toujours null par defaut; renseigne explicitement uniquement en mode admin.
+            'recipient_administration_id'  => null,
             'applicant_full_name'          => $request->input('applicantFullName'),
             'applicant_matricule'          => $request->input('applicantMatricule'),
             'applicant_email'              => $request->input('applicantEmail'),
