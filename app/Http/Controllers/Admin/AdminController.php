@@ -787,8 +787,20 @@ class AdminController extends Controller
     {
         abort_if(!auth()->check() || auth()->user()->role !== 'admin', 403);
 
-        $adminId   = $request->input('administration_id');
-        $adminType = $request->input('administration_type', 'emitter');
+        $validated = $request->validate([
+            'administration_id'   => ['required', 'string'],
+            'administration_type' => ['required', 'in:emitter,recipient'],
+            'mail_host'           => ['nullable', 'string', 'max:255'],
+            'mail_port'           => ['nullable', 'integer', 'min:1', 'max:65535'],
+            'mail_username'       => ['nullable', 'string', 'max:255'],
+            'mail_password'       => ['nullable', 'string'],
+            'mail_encryption'     => ['nullable', 'in:tls,ssl,'],
+            'mail_from_address'   => ['nullable', 'email', 'max:255'],
+            'mail_from_name'      => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $adminId   = (string) $validated['administration_id'];
+        $adminType = (string) ($validated['administration_type'] ?? 'emitter');
 
         if (!$adminId) {
             return response()->json(['success' => false, 'message' => 'Administration non sélectionnée.'], 422);
@@ -798,6 +810,14 @@ class AdminController extends Controller
             'mail_host', 'mail_port', 'mail_username',
             'mail_encryption', 'mail_from_address', 'mail_from_name',
         ]);
+
+        // Normalize empty values and guarantee a numeric SMTP port.
+        $data['mail_port'] = (int) ($data['mail_port'] ?: 587);
+        foreach (['mail_host', 'mail_username', 'mail_encryption', 'mail_from_address', 'mail_from_name'] as $k) {
+            if (array_key_exists($k, $data) && is_string($data[$k])) {
+                $data[$k] = trim($data[$k]);
+            }
+        }
 
         // Only update password if a new value was provided
         $newPassword = $request->input('mail_password');

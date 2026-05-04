@@ -6565,7 +6565,11 @@ document.addEventListener('DOMContentLoaded', function () {
     const type = opt.dataset.type || 'emitter';
     formWrap.classList.add('hidden');
     result.className = 'hidden';
-    fields.forEach(f => { const el = document.getElementById('smtp_' + f); if (el) el.value = ''; });
+    fields.forEach(f => {
+      const el = document.getElementById('smtp_' + f);
+      if (!el) return;
+      el.value = (f === 'mail_port') ? '587' : '';
+    });
     if (!id) return;
     document.getElementById('smtpAdminId').value   = id;
     document.getElementById('smtpAdminType').value = type;
@@ -6580,6 +6584,8 @@ document.addEventListener('DOMContentLoaded', function () {
       });
       const enc = document.getElementById('smtp_mail_encryption');
       if (enc) enc.value = data['mail_encryption'] ?? 'tls';
+      const port = document.getElementById('smtp_mail_port');
+      if (port && !port.value) port.value = '587';
       formWrap.classList.remove('hidden');
     })
     .catch(() => { formWrap.classList.remove('hidden'); });
