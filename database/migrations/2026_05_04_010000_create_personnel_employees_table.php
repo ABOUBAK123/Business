@@ -8,6 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
+        Schema::dropIfExists('personnel_employees');
         Schema::create('personnel_employees', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('user_id')->nullable()->index();
