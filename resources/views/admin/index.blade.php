@@ -607,15 +607,10 @@ $_oc = [
   </div>
 </div>
 
-@if(!$agentSpaceEmployee)
-<div class="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800 mb-5">
-  {{ __('personnel.ui.agent_space.select_employee_hint') }}
-</div>
-@else
 <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-3 mb-5">
   <div class="flex flex-wrap gap-2">
     @foreach($agentSpaceTabs as $key => [$icon, $label])
-    <a href="{{ route('admin.index', ['tab' => 'personnel', 'personnel_tab' => 'agent-space', 'selected_employee' => $agentSpaceEmployee->id, 'agent_space_tab' => $key]) }}"
+    <a href="{{ route('admin.index', array_merge(['tab' => 'personnel', 'personnel_tab' => 'agent-space', 'agent_space_tab' => $key], $agentSpaceEmployee ? ['selected_employee' => $agentSpaceEmployee->id] : [])) }}"
        class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition {{ $agentSpaceTab === $key ? 'bg-[#2453d6] text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200' }}">
       <i class="{{ $icon }} text-xs"></i>
       <span>{{ $label }}</span>
@@ -623,6 +618,12 @@ $_oc = [
     @endforeach
   </div>
 </div>
+
+@if(!$agentSpaceEmployee)
+<div class="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800 mb-5">
+  {{ __('personnel.ui.agent_space.select_employee_hint') }}
+</div>
+@else
 
 @if($agentSpaceTab === 'profile')
 @php
