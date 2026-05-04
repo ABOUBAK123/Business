@@ -42,7 +42,8 @@
             <span class="text-sm text-gray-500">{{ $documents->total() }} document(s)</span>
         </div>
 
-        <table class="w-full text-sm">
+            <div class="overflow-x-scroll pb-2">
+            <table class="w-full min-w-[980px] text-sm">
             <thead class="bg-gray-50 border-b border-gray-100">
                 <tr>
                     <th class="text-left px-5 py-3 font-semibold text-gray-600">Document</th>
@@ -114,6 +115,7 @@
                 @endforeach
             </tbody>
         </table>
+            </div>
 
         @if($documents->hasPages())
         <div class="px-5 py-4 border-t border-gray-100">
