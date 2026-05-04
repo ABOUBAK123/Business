@@ -290,6 +290,13 @@
         </a>
         @endif
 
+        @if($canMenu('administration'))
+        <a href="{{ route('admin.index', ['tab' => 'personnel']) }}"
+           class="nav-link {{ request()->routeIs('admin.*') && request('tab') === 'personnel' ? 'active' : '' }}">
+            <i class="fas fa-id-badge"></i> Gestion du personnel
+        </a>
+        @endif
+
         @if($canMenu('meetings'))
         <a href="{{ route('meetings.index') }}"
            class="nav-link {{ request()->routeIs('meetings.*') || request()->routeIs('meetings.rooms.*') ? 'active' : '' }}">
@@ -307,7 +314,7 @@
         @if($canMenu('administration'))
         <div class="nav-section">{{ __('navigation.administration') }}</div>
         <a href="{{ route('admin.index') }}"
-           class="nav-link {{ request()->routeIs('admin.*') ? 'active' : '' }}">
+           class="nav-link {{ request()->routeIs('admin.*') && request('tab') !== 'personnel' ? 'active' : '' }}">
             <i class="fas fa-shield-alt"></i> {{ __('navigation.administration') }}
         </a>
         @endif

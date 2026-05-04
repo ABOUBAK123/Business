@@ -6,7 +6,20 @@
         <i class="fa-solid fa-arrow-left text-xs"></i> {{ __('buttons.back') }}
     </a>
 </div>
-<h2 class="text-xl font-bold text-gray-800 mb-2">{{ __('auth.password_reset') }}</h2>
+<div class="flex items-center justify-between mb-2">
+    <h2 class="text-xl font-bold text-gray-800">{{ __('auth.password_reset') }}</h2>
+    <form method="POST" action="{{ route('lang.switch', app()->getLocale()) }}" id="lang-form-forgot">
+        @csrf
+        <select onchange="document.getElementById('lang-form-forgot').action='{{ url('/lang') }}/'+this.value; document.getElementById('lang-form-forgot').submit();"
+                class="text-sm border border-gray-300 rounded-lg px-2 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white cursor-pointer">
+            <option value="fr" {{ app()->getLocale() === 'fr' ? 'selected' : '' }}>🇫🇷 FR</option>
+            <option value="en" {{ app()->getLocale() === 'en' ? 'selected' : '' }}>🇬🇧 EN</option>
+            <option value="es" {{ app()->getLocale() === 'es' ? 'selected' : '' }}>🇪🇸 ES</option>
+            <option value="pt" {{ app()->getLocale() === 'pt' ? 'selected' : '' }}>🇵🇹 PT</option>
+            <option value="ar" {{ app()->getLocale() === 'ar' ? 'selected' : '' }}>🇸🇦 AR</option>
+        </select>
+    </form>
+</div>
 <p class="text-sm text-gray-500 mb-6">{{ __('auth.reset_link_sent') }}</p>
 
 @if(session('success'))

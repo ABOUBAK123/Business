@@ -3,7 +3,17 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Exports\PersonnelEmployeesTemplateExport;
+use App\Imports\PersonnelEmployeesImport;
 use App\Models\AppSetting;
+use App\Models\PersonnelCareerEvent;
+use App\Models\PersonnelEmployeeSkill;
+use App\Models\PersonnelGoal;
+use App\Models\PersonnelLeaveRequest;
+use App\Models\PersonnelLeaveType;
+use App\Models\PersonnelPerformanceReview;
+use App\Models\PersonnelTraining;
+use App\Models\PersonnelTrainingEnrollment;
 use App\Models\User;
 use App\Models\Document;
 use App\Models\Signature;
@@ -20,7 +30,10 @@ use App\Models\Instruction;
 use App\Models\UserDirectionAssignment;
 use App\Models\SignatureProviderConfig;
 use App\Models\AdministrationSmtpSetting;
+use App\Models\PersonnelEmployee;
+use App\Models\PersonnelEmployeeDocument;
 use App\Services\NotificationService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Hash;
@@ -28,8 +41,11 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Database\QueryException;
 use Illuminate\Validation\ValidationException;
+use Maatwebsite\Excel\Facades\Excel;
+use Spatie\Activitylog\Models\Activity;
 
 class AdminController extends Controller
 {
@@ -146,6 +162,85 @@ class AdminController extends Controller
         return $type === 'recipient' ? 'recipient' : 'emitter';
     }
 
+    private function applyPersonnelScope($query, ?array $adminScope)
+    {
+        if (!$adminScope) {
+            return $query;
+        }
+
+        return $query->where('administration_type', $this->normalizeAdministrationType($adminScope['type'] ?? null))
+            ->where('administration_id', $adminScope['id'] ?? null);
+    }
+
+    private function ensurePersonnelAdministrationExists(string $type, string $administrationId): void
+    {
+        $exists = $type === 'recipient'
+            ? RecipientAdministration::whereKey($administrationId)->exists()
+            : IssuingAdministration::whereKey($administrationId)->exists();
+
+        if (!$exists) {
+            throw ValidationException::withMessages([
+                'administration_id' => 'Administration sélectionnée introuvable pour ce type.',
+            ]);
+        }
+    }
+
+    private function abortIfPersonnelEmployeeOutsideScope(PersonnelEmployee $employee): void
+    {
+        $this->abortIfPersonnelScopeMismatch(
+            $employee->administration_type,
+            $employee->administration_id,
+            'Cet employé est hors de votre périmètre d\'administration.'
+        );
+    }
+
+    private function personnelScopeAllows(?string $administrationType, ?string $administrationId, ?array $adminScope): bool
+    {
+        if (!$adminScope) {
+            return true;
+        }
+
+        return $administrationType === $this->normalizeAdministrationType($adminScope['type'] ?? null)
+            && $administrationId === ($adminScope['id'] ?? null);
+    }
+
+    private function abortIfPersonnelScopeMismatch(?string $administrationType, ?string $administrationId, string $message): void
+    {
+        $adminScope = $this->resolveAdminScope();
+        abort_unless($this->personnelScopeAllows($administrationType, $administrationId, $adminScope), 403, $message);
+    }
+
+    private function filterPersonnelActivities($activities, ?array $adminScope)
+    {
+        if (!$adminScope) {
+            return $activities;
+        }
+
+        return $activities->filter(function (Activity $activity) use ($adminScope) {
+            $subject = $activity->subject;
+
+            if ($subject instanceof PersonnelEmployee) {
+                return $this->personnelScopeAllows($subject->administration_type, $subject->administration_id, $adminScope);
+            }
+
+            if ($subject instanceof PersonnelEmployeeDocument) {
+                return $subject->employee
+                    ? $this->personnelScopeAllows($subject->employee->administration_type, $subject->employee->administration_id, $adminScope)
+                    : false;
+            }
+
+            if ($subject instanceof PersonnelLeaveType || $subject instanceof PersonnelTraining) {
+                return $this->personnelScopeAllows($subject->administration_type, $subject->administration_id, $adminScope);
+            }
+
+            if ($subject instanceof PersonnelLeaveRequest || $subject instanceof PersonnelTrainingEnrollment || $subject instanceof PersonnelEmployeeSkill || $subject instanceof PersonnelGoal || $subject instanceof PersonnelPerformanceReview || $subject instanceof PersonnelCareerEvent) {
+                return $this->personnelScopeAllows($subject->administration_type, $subject->administration_id, $adminScope);
+            }
+
+            return false;
+        })->values();
+    }
+
     private function resolveProfileAdministrationSelection(array $data, ?array $adminScope): array
     {
         if ($adminScope && !empty($adminScope['id'])) {
@@ -210,6 +305,32 @@ class AdminController extends Controller
         $dirAssignments = collect();
         $sigProviders   = collect();
         $courrierArchivalDays = 0;
+        $personnelEmployees = collect();
+        $personnelEmployeeDirectory = collect();
+        $selectedPersonnelEmployee = null;
+        $personnelLeaveTypes = collect();
+        $personnelLeaveRequests = collect();
+        $personnelTrainings = collect();
+        $personnelTrainingEnrollments = collect();
+        $personnelEmployeeSkills = collect();
+        $personnelGoals = collect();
+        $personnelPerformanceReviews = collect();
+        $personnelCareerEvents = collect();
+        $personnelRecentActivity = collect();
+        $personnelStats = [
+            'employees' => 0,
+            'documents' => 0,
+            'active' => 0,
+            'newThisYear' => 0,
+            'leaveRequests' => 0,
+            'pendingLeaveRequests' => 0,
+            'trainings' => 0,
+            'enrollments' => 0,
+            'skills' => 0,
+            'goals' => 0,
+            'reviews' => 0,
+            'careerEvents' => 0,
+        ];
 
         // Périmètre d'administration de l'utilisateur connecté (null = super-admin)
         $adminScope = $this->resolveAdminScope();
@@ -343,6 +464,107 @@ class AdminController extends Controller
             $sigProviders = $sigQuery->get()->keyBy('administration_id');
 
             $courrierArchivalDays = (int) AppSetting::where('key', 'courrier_archival_days')->value('value');
+
+            // ── Module Gestion du personnel ──────────────────────────────────
+            if (Schema::hasTable('personnel_employees')) {
+                $personnelQuery = PersonnelEmployee::with(['user', 'subEntity', 'documents'])->latest();
+                $this->applyPersonnelScope($personnelQuery, $adminScope);
+                $personnelEmployees = $personnelQuery->paginate(15, ['*'], 'personnel_page');
+                $personnelEmployeeDirectory = $this->applyPersonnelScope(
+                    PersonnelEmployee::query()->orderBy('last_name')->orderBy('first_name'),
+                    $adminScope
+                )->get();
+
+                $selectedPersonnelEmployee = request('selected_employee')
+                    ? $this->applyPersonnelScope(
+                        PersonnelEmployee::with(['documents', 'user', 'subEntity'])->whereKey(request('selected_employee')),
+                        $adminScope
+                    )->first()
+                    : null;
+
+                $personnelStats['employees'] = (clone $this->applyPersonnelScope(PersonnelEmployee::query(), $adminScope))->count();
+                $personnelStats['documents'] = PersonnelEmployeeDocument::whereIn(
+                    'employee_id',
+                    $this->applyPersonnelScope(PersonnelEmployee::query(), $adminScope)->select('id')
+                )->count();
+                $personnelStats['active'] = (clone $this->applyPersonnelScope(PersonnelEmployee::query(), $adminScope))
+                    ->where('employment_status', 'active')
+                    ->count();
+                $personnelStats['newThisYear'] = (clone $this->applyPersonnelScope(PersonnelEmployee::query(), $adminScope))
+                    ->whereYear('hire_date', now()->year)
+                    ->count();
+            }
+
+            if (Schema::hasTable('personnel_leave_types')) {
+                $personnelLeaveTypes = $this->applyPersonnelScope(
+                    PersonnelLeaveType::query()->orderByDesc('is_active')->orderBy('name'),
+                    $adminScope
+                )->get();
+            }
+
+            if (Schema::hasTable('personnel_leave_requests')) {
+                $leaveRequestQuery = PersonnelLeaveRequest::with(['employee', 'leaveType', 'approvedBy'])->latest();
+                $this->applyPersonnelScope($leaveRequestQuery, $adminScope);
+                $personnelLeaveRequests = $leaveRequestQuery->limit(12)->get();
+                $personnelStats['leaveRequests'] = (clone $this->applyPersonnelScope(PersonnelLeaveRequest::query(), $adminScope))->count();
+                $personnelStats['pendingLeaveRequests'] = (clone $this->applyPersonnelScope(PersonnelLeaveRequest::query(), $adminScope))
+                    ->where('status', 'pending')
+                    ->count();
+            }
+
+            if (Schema::hasTable('personnel_trainings')) {
+                $personnelTrainings = $this->applyPersonnelScope(
+                    PersonnelTraining::withCount('enrollments')->orderByDesc('is_active')->orderBy('title'),
+                    $adminScope
+                )->get();
+                $personnelStats['trainings'] = (clone $this->applyPersonnelScope(PersonnelTraining::query(), $adminScope))->count();
+            }
+
+            if (Schema::hasTable('personnel_training_enrollments')) {
+                $trainingEnrollmentQuery = PersonnelTrainingEnrollment::with(['employee', 'training'])->latest();
+                $this->applyPersonnelScope($trainingEnrollmentQuery, $adminScope);
+                $personnelTrainingEnrollments = $trainingEnrollmentQuery->limit(12)->get();
+                $personnelStats['enrollments'] = (clone $this->applyPersonnelScope(PersonnelTrainingEnrollment::query(), $adminScope))->count();
+            }
+
+            if (Schema::hasTable('personnel_employee_skills')) {
+                $skillQuery = PersonnelEmployeeSkill::with('employee')->latest();
+                $this->applyPersonnelScope($skillQuery, $adminScope);
+                $personnelEmployeeSkills = $skillQuery->limit(12)->get();
+                $personnelStats['skills'] = (clone $this->applyPersonnelScope(PersonnelEmployeeSkill::query(), $adminScope))->count();
+            }
+
+            if (Schema::hasTable('personnel_goals')) {
+                $goalQuery = PersonnelGoal::with(['employee', 'manager'])->latest();
+                $this->applyPersonnelScope($goalQuery, $adminScope);
+                $personnelGoals = $goalQuery->limit(12)->get();
+                $personnelStats['goals'] = (clone $this->applyPersonnelScope(PersonnelGoal::query(), $adminScope))->count();
+            }
+
+            if (Schema::hasTable('personnel_performance_reviews')) {
+                $reviewQuery = PersonnelPerformanceReview::with(['employee', 'reviewer'])->latest();
+                $this->applyPersonnelScope($reviewQuery, $adminScope);
+                $personnelPerformanceReviews = $reviewQuery->limit(12)->get();
+                $personnelStats['reviews'] = (clone $this->applyPersonnelScope(PersonnelPerformanceReview::query(), $adminScope))->count();
+            }
+
+            if (Schema::hasTable('personnel_career_events')) {
+                $careerEventQuery = PersonnelCareerEvent::with(['employee', 'recordedBy'])->latest();
+                $this->applyPersonnelScope($careerEventQuery, $adminScope);
+                $personnelCareerEvents = $careerEventQuery->limit(12)->get();
+                $personnelStats['careerEvents'] = (clone $this->applyPersonnelScope(PersonnelCareerEvent::query(), $adminScope))->count();
+            }
+
+            if (Schema::hasTable('activity_log')) {
+                $personnelRecentActivity = $this->filterPersonnelActivities(
+                    Activity::with(['subject', 'causer'])
+                        ->where('log_name', 'personnel')
+                        ->latest()
+                        ->limit(100)
+                        ->get(),
+                    $adminScope
+                )->take(12);
+            }
         } catch (\Throwable $e) {
             if (!in_array($tab, ['emitters', 'recipients'], true)) {
                 throw $e;
@@ -416,8 +638,795 @@ class AdminController extends Controller
             'directionTypes', 'subEntities', 'requestedActs', 'routingRules', 'profiles', 'profilesList',
             'instructions',
             'allUsers', 'shareMap', 'onlyofficeUrl', 'onlyofficeJwt', 'appPublicUrl', 'dirAssignments',
-            'sigProviders', 'courrierArchivalDays', 'adminScope'
+            'sigProviders', 'courrierArchivalDays', 'adminScope',
+            'personnelEmployees', 'personnelEmployeeDirectory', 'selectedPersonnelEmployee', 'personnelStats',
+            'personnelLeaveTypes', 'personnelLeaveRequests', 'personnelTrainings', 'personnelTrainingEnrollments',
+            'personnelEmployeeSkills', 'personnelGoals', 'personnelPerformanceReviews', 'personnelCareerEvents', 'personnelRecentActivity'
         ));
+    }
+
+    public function storePersonnelEmployee(Request $request)
+    {
+        $validated = $request->validate([
+            'personnel_tab' => ['nullable', 'string'],
+            'administration_type' => ['required', 'in:emitter,recipient'],
+            'administration_id' => ['required', 'string'],
+            'sub_entity_id' => ['nullable', 'string'],
+            'user_id' => ['nullable', 'string'],
+            'employee_number' => ['nullable', 'string', 'max:100'],
+            'first_name' => ['required', 'string', 'max:150'],
+            'last_name' => ['required', 'string', 'max:150'],
+            'gender' => ['nullable', 'string', 'max:20'],
+            'birth_date' => ['nullable', 'date'],
+            'birth_place' => ['nullable', 'string', 'max:150'],
+            'marital_status' => ['nullable', 'string', 'max:50'],
+            'phone' => ['nullable', 'string', 'max:50'],
+            'secondary_phone' => ['nullable', 'string', 'max:50'],
+            'email' => ['nullable', 'email', 'max:255'],
+            'address' => ['nullable', 'string'],
+            'emergency_contact_name' => ['nullable', 'string', 'max:191'],
+            'emergency_contact_phone' => ['nullable', 'string', 'max:50'],
+            'job_title' => ['nullable', 'string', 'max:191'],
+            'hire_date' => ['nullable', 'date'],
+            'employment_status' => ['nullable', 'string', 'max:50'],
+            'notes' => ['nullable', 'string'],
+        ]);
+
+        $this->ensurePersonnelAdministrationExists($validated['administration_type'], $validated['administration_id']);
+
+        PersonnelEmployee::create($validated);
+
+        return redirect()->route('admin.index', [
+            'tab' => 'personnel',
+            'personnel_tab' => $request->input('personnel_tab', 'employees'),
+        ])->with('success', 'Employé enregistré avec succès.');
+    }
+
+    public function updatePersonnelEmployee(Request $request, PersonnelEmployee $employee)
+    {
+        $validated = $request->validate([
+            'personnel_tab' => ['nullable', 'string'],
+            'administration_type' => ['required', 'in:emitter,recipient'],
+            'administration_id' => ['required', 'string'],
+            'sub_entity_id' => ['nullable', 'string'],
+            'user_id' => ['nullable', 'string'],
+            'employee_number' => ['nullable', 'string', 'max:100'],
+            'first_name' => ['required', 'string', 'max:150'],
+            'last_name' => ['required', 'string', 'max:150'],
+            'gender' => ['nullable', 'string', 'max:20'],
+            'birth_date' => ['nullable', 'date'],
+            'birth_place' => ['nullable', 'string', 'max:150'],
+            'marital_status' => ['nullable', 'string', 'max:50'],
+            'phone' => ['nullable', 'string', 'max:50'],
+            'secondary_phone' => ['nullable', 'string', 'max:50'],
+            'email' => ['nullable', 'email', 'max:255'],
+            'address' => ['nullable', 'string'],
+            'emergency_contact_name' => ['nullable', 'string', 'max:191'],
+            'emergency_contact_phone' => ['nullable', 'string', 'max:50'],
+            'job_title' => ['nullable', 'string', 'max:191'],
+            'hire_date' => ['nullable', 'date'],
+            'employment_status' => ['nullable', 'string', 'max:50'],
+            'notes' => ['nullable', 'string'],
+        ]);
+
+        $this->abortIfPersonnelEmployeeOutsideScope($employee);
+        $this->ensurePersonnelAdministrationExists($validated['administration_type'], $validated['administration_id']);
+
+        $employee->update($validated);
+
+        return redirect()->route('admin.index', [
+            'tab' => 'personnel',
+            'personnel_tab' => $request->input('personnel_tab', 'employees'),
+            'selected_employee' => $employee->id,
+        ])->with('success', 'Fiche employé mise à jour.');
+    }
+
+    public function downloadPersonnelEmployeesTemplate()
+    {
+        return Excel::download(new PersonnelEmployeesTemplateExport(), 'modele_import_employes.xlsx');
+    }
+
+    public function importPersonnelEmployees(Request $request)
+    {
+        $request->validate([
+            'personnel_tab' => ['nullable', 'string'],
+            'employees_file' => ['required', 'file', 'mimes:xlsx,xls,csv'],
+        ]);
+
+        $import = new PersonnelEmployeesImport();
+        Excel::import($import, $request->file('employees_file'));
+
+        $adminScope = $this->resolveAdminScope();
+        $created = 0;
+        $skipped = [];
+
+        foreach ($import->rows as $index => $row) {
+            $line = $index + 2;
+            $data = collect($row)->map(function ($value) {
+                return is_string($value) ? trim($value) : $value;
+            });
+
+            $firstName = (string) ($data->get('first_name') ?? '');
+            $lastName = (string) ($data->get('last_name') ?? '');
+            $employeeNumber = (string) ($data->get('employee_number') ?? '');
+
+            if ($firstName === '' && $lastName === '' && $employeeNumber === '') {
+                continue;
+            }
+
+            $payload = [
+                'administration_type' => (string) ($data->get('administration_type') ?? ''),
+                'administration_id' => (string) ($data->get('administration_id') ?? ''),
+                'sub_entity_id' => (string) ($data->get('sub_entity_id') ?? ''),
+                'employee_number' => $employeeNumber !== '' ? $employeeNumber : null,
+                'first_name' => $firstName,
+                'last_name' => $lastName,
+                'gender' => (string) ($data->get('gender') ?? ''),
+                'birth_date' => (string) ($data->get('birth_date') ?? ''),
+                'birth_place' => (string) ($data->get('birth_place') ?? ''),
+                'marital_status' => (string) ($data->get('marital_status') ?? ''),
+                'phone' => (string) ($data->get('phone') ?? ''),
+                'secondary_phone' => (string) ($data->get('secondary_phone') ?? ''),
+                'email' => (string) ($data->get('email') ?? ''),
+                'address' => (string) ($data->get('address') ?? ''),
+                'emergency_contact_name' => (string) ($data->get('emergency_contact_name') ?? ''),
+                'emergency_contact_phone' => (string) ($data->get('emergency_contact_phone') ?? ''),
+                'job_title' => (string) ($data->get('job_title') ?? ''),
+                'hire_date' => (string) ($data->get('hire_date') ?? ''),
+                'employment_status' => (string) ($data->get('employment_status') ?? 'active'),
+                'notes' => (string) ($data->get('notes') ?? ''),
+            ];
+
+            foreach (['gender', 'birth_date', 'birth_place', 'marital_status', 'phone', 'secondary_phone', 'email', 'address', 'emergency_contact_name', 'emergency_contact_phone', 'job_title', 'hire_date', 'notes'] as $nullableKey) {
+                if (($payload[$nullableKey] ?? '') === '') {
+                    $payload[$nullableKey] = null;
+                }
+            }
+
+            if (($payload['sub_entity_id'] ?? '') === '') {
+                $payload['sub_entity_id'] = null;
+            }
+
+            if ($adminScope) {
+                $payload['administration_type'] = $this->normalizeAdministrationType($adminScope['type'] ?? null);
+                $payload['administration_id'] = $adminScope['id'];
+            }
+
+            $validator = Validator::make($payload, [
+                'administration_type' => ['required', 'in:emitter,recipient'],
+                'administration_id' => ['required', 'string'],
+                'sub_entity_id' => ['nullable', 'exists:sub_entities,id'],
+                'employee_number' => ['nullable', 'string', 'max:100'],
+                'first_name' => ['required', 'string', 'max:150'],
+                'last_name' => ['required', 'string', 'max:150'],
+                'gender' => ['nullable', 'string', 'max:20'],
+                'birth_date' => ['nullable', 'date'],
+                'birth_place' => ['nullable', 'string', 'max:150'],
+                'marital_status' => ['nullable', 'string', 'max:50'],
+                'phone' => ['nullable', 'string', 'max:50'],
+                'secondary_phone' => ['nullable', 'string', 'max:50'],
+                'email' => ['nullable', 'email', 'max:255'],
+                'address' => ['nullable', 'string'],
+                'emergency_contact_name' => ['nullable', 'string', 'max:191'],
+                'emergency_contact_phone' => ['nullable', 'string', 'max:50'],
+                'job_title' => ['nullable', 'string', 'max:191'],
+                'hire_date' => ['nullable', 'date'],
+                'employment_status' => ['nullable', 'in:active,probation,suspended,inactive'],
+                'notes' => ['nullable', 'string'],
+            ]);
+
+            if ($validator->fails()) {
+                $skipped[] = 'Ligne ' . $line . ': ' . $validator->errors()->first();
+                continue;
+            }
+
+            try {
+                $this->ensurePersonnelAdministrationExists($payload['administration_type'], $payload['administration_id']);
+            } catch (ValidationException $e) {
+                $skipped[] = 'Ligne ' . $line . ': administration introuvable.';
+                continue;
+            }
+
+            $managerEmail = trim((string) ($data->get('superieur_hierarchique_email') ?? $data->get('manager_email') ?? ''));
+            if ($managerEmail !== '') {
+                $managerUser = User::query()->where('email', $managerEmail)->first();
+                if (!$managerUser) {
+                    $skipped[] = 'Ligne ' . $line . ': supérieur hiérarchique introuvable (' . $managerEmail . ').';
+                    continue;
+                }
+                $payload['user_id'] = $managerUser->id;
+            } else {
+                $payload['user_id'] = null;
+            }
+
+            if (!empty($payload['employee_number'])) {
+                $exists = PersonnelEmployee::query()
+                    ->where('administration_type', $payload['administration_type'])
+                    ->where('employee_number', $payload['employee_number'])
+                    ->exists();
+
+                if ($exists) {
+                    $skipped[] = 'Ligne ' . $line . ': matricule déjà existant pour cette administration.';
+                    continue;
+                }
+            }
+
+            try {
+                PersonnelEmployee::create($payload);
+                $created++;
+            } catch (QueryException $e) {
+                $skipped[] = 'Ligne ' . $line . ': insertion impossible.';
+            }
+        }
+
+        $message = $created . ' employé(s) importé(s) avec succès.';
+        if (!empty($skipped)) {
+            $message .= ' ' . count($skipped) . ' ligne(s) ignorée(s).';
+            $errorPreview = implode(' | ', array_slice($skipped, 0, 5));
+
+            return redirect()->route('admin.index', [
+                'tab' => 'personnel',
+                'personnel_tab' => $request->input('personnel_tab', 'employees'),
+            ])->with('success', $message)->with('error', $errorPreview);
+        }
+
+        return redirect()->route('admin.index', [
+            'tab' => 'personnel',
+            'personnel_tab' => $request->input('personnel_tab', 'employees'),
+        ])->with('success', $message);
+    }
+
+    public function uploadPersonnelEmployeeDocument(Request $request, PersonnelEmployee $employee)
+    {
+        $validated = $request->validate([
+            'personnel_tab' => ['nullable', 'string'],
+            'category' => ['required', 'string', 'max:100'],
+            'label' => ['required', 'string', 'max:191'],
+            'document' => ['required', 'file', 'max:10240'],
+        ]);
+
+        $this->abortIfPersonnelEmployeeOutsideScope($employee);
+
+        $file = $request->file('document');
+        $storedName = Str::uuid() . '_' . preg_replace('/[^A-Za-z0-9._-]/', '_', $file->getClientOriginalName());
+        $path = $file->storeAs('personnel-documents/' . $employee->id, $storedName, 'local');
+
+        $employee->documents()->create([
+            'category' => $validated['category'],
+            'label' => $validated['label'],
+            'disk' => 'local',
+            'path' => $path,
+            'original_name' => $file->getClientOriginalName(),
+            'mime_type' => $file->getClientMimeType(),
+            'size' => $file->getSize(),
+        ]);
+
+        return redirect()->route('admin.index', [
+            'tab' => 'personnel',
+            'personnel_tab' => $request->input('personnel_tab', 'employees'),
+            'selected_employee' => $employee->id,
+        ])->with('success', 'Document ajouté à l’espace agent.');
+    }
+
+    public function downloadPersonnelEmployeeDocument(PersonnelEmployeeDocument $document)
+    {
+        $this->abortIfPersonnelEmployeeOutsideScope($document->employee);
+        abort_unless(Storage::disk($document->disk)->exists($document->path), 404);
+
+        return Storage::disk($document->disk)->download($document->path, $document->original_name);
+    }
+
+    public function storePersonnelLeaveType(Request $request)
+    {
+        $validated = $request->validate([
+            'personnel_tab' => ['nullable', 'string'],
+            'administration_type' => ['required', 'in:emitter,recipient'],
+            'administration_id' => ['required', 'string'],
+            'code' => ['nullable', 'string', 'max:100'],
+            'name' => ['required', 'string', 'max:191'],
+            'description' => ['nullable', 'string'],
+            'unit' => ['required', 'in:day,hour'],
+            'default_days' => ['nullable', 'numeric', 'min:0'],
+            'carry_over_days' => ['nullable', 'numeric', 'min:0'],
+            'requires_attachment' => ['nullable', 'boolean'],
+            'is_paid' => ['nullable', 'boolean'],
+            'is_active' => ['nullable', 'boolean'],
+        ]);
+
+        $adminScope = $this->resolveAdminScope();
+        if ($adminScope) {
+            $validated['administration_type'] = $this->normalizeAdministrationType($adminScope['type'] ?? null);
+            $validated['administration_id'] = $adminScope['id'];
+        }
+
+        $this->ensurePersonnelAdministrationExists($validated['administration_type'], $validated['administration_id']);
+
+        if (!empty($validated['code'])) {
+            $duplicate = PersonnelLeaveType::query()
+                ->where('administration_type', $validated['administration_type'])
+                ->where('administration_id', $validated['administration_id'])
+                ->where('code', $validated['code'])
+                ->exists();
+
+            if ($duplicate) {
+                throw ValidationException::withMessages([
+                    'code' => 'Un type de congé existe déjà avec ce code pour cette administration.',
+                ]);
+            }
+        }
+
+        PersonnelLeaveType::create([
+            'administration_type' => $validated['administration_type'],
+            'administration_id' => $validated['administration_id'],
+            'code' => $validated['code'] ?: null,
+            'name' => $validated['name'],
+            'description' => $validated['description'] ?? null,
+            'unit' => $validated['unit'],
+            'default_days' => $validated['default_days'] ?? null,
+            'carry_over_days' => $validated['carry_over_days'] ?? 0,
+            'requires_attachment' => $request->boolean('requires_attachment'),
+            'is_paid' => $request->boolean('is_paid', true),
+            'is_active' => $request->boolean('is_active', true),
+        ]);
+
+        return redirect()->route('admin.index', [
+            'tab' => 'personnel',
+            'personnel_tab' => $request->input('personnel_tab', 'leave'),
+        ])->with('success', 'Type de congé enregistré.');
+    }
+
+    public function storePersonnelLeaveRequest(Request $request)
+    {
+        $validated = $request->validate([
+            'personnel_tab' => ['nullable', 'string'],
+            'employee_id' => ['required', 'string'],
+            'leave_type_id' => ['required', 'string'],
+            'start_date' => ['required', 'date'],
+            'end_date' => ['required', 'date', 'after_or_equal:start_date'],
+            'return_date' => ['nullable', 'date', 'after_or_equal:end_date'],
+            'requested_days' => ['nullable', 'numeric', 'min:0'],
+            'reason' => ['nullable', 'string'],
+            'unexpected_absence' => ['nullable', 'boolean'],
+            'attachment' => ['nullable', 'file', 'max:10240'],
+        ]);
+
+        $employee = PersonnelEmployee::findOrFail($validated['employee_id']);
+        $leaveType = PersonnelLeaveType::findOrFail($validated['leave_type_id']);
+
+        $this->abortIfPersonnelEmployeeOutsideScope($employee);
+        $this->abortIfPersonnelScopeMismatch(
+            $leaveType->administration_type,
+            $leaveType->administration_id,
+            'Ce type de congé est hors de votre périmètre d\'administration.'
+        );
+
+        if (
+            $employee->administration_type !== $leaveType->administration_type
+            || $employee->administration_id !== $leaveType->administration_id
+        ) {
+            throw ValidationException::withMessages([
+                'leave_type_id' => 'Le type de congé ne correspond pas à l’administration de l’employé.',
+            ]);
+        }
+
+        if ($leaveType->requires_attachment && !$request->hasFile('attachment')) {
+            throw ValidationException::withMessages([
+                'attachment' => 'Une pièce justificative est obligatoire pour ce type de congé.',
+            ]);
+        }
+
+        $requestedDays = $validated['requested_days'] ?? (Carbon::parse($validated['start_date'])->diffInDays(Carbon::parse($validated['end_date'])) + 1);
+        $payload = [
+            'employee_id' => $employee->id,
+            'leave_type_id' => $leaveType->id,
+            'requested_by_user_id' => auth()->id(),
+            'administration_type' => $employee->administration_type,
+            'administration_id' => $employee->administration_id,
+            'start_date' => $validated['start_date'],
+            'end_date' => $validated['end_date'],
+            'return_date' => $validated['return_date'] ?? null,
+            'requested_days' => $requestedDays,
+            'status' => 'pending',
+            'reason' => $validated['reason'] ?? null,
+            'unexpected_absence' => $request->boolean('unexpected_absence'),
+        ];
+
+        if ($request->hasFile('attachment')) {
+            $file = $request->file('attachment');
+            $storedName = Str::uuid() . '_' . preg_replace('/[^A-Za-z0-9._-]/', '_', $file->getClientOriginalName());
+            $path = $file->storeAs('personnel-leaves/' . $employee->id, $storedName, 'local');
+            $payload['attachment_disk'] = 'local';
+            $payload['attachment_path'] = $path;
+            $payload['attachment_original_name'] = $file->getClientOriginalName();
+            $payload['attachment_mime_type'] = $file->getClientMimeType();
+            $payload['attachment_size'] = $file->getSize();
+        }
+
+        PersonnelLeaveRequest::create($payload);
+
+        return redirect()->route('admin.index', [
+            'tab' => 'personnel',
+            'personnel_tab' => $request->input('personnel_tab', 'leave'),
+        ])->with('success', 'Demande de congé enregistrée.');
+    }
+
+    public function updatePersonnelLeaveRequestStatus(Request $request, PersonnelLeaveRequest $leaveRequest)
+    {
+        $validated = $request->validate([
+            'personnel_tab' => ['nullable', 'string'],
+            'status' => ['required', 'in:pending,approved,rejected,cancelled'],
+            'approved_days' => ['nullable', 'numeric', 'min:0'],
+            'comment' => ['nullable', 'string'],
+        ]);
+
+        $this->abortIfPersonnelScopeMismatch(
+            $leaveRequest->administration_type,
+            $leaveRequest->administration_id,
+            'Cette demande est hors de votre périmètre d\'administration.'
+        );
+
+        $leaveRequest->status = $validated['status'];
+        $leaveRequest->hr_comments = $validated['comment'] ?? $leaveRequest->hr_comments;
+
+        if ($validated['status'] === 'approved') {
+            $leaveRequest->approved_by_user_id = auth()->id();
+            $leaveRequest->approved_at = now();
+            $leaveRequest->rejected_at = null;
+            $leaveRequest->approved_days = $validated['approved_days'] ?? $leaveRequest->requested_days;
+        } elseif ($validated['status'] === 'rejected') {
+            $leaveRequest->approved_by_user_id = auth()->id();
+            $leaveRequest->rejected_at = now();
+            $leaveRequest->approved_at = null;
+            $leaveRequest->approved_days = null;
+        } else {
+            $leaveRequest->approved_at = null;
+            $leaveRequest->rejected_at = null;
+            $leaveRequest->approved_days = null;
+            if ($validated['status'] !== 'pending') {
+                $leaveRequest->approved_by_user_id = auth()->id();
+            }
+        }
+
+        $leaveRequest->save();
+
+        return redirect()->route('admin.index', [
+            'tab' => 'personnel',
+            'personnel_tab' => $request->input('personnel_tab', 'leave'),
+        ])->with('success', 'Statut de la demande mis à jour.');
+    }
+
+    public function storePersonnelTraining(Request $request)
+    {
+        $validated = $request->validate([
+            'personnel_tab' => ['nullable', 'string'],
+            'administration_type' => ['required', 'in:emitter,recipient'],
+            'administration_id' => ['required', 'string'],
+            'code' => ['nullable', 'string', 'max:100'],
+            'title' => ['required', 'string', 'max:191'],
+            'category' => ['nullable', 'string', 'max:100'],
+            'provider_name' => ['nullable', 'string', 'max:191'],
+            'delivery_mode' => ['required', 'in:internal,external,elearning,hybrid'],
+            'duration_hours' => ['nullable', 'numeric', 'min:0'],
+            'budget_amount' => ['nullable', 'numeric', 'min:0'],
+            'validity_months' => ['nullable', 'integer', 'min:0'],
+            'description' => ['nullable', 'string'],
+            'objectives' => ['nullable', 'string'],
+            'skills' => ['nullable', 'string'],
+            'is_mandatory' => ['nullable', 'boolean'],
+            'is_active' => ['nullable', 'boolean'],
+        ]);
+
+        $adminScope = $this->resolveAdminScope();
+        if ($adminScope) {
+            $validated['administration_type'] = $this->normalizeAdministrationType($adminScope['type'] ?? null);
+            $validated['administration_id'] = $adminScope['id'];
+        }
+
+        $this->ensurePersonnelAdministrationExists($validated['administration_type'], $validated['administration_id']);
+
+        if (!empty($validated['code'])) {
+            $duplicate = PersonnelTraining::query()
+                ->where('administration_type', $validated['administration_type'])
+                ->where('administration_id', $validated['administration_id'])
+                ->where('code', $validated['code'])
+                ->exists();
+
+            if ($duplicate) {
+                throw ValidationException::withMessages([
+                    'code' => 'Une formation existe déjà avec ce code pour cette administration.',
+                ]);
+            }
+        }
+
+        $skills = collect(explode(',', (string) ($validated['skills'] ?? '')))
+            ->map(fn (string $skill) => trim($skill))
+            ->filter()
+            ->values()
+            ->all();
+
+        PersonnelTraining::create([
+            'administration_type' => $validated['administration_type'],
+            'administration_id' => $validated['administration_id'],
+            'code' => $validated['code'] ?: null,
+            'title' => $validated['title'],
+            'category' => $validated['category'] ?? null,
+            'provider_name' => $validated['provider_name'] ?? null,
+            'delivery_mode' => $validated['delivery_mode'],
+            'duration_hours' => $validated['duration_hours'] ?? null,
+            'budget_amount' => $validated['budget_amount'] ?? null,
+            'validity_months' => $validated['validity_months'] ?? null,
+            'description' => $validated['description'] ?? null,
+            'objectives' => $validated['objectives'] ?? null,
+            'skills' => $skills,
+            'is_mandatory' => $request->boolean('is_mandatory'),
+            'is_active' => $request->boolean('is_active', true),
+        ]);
+
+        return redirect()->route('admin.index', [
+            'tab' => 'personnel',
+            'personnel_tab' => $request->input('personnel_tab', 'training'),
+        ])->with('success', 'Formation enregistrée.');
+    }
+
+    public function storePersonnelTrainingEnrollment(Request $request)
+    {
+        $validated = $request->validate([
+            'personnel_tab' => ['nullable', 'string'],
+            'employee_id' => ['required', 'string'],
+            'training_id' => ['required', 'string'],
+            'status' => ['required', 'in:planned,in_progress,completed,cancelled'],
+            'planned_start_date' => ['nullable', 'date'],
+            'planned_end_date' => ['nullable', 'date', 'after_or_equal:planned_start_date'],
+            'attendance_rate' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'score' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'satisfaction_score' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'notes' => ['nullable', 'string'],
+            'certificate' => ['nullable', 'file', 'max:10240'],
+        ]);
+
+        $employee = PersonnelEmployee::findOrFail($validated['employee_id']);
+        $training = PersonnelTraining::findOrFail($validated['training_id']);
+
+        $this->abortIfPersonnelEmployeeOutsideScope($employee);
+        $this->abortIfPersonnelScopeMismatch(
+            $training->administration_type,
+            $training->administration_id,
+            'Cette formation est hors de votre périmètre d\'administration.'
+        );
+
+        if (
+            $employee->administration_type !== $training->administration_type
+            || $employee->administration_id !== $training->administration_id
+        ) {
+            throw ValidationException::withMessages([
+                'training_id' => 'La formation ne correspond pas à l’administration de l’employé.',
+            ]);
+        }
+
+        $exists = PersonnelTrainingEnrollment::query()
+            ->where('employee_id', $employee->id)
+            ->where('training_id', $training->id)
+            ->exists();
+
+        if ($exists) {
+            throw ValidationException::withMessages([
+                'training_id' => 'Cette formation est déjà affectée à cet employé.',
+            ]);
+        }
+
+        $payload = [
+            'employee_id' => $employee->id,
+            'training_id' => $training->id,
+            'assigned_by_user_id' => auth()->id(),
+            'administration_type' => $employee->administration_type,
+            'administration_id' => $employee->administration_id,
+            'status' => $validated['status'],
+            'planned_start_date' => $validated['planned_start_date'] ?? null,
+            'planned_end_date' => $validated['planned_end_date'] ?? null,
+            'started_at' => $validated['status'] === 'in_progress' ? now() : null,
+            'completed_at' => $validated['status'] === 'completed' ? now() : null,
+            'attendance_rate' => $validated['attendance_rate'] ?? null,
+            'score' => $validated['score'] ?? null,
+            'satisfaction_score' => $validated['satisfaction_score'] ?? null,
+            'notes' => $validated['notes'] ?? null,
+        ];
+
+        if ($request->hasFile('certificate')) {
+            $file = $request->file('certificate');
+            $storedName = Str::uuid() . '_' . preg_replace('/[^A-Za-z0-9._-]/', '_', $file->getClientOriginalName());
+            $path = $file->storeAs('personnel-training/' . $employee->id, $storedName, 'local');
+            $payload['certificate_disk'] = 'local';
+            $payload['certificate_path'] = $path;
+            $payload['certificate_original_name'] = $file->getClientOriginalName();
+            $payload['certificate_mime_type'] = $file->getClientMimeType();
+            $payload['certificate_size'] = $file->getSize();
+        }
+
+        PersonnelTrainingEnrollment::create($payload);
+
+        return redirect()->route('admin.index', [
+            'tab' => 'personnel',
+            'personnel_tab' => $request->input('personnel_tab', 'training'),
+        ])->with('success', 'Formation affectée à l’employé.');
+    }
+
+    public function storePersonnelEmployeeSkill(Request $request)
+    {
+        $validated = $request->validate([
+            'personnel_tab' => ['nullable', 'string'],
+            'employee_id' => ['required', 'string'],
+            'skill_name' => ['required', 'string', 'max:191'],
+            'category' => ['nullable', 'string', 'max:100'],
+            'current_level' => ['required', 'integer', 'min:1', 'max:5'],
+            'target_level' => ['nullable', 'integer', 'min:1', 'max:5'],
+            'assessment_date' => ['nullable', 'date'],
+            'source' => ['nullable', 'string', 'max:100'],
+            'notes' => ['nullable', 'string'],
+        ]);
+
+        $employee = PersonnelEmployee::findOrFail($validated['employee_id']);
+
+        $this->abortIfPersonnelEmployeeOutsideScope($employee);
+
+        $duplicate = $employee->skills()
+            ->whereRaw('LOWER(skill_name) = ?', [mb_strtolower($validated['skill_name'])])
+            ->exists();
+
+        if ($duplicate) {
+            throw ValidationException::withMessages([
+                'skill_name' => 'Cette compétence existe déjà pour cet employé.',
+            ]);
+        }
+
+        $employee->skills()->create([
+            'administration_type' => $employee->administration_type,
+            'administration_id' => $employee->administration_id,
+            'skill_name' => $validated['skill_name'],
+            'category' => $validated['category'] ?? null,
+            'current_level' => $validated['current_level'],
+            'target_level' => $validated['target_level'] ?? null,
+            'assessment_date' => $validated['assessment_date'] ?? null,
+            'source' => $validated['source'] ?? null,
+            'notes' => $validated['notes'] ?? null,
+        ]);
+
+        return redirect()->route('admin.index', [
+            'tab' => 'personnel',
+            'personnel_tab' => $request->input('personnel_tab', 'training'),
+            'selected_employee' => $employee->id,
+        ])->with('success', 'Compétence ajoutée à la fiche agent.');
+    }
+
+    public function storePersonnelGoal(Request $request)
+    {
+        $validated = $request->validate([
+            'personnel_tab' => ['nullable', 'string'],
+            'employee_id' => ['required', 'string'],
+            'manager_user_id' => ['nullable', 'string'],
+            'title' => ['required', 'string', 'max:191'],
+            'description' => ['nullable', 'string'],
+            'goal_type' => ['required', 'in:individual,team,strategic'],
+            'weight' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'target_value' => ['nullable', 'numeric'],
+            'current_value' => ['nullable', 'numeric'],
+            'progress_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'start_date' => ['nullable', 'date'],
+            'due_date' => ['nullable', 'date', 'after_or_equal:start_date'],
+            'status' => ['required', 'in:draft,active,completed,on_hold,cancelled'],
+            'notes' => ['nullable', 'string'],
+        ]);
+
+        $employee = PersonnelEmployee::findOrFail($validated['employee_id']);
+        $this->abortIfPersonnelEmployeeOutsideScope($employee);
+
+        $employee->goals()->create([
+            'manager_user_id' => $validated['manager_user_id'] ?: auth()->id(),
+            'administration_type' => $employee->administration_type,
+            'administration_id' => $employee->administration_id,
+            'title' => $validated['title'],
+            'description' => $validated['description'] ?? null,
+            'goal_type' => $validated['goal_type'],
+            'weight' => $validated['weight'] ?? null,
+            'target_value' => $validated['target_value'] ?? null,
+            'current_value' => $validated['current_value'] ?? null,
+            'progress_percent' => $validated['progress_percent'] ?? 0,
+            'start_date' => $validated['start_date'] ?? null,
+            'due_date' => $validated['due_date'] ?? null,
+            'status' => $validated['status'],
+            'notes' => $validated['notes'] ?? null,
+        ]);
+
+        return redirect()->route('admin.index', [
+            'tab' => 'personnel',
+            'personnel_tab' => $request->input('personnel_tab', 'career'),
+            'selected_employee' => $employee->id,
+        ])->with('success', 'Objectif enregistré.');
+    }
+
+    public function storePersonnelPerformanceReview(Request $request)
+    {
+        $validated = $request->validate([
+            'personnel_tab' => ['nullable', 'string'],
+            'employee_id' => ['required', 'string'],
+            'reviewer_user_id' => ['nullable', 'string'],
+            'review_type' => ['required', 'in:annual,midyear,probation,360,continuous'],
+            'title' => ['required', 'string', 'max:191'],
+            'period_label' => ['nullable', 'string', 'max:100'],
+            'scheduled_at' => ['nullable', 'date'],
+            'status' => ['required', 'in:scheduled,in_progress,completed,cancelled'],
+            'overall_score' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'strengths' => ['nullable', 'string'],
+            'improvements' => ['nullable', 'string'],
+            'manager_comments' => ['nullable', 'string'],
+            'employee_comments' => ['nullable', 'string'],
+            'recommendations' => ['nullable', 'string'],
+        ]);
+
+        $employee = PersonnelEmployee::findOrFail($validated['employee_id']);
+        $this->abortIfPersonnelEmployeeOutsideScope($employee);
+
+        $employee->performanceReviews()->create([
+            'reviewer_user_id' => $validated['reviewer_user_id'] ?: auth()->id(),
+            'administration_type' => $employee->administration_type,
+            'administration_id' => $employee->administration_id,
+            'review_type' => $validated['review_type'],
+            'title' => $validated['title'],
+            'period_label' => $validated['period_label'] ?? null,
+            'scheduled_at' => $validated['scheduled_at'] ?? null,
+            'completed_at' => $validated['status'] === 'completed' ? now() : null,
+            'status' => $validated['status'],
+            'overall_score' => $validated['overall_score'] ?? null,
+            'strengths' => $validated['strengths'] ?? null,
+            'improvements' => $validated['improvements'] ?? null,
+            'manager_comments' => $validated['manager_comments'] ?? null,
+            'employee_comments' => $validated['employee_comments'] ?? null,
+            'recommendations' => $validated['recommendations'] ?? null,
+        ]);
+
+        return redirect()->route('admin.index', [
+            'tab' => 'personnel',
+            'personnel_tab' => $request->input('personnel_tab', 'career'),
+            'selected_employee' => $employee->id,
+        ])->with('success', 'Évaluation enregistrée.');
+    }
+
+    public function storePersonnelCareerEvent(Request $request)
+    {
+        $validated = $request->validate([
+            'personnel_tab' => ['nullable', 'string'],
+            'employee_id' => ['required', 'string'],
+            'event_type' => ['required', 'in:promotion,mobility,succession,job_change,interview'],
+            'effective_date' => ['nullable', 'date'],
+            'title' => ['required', 'string', 'max:191'],
+            'previous_job_title' => ['nullable', 'string', 'max:191'],
+            'new_job_title' => ['nullable', 'string', 'max:191'],
+            'status' => ['required', 'in:planned,validated,completed,cancelled'],
+            'summary' => ['nullable', 'string'],
+            'notes' => ['nullable', 'string'],
+        ]);
+
+        $employee = PersonnelEmployee::findOrFail($validated['employee_id']);
+        $this->abortIfPersonnelEmployeeOutsideScope($employee);
+
+        $employee->careerEvents()->create([
+            'recorded_by_user_id' => auth()->id(),
+            'administration_type' => $employee->administration_type,
+            'administration_id' => $employee->administration_id,
+            'event_type' => $validated['event_type'],
+            'effective_date' => $validated['effective_date'] ?? null,
+            'title' => $validated['title'],
+            'previous_job_title' => $validated['previous_job_title'] ?? $employee->job_title,
+            'new_job_title' => $validated['new_job_title'] ?? null,
+            'status' => $validated['status'],
+            'summary' => $validated['summary'] ?? null,
+            'notes' => $validated['notes'] ?? null,
+        ]);
+
+        return redirect()->route('admin.index', [
+            'tab' => 'personnel',
+            'personnel_tab' => $request->input('personnel_tab', 'career'),
+            'selected_employee' => $employee->id,
+        ])->with('success', 'Événement de carrière enregistré.');
     }
 
     // ── Token OnlyOffice (API, génère un JWT frais pour un document) ──────────

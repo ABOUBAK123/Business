@@ -32,6 +32,16 @@ Route::middleware('guest')->group(function () {
     Route::post('/mot-de-passe-oublie', [AuthController::class, 'sendResetLink'])->name('password.email');
 });
 
+// Changement de langue public (accessible sans authentification)
+Route::post('/lang/{locale}', function ($locale) {
+    $allowed = ['fr', 'en', 'es', 'pt', 'ar'];
+    if (in_array($locale, $allowed)) {
+        session(['locale' => $locale]);
+        app()->setLocale($locale);
+    }
+    return redirect()->back();
+})->name('lang.switch');
+
 // Routes publiques (sans authentification) — fichiers vierges pour OnlyOffice
 Route::get('/oo-blank/{type}', function ($type) {
     $allowed = ['docx' => 'empty_template.docx', 'xlsx' => 'blank_xlsx.xlsx', 'pptx' => 'blank_pptx.pptx'];
@@ -274,6 +284,21 @@ Route::middleware('auth')->group(function () {
         Route::post('/signature-provider', [AdminController::class, 'saveSignatureProvider'])->name('signature-provider.save');
         Route::post('/signature-provider/test', [AdminController::class, 'testSignatureConnection'])->name('signature-provider.test');
         Route::post('/onlyoffice-token', [AdminController::class, 'onlyofficeToken'])->name('onlyoffice.token');
+        Route::post('/personnel/employees', [AdminController::class, 'storePersonnelEmployee'])->name('personnel.employees.store');
+        Route::get('/personnel/employees/template', [AdminController::class, 'downloadPersonnelEmployeesTemplate'])->name('personnel.employees.template');
+        Route::post('/personnel/employees/import', [AdminController::class, 'importPersonnelEmployees'])->name('personnel.employees.import');
+        Route::put('/personnel/employees/{employee}', [AdminController::class, 'updatePersonnelEmployee'])->name('personnel.employees.update');
+        Route::post('/personnel/employees/{employee}/documents', [AdminController::class, 'uploadPersonnelEmployeeDocument'])->name('personnel.employees.documents.store');
+        Route::post('/personnel/employee-skills', [AdminController::class, 'storePersonnelEmployeeSkill'])->name('personnel.employees.skills.store');
+        Route::get('/personnel/documents/{document}/download', [AdminController::class, 'downloadPersonnelEmployeeDocument'])->name('personnel.documents.download');
+        Route::post('/personnel/leave-types', [AdminController::class, 'storePersonnelLeaveType'])->name('personnel.leave-types.store');
+        Route::post('/personnel/leave-requests', [AdminController::class, 'storePersonnelLeaveRequest'])->name('personnel.leave-requests.store');
+        Route::patch('/personnel/leave-requests/{leaveRequest}/status', [AdminController::class, 'updatePersonnelLeaveRequestStatus'])->name('personnel.leave-requests.status');
+        Route::post('/personnel/trainings', [AdminController::class, 'storePersonnelTraining'])->name('personnel.trainings.store');
+        Route::post('/personnel/training-enrollments', [AdminController::class, 'storePersonnelTrainingEnrollment'])->name('personnel.training-enrollments.store');
+        Route::post('/personnel/goals', [AdminController::class, 'storePersonnelGoal'])->name('personnel.goals.store');
+        Route::post('/personnel/performance-reviews', [AdminController::class, 'storePersonnelPerformanceReview'])->name('personnel.performance-reviews.store');
+        Route::post('/personnel/career-events', [AdminController::class, 'storePersonnelCareerEvent'])->name('personnel.career-events.store');
         Route::post('/templates/upload-file', [AdminController::class, 'uploadTemplateFile'])->name('admin.templates.uploadFile');
         Route::post('/templates/{template}/detect-vars', [AdminController::class, 'detectTemplateVars'])->name('admin.templates.detectVars');
             Route::post('/templates/{template}/ai-enrich',   [AdminController::class, 'aiEnrichTemplateVars'])->name('admin.templates.aiEnrich');

@@ -16,6 +16,7 @@
 
 @php
 $tab = request('tab', 'overview');
+$personnelTab = request('personnel_tab', 'dashboard');
 $allTabs = [
   'overview'           => ['fas fa-th-large',          'Aperçu',                '#6366f1', null],
   'templates'          => ['fas fa-file-code',         'Templates',             '#0ea5e9', 'administration.templates'],
@@ -43,7 +44,7 @@ $tabs = array_filter($allTabs, function($v) use ($permSetAdmin) {
     return $permSetAdmin['isElevated'] || isset($permSetAdmin['permissions'][$perm]);
 });
 
-if (!array_key_exists($tab, $tabs)) {
+if ($tab !== 'personnel' && !array_key_exists($tab, $tabs)) {
   $tab = 'overview';
 }
 @endphp
@@ -65,6 +66,30 @@ if (!array_key_exists($tab, $tabs)) {
 @endif
 
 {{-- Barre d'onglets --}}
+@if($tab === 'personnel')
+{{-- Barre des sous-onglets Personnel uniquement --}}
+@php
+  $_personnelNavTabs = [
+    'dashboard' => ['fas fa-chart-line', __('personnel.ui.tabs.dashboard')],
+    'employees' => ['fas fa-id-card', __('personnel.ui.tabs.employees')],
+    'agent-space' => ['fas fa-user-clock', __('personnel.ui.tabs.agent_space')],
+    'leave'     => ['fas fa-calendar-check', __('personnel.ui.tabs.leave')],
+    'training'  => ['fas fa-graduation-cap', __('personnel.ui.tabs.training')],
+    'career'    => ['fas fa-ranking-star', __('personnel.ui.tabs.career')],
+  ];
+@endphp
+<div class="flex flex-wrap gap-1.5 mb-6 bg-white rounded-2xl border border-gray-200 p-2 shadow-sm">
+    @foreach($_personnelNavTabs as $key => [$icon, $label])
+    <a href="{{ route('admin.index', ['tab' => 'personnel', 'personnel_tab' => $key]) }}"
+       title="{{ $label }}"
+       class="flex items-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition
+              {{ $personnelTab === $key ? 'bg-[#2453d6] text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100' }}">
+        <i class="{{ $icon }} text-xs flex-shrink-0"></i>
+        <span class="adm-tab-label">{{ $label }}</span>
+    </a>
+    @endforeach
+</div>
+@else
 <div class="flex flex-wrap gap-1.5 mb-6 bg-white rounded-2xl border border-gray-200 p-2 shadow-sm">
     @foreach($tabs as $key => [$icon, $label, $color, $perm])
     <a href="{{ route('admin.index', ['tab' => $key]) }}"
@@ -76,6 +101,7 @@ if (!array_key_exists($tab, $tabs)) {
     </a>
     @endforeach
 </div>
+@endif
 
 {{-- ══════════════════════ APERÇU ══════════════════════ --}}
 @if($tab === 'overview')
@@ -146,6 +172,1267 @@ $_oc = [
     </a>
     @endforeach
 </div>
+
+{{-- ══════════════════════ GESTION DU PERSONNEL ══════════════════════ --}}
+@elseif($tab === 'personnel')
+@php
+  $personnelTabs = [
+    'dashboard' => ['fas fa-chart-line', __('personnel.ui.tabs.dashboard')],
+    'employees' => ['fas fa-id-card', __('personnel.ui.tabs.employees')],
+    'agent-space' => ['fas fa-user-clock', __('personnel.ui.tabs.agent_space')],
+    'leave' => ['fas fa-calendar-check', __('personnel.ui.tabs.leave')],
+    'training' => ['fas fa-graduation-cap', __('personnel.ui.tabs.training')],
+    'career' => ['fas fa-ranking-star', __('personnel.ui.tabs.career')],
+  ];
+  if (!array_key_exists($personnelTab, $personnelTabs)) {
+    $personnelTab = 'dashboard';
+  }
+  $editingPersonnel = $selectedPersonnelEmployee;
+@endphp
+
+<div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-6">
+  <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <div>
+      <h2 class="text-xl font-bold text-gray-800">{{ __('personnel.ui.module.title') }}</h2>
+      <p class="text-sm text-gray-500 mt-1">{{ __('personnel.ui.module.description') }}</p>
+    </div>
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 min-w-0">
+      <div class="rounded-xl bg-teal-50 border border-teal-100 px-4 py-3">
+        <div class="text-xs uppercase tracking-wide text-teal-700">{{ __('personnel.ui.stats.employees') }}</div>
+        <div class="text-2xl font-black text-gray-800">{{ number_format($personnelStats['employees'] ?? 0) }}</div>
+      </div>
+      <div class="rounded-xl bg-cyan-50 border border-cyan-100 px-4 py-3">
+        <div class="text-xs uppercase tracking-wide text-cyan-700">{{ __('personnel.ui.stats.documents') }}</div>
+        <div class="text-2xl font-black text-gray-800">{{ number_format($personnelStats['documents'] ?? 0) }}</div>
+      </div>
+      <div class="rounded-xl bg-emerald-50 border border-emerald-100 px-4 py-3">
+        <div class="text-xs uppercase tracking-wide text-emerald-700">{{ __('personnel.ui.stats.active') }}</div>
+        <div class="text-2xl font-black text-gray-800">{{ number_format($personnelStats['active'] ?? 0) }}</div>
+      </div>
+      <div class="rounded-xl bg-amber-50 border border-amber-100 px-4 py-3">
+        <div class="text-xs uppercase tracking-wide text-amber-700">{{ __('personnel.ui.stats.new_hires_year', ['year' => now()->year]) }}</div>
+        <div class="text-2xl font-black text-gray-800">{{ number_format($personnelStats['newThisYear'] ?? 0) }}</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+@if($personnelTab === 'dashboard')
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-6">
+  <section class="xl:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <h3 class="text-lg font-bold text-gray-800 mb-2">{{ __('personnel.ui.dashboard.vision_title') }}</h3>
+    <p class="text-sm text-gray-500 mb-4">{{ __('personnel.ui.dashboard.vision_description') }}</p>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      @foreach([
+        [__('personnel.ui.dashboard.cards.employees_title'), __('personnel.ui.dashboard.cards.employees_desc'), 'fas fa-id-card', 'teal'],
+        [__('personnel.ui.dashboard.cards.leave_title'), __('personnel.ui.dashboard.cards.leave_desc'), 'fas fa-calendar-check', 'sky'],
+        [__('personnel.ui.dashboard.cards.training_title'), __('personnel.ui.dashboard.cards.training_desc'), 'fas fa-graduation-cap', 'violet'],
+        [__('personnel.ui.dashboard.cards.career_title'), __('personnel.ui.dashboard.cards.career_desc'), 'fas fa-ranking-star', 'amber'],
+      ] as [$title, $desc, $icon, $color])
+      <div class="rounded-2xl border border-gray-200 p-4 bg-gray-50">
+        <div class="h-10 w-10 rounded-xl bg-{{ $color }}-100 flex items-center justify-center mb-3">
+          <i class="{{ $icon }} text-{{ $color }}-600"></i>
+        </div>
+        <h4 class="font-semibold text-gray-800 mb-1">{{ $title }}</h4>
+        <p class="text-sm text-gray-500">{{ $desc }}</p>
+      </div>
+      @endforeach
+    </div>
+  </section>
+
+  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <h3 class="text-lg font-bold text-gray-800 mb-4">{{ __('personnel.ui.dashboard.workflow_title') }}</h3>
+    <div class="space-y-3">
+      @foreach([
+        [__('personnel.ui.dashboard.workflow.approvals_title'), __('personnel.ui.dashboard.workflow.approvals_desc')],
+        [__('personnel.ui.dashboard.workflow.notifications_title'), __('personnel.ui.dashboard.workflow.notifications_desc')],
+        [__('personnel.ui.dashboard.workflow.reminders_title'), __('personnel.ui.dashboard.workflow.reminders_desc')],
+        [__('personnel.ui.dashboard.workflow.steering_title'), __('personnel.ui.dashboard.workflow.steering_desc')],
+        [__('personnel.ui.dashboard.workflow.attendance_title'), __('personnel.ui.dashboard.workflow.attendance_desc')],
+      ] as [$title, $desc])
+      <div class="rounded-xl border border-gray-200 p-4">
+        <div class="font-semibold text-gray-800">{{ $title }}</div>
+        <div class="text-sm text-gray-500 mt-1">{{ $desc }}</div>
+      </div>
+      @endforeach
+    </div>
+
+    <div class="mt-5 pt-5 border-t border-gray-200">
+      <div class="flex items-center justify-between gap-3 mb-3">
+        <h4 class="font-semibold text-gray-800">{{ __('personnel.audit.title') }}</h4>
+        <span class="text-xs text-gray-500">{{ __('personnel.audit.recent_actions', ['count' => $personnelRecentActivity->count()]) }}</span>
+      </div>
+      <div class="space-y-3">
+        @forelse($personnelRecentActivity as $activity)
+        @php
+          $subjectLabels = [
+            'PersonnelEmployee' => __('personnel.audit.subjects.employee_record'),
+            'PersonnelEmployeeDocument' => __('personnel.audit.subjects.employee_document'),
+            'PersonnelLeaveType' => __('personnel.audit.subjects.leave_type'),
+            'PersonnelLeaveRequest' => __('personnel.audit.subjects.leave_request'),
+            'PersonnelTraining' => __('personnel.audit.subjects.training'),
+            'PersonnelTrainingEnrollment' => __('personnel.audit.subjects.training_enrollment'),
+            'PersonnelEmployeeSkill' => __('personnel.audit.subjects.skill'),
+          ];
+          $subjectLabel = $subjectLabels[class_basename($activity->subject_type)] ?? __('personnel.audit.subjects.hr_item');
+          $eventRaw = $activity->event ?: 'updated';
+          $eventKey = 'personnel.audit.events.' . $eventRaw;
+          $eventLabel = __($eventKey);
+          if ($eventLabel === $eventKey) {
+              $eventLabel = \Illuminate\Support\Str::headline($eventRaw);
+          }
+
+          $descriptionRaw = (string) ($activity->description ?: '');
+          $descriptionMap = [
+            'created' => __('personnel.audit.events.created'),
+            'updated' => __('personnel.audit.events.updated'),
+            'deleted' => __('personnel.audit.events.deleted'),
+            'restored' => __('personnel.audit.events.restored'),
+          ];
+          $descriptionLabel = $descriptionRaw !== ''
+            ? ($descriptionMap[$descriptionRaw] ?? $descriptionRaw)
+            : __('personnel.audit.default_description');
+        @endphp
+        <div class="rounded-xl border border-gray-200 p-4 bg-gray-50">
+          <div class="font-semibold text-gray-800">{{ $eventLabel }} {{ $subjectLabel }}</div>
+          <div class="text-sm text-gray-500 mt-1">{{ $descriptionLabel }}</div>
+          <div class="text-xs text-gray-400 mt-2">{{ $activity->causer?->name ?? __('personnel.audit.system') }} · {{ optional($activity->created_at)->diffForHumans() }}</div>
+        </div>
+        @empty
+        <div class="rounded-xl border border-gray-200 p-4 text-sm text-gray-500 bg-gray-50">{{ __('personnel.audit.empty') }}</div>
+        @endforelse
+      </div>
+    </div>
+  </section>
+</div>
+@elseif($personnelTab === 'employees')
+<div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-5">
+  <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <div>
+      <h3 class="text-base font-bold text-gray-800">{{ __('personnel.ui.employees.import_title') }}</h3>
+      <p class="text-sm text-gray-500 mt-1">{{ __('personnel.ui.employees.import_description') }}</p>
+    </div>
+    <div class="flex flex-wrap items-center gap-3">
+      <a href="{{ route('admin.personnel.employees.template') }}" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+        <i class="fas fa-file-excel text-emerald-600"></i>
+        {{ __('personnel.ui.employees.download_template') }}
+      </a>
+      <form method="POST" enctype="multipart/form-data" action="{{ route('admin.personnel.employees.import') }}" class="flex items-center gap-2">
+        @csrf
+        <input type="hidden" name="personnel_tab" value="employees">
+        <input type="file" name="employees_file" accept=".xlsx,.xls,.csv" required class="border border-gray-300 rounded-xl px-3 py-2 text-sm">
+        <button type="submit" class="px-4 py-2 bg-[#2453d6] text-white rounded-xl text-sm font-semibold">{{ __('personnel.ui.employees.import_button') }}</button>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-5 gap-5">
+  <section class="xl:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <div class="flex items-center justify-between gap-3 mb-4">
+      <div>
+        <h3 class="text-lg font-bold text-gray-800">{{ __('personnel.ui.employees.sheet_title') }}</h3>
+        <p class="text-sm text-gray-500">{{ __('personnel.ui.employees.sheet_description') }}</p>
+      </div>
+      @if($editingPersonnel)
+      <a href="{{ route('admin.index', ['tab' => 'personnel', 'personnel_tab' => 'employees']) }}" class="text-xs font-semibold text-[#2453d6]">{{ __('personnel.ui.employees.form_btn_new') }}</a>
+      @endif
+    </div>
+
+    <form method="POST" action="{{ $editingPersonnel ? route('admin.personnel.employees.update', $editingPersonnel) : route('admin.personnel.employees.store') }}" class="space-y-4">
+      @csrf
+      @if($editingPersonnel)
+        @method('PUT')
+      @endif
+      <input type="hidden" name="personnel_tab" value="employees">
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_first_name') }}</label>
+          <input type="text" name="first_name" required value="{{ old('first_name', $editingPersonnel->first_name ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_last_name') }}</label>
+          <input type="text" name="last_name" required value="{{ old('last_name', $editingPersonnel->last_name ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_employee_number') }}</label>
+          <input type="text" name="employee_number" value="{{ old('employee_number', $editingPersonnel->employee_number ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_job_title') }}</label>
+          <input type="text" name="job_title" value="{{ old('job_title', $editingPersonnel->job_title ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_email') }}</label>
+          <input type="email" name="email" value="{{ old('email', $editingPersonnel->email ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_phone') }}</label>
+          <input type="text" name="phone" value="{{ old('phone', $editingPersonnel->phone ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_marital_status') }}</label>
+          <input type="text" name="marital_status" value="{{ old('marital_status', $editingPersonnel->marital_status ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">Date d’embauche</label>
+          <input type="date" name="hire_date" value="{{ old('hire_date', optional($editingPersonnel?->hire_date)->format('Y-m-d')) }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_employment_status') }}</label>
+          <select name="employment_status" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+            @foreach(['active', 'probation', 'suspended', 'inactive'] as $empStatus)
+            <option value="{{ $empStatus }}" {{ old('employment_status', $editingPersonnel->employment_status ?? 'active') === $empStatus ? 'selected' : '' }}>{{ __('personnel.ui.employees.status_' . $empStatus) }}</option>
+            @endforeach
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_superior') }}</label>
+          <select name="user_id" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+            <option value="">{{ __('personnel.ui.employees.form_no_superior') }}</option>
+            @foreach($allUsers as $u)
+            <option value="{{ $u->id }}" {{ old('user_id', $editingPersonnel->user_id ?? '') === $u->id ? 'selected' : '' }}>{{ $u->name }} - {{ $u->email }}</option>
+            @endforeach
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_admin_type') }}</label>
+          <select name="administration_type" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+            <option value="emitter" {{ old('administration_type', $editingPersonnel->administration_type ?? ($adminScope['type'] ?? 'emitter')) === 'emitter' ? 'selected' : '' }}>{{ __('personnel.ui.employees.admin_emitter') }}</option>
+            <option value="recipient" {{ old('administration_type', $editingPersonnel->administration_type ?? ($adminScope['type'] ?? 'emitter')) === 'recipient' ? 'selected' : '' }}>{{ __('personnel.ui.employees.admin_recipient') }}</option>
+          </select>
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_administration') }}</label>
+          <select name="administration_id" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+            <option value="">{{ __('personnel.ui.employees.form_select_admin') }}</option>
+            @foreach($emitters as $e)
+            <option value="{{ $e->id }}" {{ old('administration_id', $editingPersonnel->administration_id ?? ($adminScope['id'] ?? '')) === $e->id ? 'selected' : '' }}>{{ $e->name }} {{ __('personnel.ui.employees.admin_emitter_bracket') }}</option>
+            @endforeach
+            @foreach($recipients as $r)
+            <option value="{{ $r->id }}" {{ old('administration_id', $editingPersonnel->administration_id ?? ($adminScope['id'] ?? '')) === $r->id ? 'selected' : '' }}>{{ $r->name }} {{ __('personnel.ui.employees.admin_recipient_bracket') }}</option>
+            @endforeach
+          </select>
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_sub_entity') }}</label>
+          <select name="sub_entity_id" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+            <option value="">{{ __('personnel.ui.employees.form_no_entity') }}</option>
+            @foreach($subEntities as $subEntity)
+            <option value="{{ $subEntity->id }}" {{ old('sub_entity_id', $editingPersonnel->sub_entity_id ?? '') === $subEntity->id ? 'selected' : '' }}>{{ $subEntity->name }}</option>
+            @endforeach
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">Contact d’urgence</label>
+          <input type="text" name="emergency_contact_name" value="{{ old('emergency_contact_name', $editingPersonnel->emergency_contact_name ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_emergency_phone') }}</label>
+          <input type="text" name="emergency_contact_phone" value="{{ old('emergency_contact_phone', $editingPersonnel->emergency_contact_phone ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_address') }}</label>
+          <textarea name="address" rows="2" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">{{ old('address', $editingPersonnel->address ?? '') }}</textarea>
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_notes') }}</label>
+          <textarea name="notes" rows="3" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">{{ old('notes', $editingPersonnel->notes ?? '') }}</textarea>
+        </div>
+      </div>
+
+      <div class="pt-2 flex gap-3">
+        <button type="submit" class="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-xl text-sm">{{ $editingPersonnel ? __('personnel.ui.employees.form_btn_update') : __('personnel.ui.employees.form_btn_create') }}</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="xl:col-span-3 space-y-5">
+    <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+      <h3 class="text-lg font-bold text-gray-800 mb-4">{{ __('personnel.ui.employees.table_title') }}</h3>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="text-left text-gray-500 border-b border-gray-100">
+              <th class="py-3 pr-4">{{ __('personnel.ui.employees.table_col_agent') }}</th>
+              <th class="py-3 pr-4">{{ __('personnel.ui.employees.table_col_admin') }}</th>
+              <th class="py-3 pr-4">{{ __('personnel.ui.employees.table_col_function') }}</th>
+              <th class="py-3 pr-4">{{ __('personnel.ui.employees.table_col_status') }}</th>
+              <th class="py-3 pr-4">{{ __('personnel.ui.employees.table_col_docs') }}</th>
+              <th class="py-3">{{ __('personnel.ui.employees.table_col_action') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @forelse($personnelEmployees as $employee)
+            <tr class="border-b border-gray-100">
+              <td class="py-3 pr-4">
+                <div class="font-semibold text-gray-800">{{ $employee->full_name }}</div>
+                <div class="text-xs text-gray-500">{{ $employee->employee_number ?: __('personnel.ui.employees.table_no_employee_number') }}</div>
+              </td>
+              <td class="py-3 pr-4 text-gray-600">{{ $employee->administration_id ?: __('personnel.ui.employees.table_not_assigned') }}</td>
+              <td class="py-3 pr-4 text-gray-600">{{ $employee->job_title ?: __('personnel.ui.employees.table_not_defined') }}</td>
+              <td class="py-3 pr-4">
+                <span class="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">{{ __('personnel.ui.statuses.' . $employee->employment_status) }}</span>
+              </td>
+              <td class="py-3 pr-4 text-gray-600">{{ $employee->documents->count() }}</td>
+              <td class="py-3">
+                <a href="{{ route('admin.index', ['tab' => 'personnel', 'personnel_tab' => 'employees', 'selected_employee' => $employee->id]) }}" class="text-sm font-semibold text-[#2453d6]">{{ __('personnel.ui.employees.table_btn_open') }}</a>
+              </td>
+            </tr>
+            @empty
+            <tr>
+              <td colspan="6" class="py-8 text-center text-sm text-gray-400">{{ __('personnel.ui.employees.table_empty') }}</td>
+            </tr>
+            @endforelse
+          </tbody>
+        </table>
+      </div>
+      @if(method_exists($personnelEmployees, 'links'))
+      <div class="mt-4">{{ $personnelEmployees->appends(['tab' => 'personnel', 'personnel_tab' => 'employees', 'selected_employee' => request('selected_employee')])->links() }}</div>
+      @endif
+    </div>
+
+    <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+      <div class="flex items-center justify-between gap-3 mb-4">
+        <div>
+          <h3 class="text-lg font-bold text-gray-800">{{ __('personnel.ui.employees.documents_title') }}</h3>
+          <p class="text-sm text-gray-500">{{ __('personnel.ui.employees.documents_description') }}</p>
+        </div>
+        @if(!$editingPersonnel)
+        <span class="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-full px-3 py-1">{{ __('personnel.ui.employees.doc_select_hint') }}</span>
+        @endif
+      </div>
+
+      @if($editingPersonnel)
+      <form method="POST" enctype="multipart/form-data" action="{{ route('admin.personnel.employees.documents.store', $editingPersonnel) }}" class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-5">
+        @csrf
+        <input type="hidden" name="personnel_tab" value="employees">
+        <input type="text" name="label" placeholder="{{ __('personnel.ui.employees.doc_placeholder_label') }}" class="border border-gray-300 rounded-xl px-4 py-2.5 text-sm" required>
+        <select name="category" class="border border-gray-300 rounded-xl px-4 py-2.5 text-sm" required>
+          <option value="job_description">{{ __('personnel.ui.employees.doc_cat_job_desc') }}</option>
+          <option value="cv">{{ __('personnel.ui.employees.doc_cat_cv') }}</option>
+          <option value="certificate">{{ __('personnel.ui.employees.doc_cat_certificate') }}</option>
+          <option value="visa">{{ __('personnel.ui.employees.doc_cat_visa') }}</option>
+          <option value="badge">{{ __('personnel.ui.employees.doc_cat_badge') }}</option>
+          <option value="other">{{ __('personnel.ui.employees.doc_cat_other') }}</option>
+        </select>
+        <input type="file" name="document" class="border border-gray-300 rounded-xl px-4 py-2.5 text-sm" required>
+        <button type="submit" class="px-5 py-2.5 bg-[#2453d6] text-white rounded-xl text-sm font-semibold">{{ __('personnel.ui.employees.doc_btn_add') }}</button>
+      </form>
+
+      <div class="space-y-3">
+        @forelse($editingPersonnel->documents as $doc)
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3 rounded-xl border border-gray-200 p-4">
+          <div>
+            <div class="font-semibold text-gray-800">{{ $doc->label }}</div>
+            <div class="text-xs text-gray-500">{{ $doc->category }} | {{ $doc->original_name }} | {{ $doc->mime_type ?: 'type inconnu' }}</div>
+          </div>
+          <a href="{{ route('admin.personnel.documents.download', $doc) }}" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+            <i class="fas fa-download"></i>
+            {{ __('personnel.ui.employees.doc_btn_download') }}
+          </a>
+        </div>
+        @empty
+        <div class="rounded-xl bg-gray-50 border border-gray-200 px-4 py-5 text-sm text-gray-500">{{ __('personnel.ui.employees.doc_empty') }}</div>
+        @endforelse
+      </div>
+      @else
+      <div class="rounded-xl bg-gray-50 border border-gray-200 px-4 py-5 text-sm text-gray-500">{{ __('personnel.ui.employees.doc_private_hint') }}</div>
+      @endif
+    </div>
+  </section>
+</div>ée s’active dès qu’une fiche agent est sélectionnée.</div>
+      @endif
+    </div>
+  </section>
+</div>
+@elseif($personnelTab === 'agent-space')
+@php
+  $agentSpaceEmployee = $selectedPersonnelEmployee;
+  if (!$agentSpaceEmployee && request('selected_employee')) {
+    $agentSpaceEmployee = $personnelEmployeeDirectory->firstWhere('id', request('selected_employee'));
+  }
+  $agentSpaceLeaveRequests = collect();
+  $agentSpaceTrainingEnrollments = collect();
+  $agentSpaceCareerHistory = collect();
+  if ($agentSpaceEmployee) {
+    $agentSpaceLeaveRequests = $personnelLeaveRequests
+      ->where('employee_id', $agentSpaceEmployee->id)
+      ->sortByDesc('created_at')
+      ->take(8)
+      ->values();
+    $agentSpaceTrainingEnrollments = $personnelTrainingEnrollments
+      ->where('employee_id', $agentSpaceEmployee->id)
+      ->sortByDesc('created_at')
+      ->take(8)
+      ->values();
+    $agentSpaceCareerHistory = $personnelCareerEvents
+      ->where('employee_id', $agentSpaceEmployee->id)
+      ->filter(fn($event) => in_array($event->event_type, ['mobility', 'job_change'], true))
+      ->sortByDesc('effective_date')
+      ->take(12)
+      ->values();
+  }
+@endphp
+
+<div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-5">
+  <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <div>
+      <h3 class="text-lg font-bold text-gray-800">{{ __('personnel.ui.agent_space.title') }}</h3>
+      <p class="text-sm text-gray-500 mt-1">{{ __('personnel.ui.agent_space.description') }}</p>
+    </div>
+    <form method="GET" action="{{ route('admin.index') }}" class="flex items-center gap-2">
+      <input type="hidden" name="tab" value="personnel">
+      <input type="hidden" name="personnel_tab" value="agent-space">
+      <label class="text-sm font-semibold text-gray-700">{{ __('personnel.ui.agent_space.agent_label') }}</label>
+      <select name="selected_employee" class="border border-gray-300 rounded-xl px-3 py-2 text-sm" onchange="this.form.submit()">
+        <option value="">{{ __('personnel.ui.agent_space.select') }}</option>
+        @foreach($personnelEmployeeDirectory as $employee)
+        <option value="{{ $employee->id }}" {{ ($agentSpaceEmployee?->id === $employee->id) ? 'selected' : '' }}>{{ $employee->full_name }}</option>
+        @endforeach
+      </select>
+    </form>
+  </div>
+</div>
+
+@if(!$agentSpaceEmployee)
+<div class="rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800 mb-5">
+  {{ __('personnel.ui.agent_space.select_employee_hint') }}
+</div>
+@else
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-5">
+  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <h4 class="text-base font-bold text-gray-800 mb-3">{{ __('personnel.ui.agent_space.leave_request_title') }}</h4>
+    @if($personnelLeaveTypes->isEmpty())
+    <div class="rounded-xl bg-amber-50 border border-amber-100 px-4 py-4 text-sm text-amber-800">Aucun type de congé disponible pour l’instant.</div>
+    @else
+    <form method="POST" action="{{ route('admin.personnel.leave-requests.store') }}" class="space-y-3">
+      @csrf
+      <input type="hidden" name="personnel_tab" value="agent-space">
+      <input type="hidden" name="employee_id" value="{{ $agentSpaceEmployee->id }}">
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.agent_space.leave_type_label') }}</label>
+        <select name="leave_type_id" class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm">
+          <option value="">{{ __('personnel.ui.agent_space.select') }}</option>
+          @foreach($personnelLeaveTypes as $leaveType)
+          <option value="{{ $leaveType->id }}">{{ $leaveType->name }}</option>
+          @endforeach
+        </select>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+        <input type="date" name="start_date" value="{{ old('start_date') }}" class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm">
+        <input type="date" name="end_date" value="{{ old('end_date') }}" class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm">
+      </div>
+      <textarea name="reason" rows="2" placeholder="{{ __('personnel.ui.agent_space.reason_placeholder') }}" class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm">{{ old('reason') }}</textarea>
+      <button type="submit" class="px-4 py-2 bg-[#2453d6] text-white rounded-xl text-sm font-semibold">{{ __('personnel.ui.agent_space.btn_send_request') }}</button>
+    </form>
+    @endif
+  </section>
+
+  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <h4 class="text-base font-bold text-gray-800 mb-3">{{ __('personnel.ui.agent_space.training_request_title') }}</h4>
+    @php
+      $agentSpaceTrainings = $personnelTrainings
+        ->where('administration_type', $agentSpaceEmployee->administration_type)
+        ->where('administration_id', $agentSpaceEmployee->administration_id)
+        ->values();
+    @endphp
+    @if($agentSpaceTrainings->isEmpty())
+    <div class="rounded-xl bg-amber-50 border border-amber-100 px-4 py-4 text-sm text-amber-800">{{ __('personnel.ui.agent_space.no_trainings') }}</div>
+    @else
+    <form method="POST" action="{{ route('admin.personnel.training-enrollments.store') }}" class="space-y-3">
+      @csrf
+      <input type="hidden" name="personnel_tab" value="agent-space">
+      <input type="hidden" name="employee_id" value="{{ $agentSpaceEmployee->id }}">
+      <input type="hidden" name="status" value="planned">
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.agent_space.training_label') }}</label>
+        <select name="training_id" class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm">
+          <option value="">{{ __('personnel.ui.agent_space.select') }}</option>
+          @foreach($agentSpaceTrainings as $training)
+          <option value="{{ $training->id }}">{{ $training->title }}</option>
+          @endforeach
+        </select>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+        <input type="date" name="planned_start_date" value="{{ old('planned_start_date') }}" class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm">
+        <input type="date" name="planned_end_date" value="{{ old('planned_end_date') }}" class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm">
+      </div>
+      <textarea name="notes" rows="2" placeholder="{{ __('personnel.ui.agent_space.training_goal_placeholder') }}" class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm">{{ old('notes') }}</textarea>
+      <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-semibold">{{ __('personnel.ui.agent_space.btn_submit_request') }}</button>
+    </form>
+    @endif
+  </section>
+
+  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <h4 class="text-base font-bold text-gray-800 mb-3">{{ __('personnel.ui.agent_space.job_description_title') }}</h4>
+    <form method="POST" enctype="multipart/form-data" action="{{ route('admin.personnel.employees.documents.store', $agentSpaceEmployee) }}" class="space-y-3">
+      @csrf
+      <input type="hidden" name="personnel_tab" value="agent-space">
+      <input type="hidden" name="category" value="job_description">
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.agent_space.label_label') }}</label>
+        <input type="text" name="label" value="{{ old('label', 'Fiche de poste') }}" class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm">
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.agent_space.document_label') }}</label>
+        <input type="file" name="document" class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm" required>
+      </div>
+      <button type="submit" class="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold">{{ __('personnel.ui.agent_space.btn_submit_job_desc') }}</button>
+    </form>
+
+    <div class="mt-4 space-y-2">
+      @forelse($agentSpaceEmployee->documents->where('category', 'job_description')->sortByDesc('created_at')->take(5) as $doc)
+      <a href="{{ route('admin.personnel.documents.download', $doc) }}" class="flex items-center justify-between rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+        <span>{{ $doc->label }}</span>
+        <i class="fas fa-download text-gray-400"></i>
+      </a>
+      @empty
+      <div class="rounded-xl bg-gray-50 border border-gray-200 px-3 py-3 text-sm text-gray-500">{{ __('personnel.ui.agent_space.no_job_desc') }}</div>
+      @endforelse
+    </div>
+  </section>
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-5">
+  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <h4 class="text-base font-bold text-gray-800 mb-3">{{ __('personnel.ui.agent_space.recent_requests_title') }}</h4>
+    <div class="space-y-2">
+      @forelse($agentSpaceLeaveRequests as $leaveRequest)
+      <div class="rounded-xl border border-gray-200 px-3 py-2">
+        <div class="text-sm font-semibold text-gray-800">{{ $leaveRequest->leaveType?->name ?? 'Type supprimé' }}</div>
+        <div class="text-xs text-gray-500">{{ optional($leaveRequest->start_date)->format('d/m/Y') }} au {{ optional($leaveRequest->end_date)->format('d/m/Y') }} · {{ __('personnel.ui.statuses.' . $leaveRequest->status) }}</div>
+      </div>
+      @empty
+      <div class="rounded-xl bg-gray-50 border border-gray-200 px-3 py-3 text-sm text-gray-500">{{ __('personnel.ui.agent_space.no_leave_requests') }}</div>
+      @endforelse
+    </div>
+  </section>
+
+  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <h4 class="text-base font-bold text-gray-800 mb-3">{{ __('personnel.ui.agent_space.requested_training_title') }}</h4>
+    <div class="space-y-2">
+      @forelse($agentSpaceTrainingEnrollments as $enrollment)
+      <div class="rounded-xl border border-gray-200 px-3 py-2">
+        <div class="text-sm font-semibold text-gray-800">{{ $enrollment->training?->title ?? 'Formation supprimée' }}</div>
+        <div class="text-xs text-gray-500">{{ __('personnel.ui.agent_space.status_prefix') }} {{ __('personnel.ui.statuses.' . $enrollment->status) }} · {{ __('personnel.ui.agent_space.start_prefix') }} {{ optional($enrollment->planned_start_date)->format('d/m/Y') ?: '-' }}</div>
+      </div>
+      @empty
+      <div class="rounded-xl bg-gray-50 border border-gray-200 px-3 py-3 text-sm text-gray-500">{{ __('personnel.ui.agent_space.no_training_requests') }}</div>
+      @endforelse
+    </div>
+  </section>
+
+  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <h4 class="text-base font-bold text-gray-800 mb-3">{{ __('personnel.ui.agent_space.mobility_history_title') }}</h4>
+    <div class="space-y-2">
+      @forelse($agentSpaceCareerHistory as $event)
+      <div class="rounded-xl border border-gray-200 px-3 py-2">
+        <div class="text-sm font-semibold text-gray-800">{{ $event->title }}</div>
+        <div class="text-xs text-gray-500">{{ optional($event->effective_date)->format('d/m/Y') ?: '-' }} · {{ $event->event_type === 'mobility' ? __('personnel.ui.agent_space.event_mutation') : __('personnel.ui.agent_space.event_assignment') }} · {{ __('personnel.ui.statuses.' . $event->status) }}</div>
+      </div>
+      @empty
+      <div class="rounded-xl bg-gray-50 border border-gray-200 px-3 py-3 text-sm text-gray-500">{{ __('personnel.ui.agent_space.no_mobility') }}</div>
+      @endforelse
+    </div>
+  </section>
+</div>
+@endif
+@elseif($personnelTab === 'leave')
+<div class="grid grid-cols-1 xl:grid-cols-5 gap-5 mb-5">
+  <section class="xl:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <div class="flex items-center justify-between gap-3 mb-4">
+      <div>
+        <h3 class="text-lg font-bold text-gray-800">{{ __('personnel.ui.leave.catalog_title') }}</h3>
+        <p class="text-sm text-gray-500">{{ __('personnel.ui.leave.catalog_description') }}</p>
+      </div>
+      <span class="text-xs rounded-full bg-sky-50 text-sky-700 border border-sky-100 px-3 py-1">{{ $personnelLeaveTypes->count() }} type(s)</span>
+    </div>
+
+    <form method="POST" action="{{ route('admin.personnel.leave-types.store') }}" class="space-y-4">
+      @csrf
+      <input type="hidden" name="personnel_tab" value="leave">
+
+      @if($adminScope)
+      <input type="hidden" name="administration_type" value="{{ $adminScope['type'] }}">
+      <input type="hidden" name="administration_id" value="{{ $adminScope['id'] }}">
+      <div class="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800 font-medium">{{ __('personnel.ui.leave.admin_locked') }}</div>
+      @else
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.admin_type_label') }}</label>
+          <select name="administration_type" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+            <option value="emitter" {{ old('administration_type', 'emitter') === 'emitter' ? 'selected' : '' }}>{{ __('personnel.ui.leave.admin_emitter') }}</option>
+            <option value="recipient" {{ old('administration_type') === 'recipient' ? 'selected' : '' }}>{{ __('personnel.ui.leave.admin_recipient') }}</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.admin_type_label') }}</label>
+          <select name="administration_id" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+            <option value="">{{ __('personnel.ui.leave.admin_select') }}</option>
+            @foreach($emitters as $e)
+            <option value="{{ $e->id }}" {{ old('administration_id') === $e->id ? 'selected' : '' }}>{{ $e->name }} {{ __('personnel.ui.leave.admin_emitter_bracket') }}</option>
+            @endforeach
+            @foreach($recipients as $r)
+            <option value="{{ $r->id }}" {{ old('administration_id') === $r->id ? 'selected' : '' }}>{{ $r->name }} {{ __('personnel.ui.leave.admin_recipient_bracket') }}</option>
+            @endforeach
+          </select>
+        </div>
+      </div>
+      @endif
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.form_name') }}</label>
+          <input type="text" name="name" value="{{ old('name') }}" required class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.form_code') }}</label>
+          <input type="text" name="code" value="{{ old('code') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.form_unit') }}</label>
+          <select name="unit" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+            <option value="day" {{ old('unit', 'day') === 'day' ? 'selected' : '' }}>{{ __('personnel.ui.leave.form_unit_day') }}</option>
+            <option value="hour" {{ old('unit') === 'hour' ? 'selected' : '' }}>{{ __('personnel.ui.leave.form_unit_hour') }}</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.form_default_days') }}</label>
+          <input type="number" step="0.5" min="0" name="default_days" value="{{ old('default_days') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.form_carry_over') }}</label>
+          <input type="number" step="0.5" min="0" name="carry_over_days" value="{{ old('carry_over_days', 0) }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div class="flex items-center gap-4 pt-7">
+          <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="requires_attachment" value="1" {{ old('requires_attachment') ? 'checked' : '' }}> {{ __('personnel.ui.leave.form_requires_attachment') }}</label>
+          <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="is_paid" value="1" {{ old('is_paid', '1') ? 'checked' : '' }}> {{ __('personnel.ui.leave.form_is_paid') }}</label>
+          <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="is_active" value="1" {{ old('is_active', '1') ? 'checked' : '' }}> {{ __('personnel.ui.leave.form_is_active') }}</label>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.form_description') }}</label>
+        <textarea name="description" rows="3" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">{{ old('description') }}</textarea>
+      </div>
+
+      <button type="submit" class="px-6 py-2.5 bg-[#2453d6] text-white rounded-xl text-sm font-semibold">{{ __('personnel.ui.leave.btn_save_type') }}</button>
+    </form>
+  </section>
+
+  <section class="xl:col-span-3 space-y-5">
+    <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+      <div class="flex items-center justify-between gap-3 mb-4">
+        <div>
+          <h3 class="text-lg font-bold text-gray-800">{{ __('personnel.ui.leave.new_request_title') }}</h3>
+          <p class="text-sm text-gray-500">{{ __('personnel.ui.leave.new_request_description') }}</p>
+        </div>
+        <div class="flex gap-2 text-xs">
+          <span class="rounded-full bg-amber-50 text-amber-700 border border-amber-100 px-3 py-1">{{ number_format($personnelStats['pendingLeaveRequests'] ?? 0) }} en attente</span>
+          <span class="rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 px-3 py-1">{{ number_format($personnelStats['leaveRequests'] ?? 0) }} demande(s)</span>
+        </div>
+      </div>
+
+      @if($personnelEmployeeDirectory->isEmpty() || $personnelLeaveTypes->isEmpty())
+      <div class="rounded-xl bg-amber-50 border border-amber-100 px-4 py-5 text-sm text-amber-800">{{ __('personnel.ui.leave.need_employee_and_type') }}</div>
+      @else
+      <form method="POST" enctype="multipart/form-data" action="{{ route('admin.personnel.leave-requests.store') }}" class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        @csrf
+        <input type="hidden" name="personnel_tab" value="leave">
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.form_employee') }}</label>
+          <select name="employee_id" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+            <option value="">{{ __('personnel.ui.leave.admin_select') }}</option>
+            @foreach($personnelEmployeeDirectory as $employee)
+            <option value="{{ $employee->id }}" {{ old('employee_id', $editingPersonnel->id ?? '') === $employee->id ? 'selected' : '' }}>{{ $employee->full_name }}{{ $employee->employee_number ? ' - ' . $employee->employee_number : '' }}</option>
+            @endforeach
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.form_leave_type') }}</label>
+          <select name="leave_type_id" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+            <option value="">{{ __('personnel.ui.leave.admin_select') }}</option>
+            @foreach($personnelLeaveTypes as $leaveType)
+            <option value="{{ $leaveType->id }}" {{ old('leave_type_id') === $leaveType->id ? 'selected' : '' }}>{{ $leaveType->name }}{{ $leaveType->default_days !== null ? ' - quota ' . $leaveType->default_days : '' }}</option>
+            @endforeach
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.form_start') }}</label>
+          <input type="date" name="start_date" value="{{ old('start_date') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.form_end') }}</label>
+          <input type="date" name="end_date" value="{{ old('end_date') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.form_return') }}</label>
+          <input type="date" name="return_date" value="{{ old('return_date') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.form_requested_days') }}</label>
+          <input type="number" min="0" step="0.5" name="requested_days" value="{{ old('requested_days') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div class="md:col-span-2">
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.form_reason') }}</label>
+          <textarea name="reason" rows="3" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">{{ old('reason') }}</textarea>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.leave.form_attachment') }}</label>
+          <input type="file" name="attachment" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div class="flex items-center gap-3 pt-7">
+          <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="unexpected_absence" value="1" {{ old('unexpected_absence') ? 'checked' : '' }}> {{ __('personnel.ui.leave.form_unexpected') }}</label>
+          <button type="submit" class="px-6 py-2.5 bg-teal-600 text-white rounded-xl text-sm font-semibold">{{ __('personnel.ui.leave.btn_save_request') }}</button>
+        </div>
+      </form>
+      @endif
+    </div>
+
+    <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+      <h3 class="text-lg font-bold text-gray-800 mb-4">{{ __('personnel.ui.leave.table_title') }}</h3>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="text-left text-gray-500 border-b border-gray-100">
+              <th class="py-3 pr-4">{{ __('personnel.ui.leave.table_col_employee') }}</th>
+              <th class="py-3 pr-4">{{ __('personnel.ui.leave.table_col_type') }}</th>
+              <th class="py-3 pr-4">{{ __('personnel.ui.leave.table_col_period') }}</th>
+              <th class="py-3 pr-4">{{ __('personnel.ui.leave.table_col_duration') }}</th>
+              <th class="py-3 pr-4">{{ __('personnel.ui.leave.table_col_status') }}</th>
+              <th class="py-3">{{ __('personnel.ui.leave.table_col_action') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            @forelse($personnelLeaveRequests as $leaveRequest)
+            <tr class="border-b border-gray-100 align-top">
+              <td class="py-3 pr-4">
+                <div class="font-semibold text-gray-800">{{ $leaveRequest->employee?->full_name ?? 'Employé supprimé' }}</div>
+                <div class="text-xs text-gray-500">{{ $leaveRequest->employee?->employee_number ?: __('personnel.ui.leave.table_no_employee_number') }}</div>
+              </td>
+              <td class="py-3 pr-4 text-gray-600">{{ $leaveRequest->leaveType?->name ?? 'Type supprimé' }}</td>
+              <td class="py-3 pr-4 text-gray-600">{{ optional($leaveRequest->start_date)->format('d/m/Y') }} → {{ optional($leaveRequest->end_date)->format('d/m/Y') }}</td>
+              <td class="py-3 pr-4 text-gray-600">{{ $leaveRequest->requested_days }}</td>
+              <td class="py-3 pr-4">
+                <span class="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold {{ $leaveRequest->status === 'approved' ? 'bg-emerald-50 text-emerald-700' : ($leaveRequest->status === 'rejected' ? 'bg-rose-50 text-rose-700' : ($leaveRequest->status === 'cancelled' ? 'bg-gray-100 text-gray-700' : 'bg-amber-50 text-amber-700')) }}">{{ __('personnel.ui.statuses.' . $leaveRequest->status) }}</span>
+              </td>
+              <td class="py-3">
+                <div class="flex flex-wrap gap-2">
+                  @foreach(['approved' => __('personnel.ui.leave.btn_approve'), 'rejected' => __('personnel.ui.leave.btn_reject'), 'pending' => __('personnel.ui.leave.btn_set_pending')] as $status => $label)
+                  <form method="POST" action="{{ route('admin.personnel.leave-requests.status', $leaveRequest) }}">
+                    @csrf
+                    @method('PATCH')
+                    <input type="hidden" name="personnel_tab" value="leave">
+                    <input type="hidden" name="status" value="{{ $status }}">
+                    <button type="submit" class="px-3 py-1.5 rounded-lg border border-gray-300 text-xs font-semibold text-gray-700 hover:bg-gray-50">{{ $label }}</button>
+                  </form>
+                  @endforeach
+                </div>
+              </td>
+            </tr>
+            @empty
+            <tr>
+              <td colspan="6" class="py-8 text-center text-sm text-gray-400">{{ __('personnel.ui.leave.table_empty') }}</td>
+            </tr>
+            @endforelse
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+@elseif($personnelTab === 'training')
+<div class="grid grid-cols-1 xl:grid-cols-6 gap-5 mb-5">
+  <section class="xl:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <div class="flex items-center justify-between gap-3 mb-4">
+      <div>
+        <h3 class="text-lg font-bold text-gray-800">{{ __('personnel.ui.training.catalog_title') }}</h3>
+        <p class="text-sm text-gray-500">{{ __('personnel.ui.training.catalog_description') }}</p>
+      </div>
+      <span class="text-xs rounded-full bg-violet-50 text-violet-700 border border-violet-100 px-3 py-1">{{ number_format($personnelStats['trainings'] ?? 0) }} formation(s)</span>
+    </div>
+
+    <form method="POST" action="{{ route('admin.personnel.trainings.store') }}" class="space-y-4">
+      @csrf
+      <input type="hidden" name="personnel_tab" value="training">
+
+      @if($adminScope)
+      <input type="hidden" name="administration_type" value="{{ $adminScope['type'] }}">
+      <input type="hidden" name="administration_id" value="{{ $adminScope['id'] }}">
+      <div class="rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm text-blue-800 font-medium">{{ __('personnel.ui.training.admin_locked') }}</div>
+      @else
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.admin_type_label') }}</label>
+          <select name="administration_type" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+            <option value="emitter" {{ old('administration_type', 'emitter') === 'emitter' ? 'selected' : '' }}>{{ __('personnel.ui.training.admin_emitter') }}</option>
+            <option value="recipient" {{ old('administration_type') === 'recipient' ? 'selected' : '' }}>{{ __('personnel.ui.training.admin_recipient') }}</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.admin_type_label') }}</label>
+          <select name="administration_id" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+            <option value="">{{ __('personnel.ui.training.admin_select') }}</option>
+            @foreach($emitters as $e)
+            <option value="{{ $e->id }}" {{ old('administration_id') === $e->id ? 'selected' : '' }}>{{ $e->name }} {{ __('personnel.ui.training.admin_emitter_bracket') }}</option>
+            @endforeach
+            @foreach($recipients as $r)
+            <option value="{{ $r->id }}" {{ old('administration_id') === $r->id ? 'selected' : '' }}>{{ $r->name }} {{ __('personnel.ui.training.admin_recipient_bracket') }}</option>
+            @endforeach
+          </select>
+        </div>
+      </div>
+      @endif
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.form_title') }}</label>
+          <input type="text" name="title" value="{{ old('title') }}" required class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.form_code') }}</label>
+          <input type="text" name="code" value="{{ old('code') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.form_category') }}</label>
+          <input type="text" name="category" value="{{ old('category') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.form_mode') }}</label>
+          <select name="delivery_mode" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+            @foreach(['internal' => __('personnel.ui.training.form_mode_internal'), 'external' => __('personnel.ui.training.form_mode_external'), 'elearning' => __('personnel.ui.training.form_mode_elearning'), 'hybrid' => __('personnel.ui.training.form_mode_hybrid')] as $value => $label)
+            <option value="{{ $value }}" {{ old('delivery_mode', 'internal') === $value ? 'selected' : '' }}>{{ $label }}</option>
+            @endforeach
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.form_provider') }}</label>
+          <input type="text" name="provider_name" value="{{ old('provider_name') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.form_duration') }}</label>
+          <input type="number" min="0" step="0.5" name="duration_hours" value="{{ old('duration_hours') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.form_budget') }}</label>
+          <input type="number" min="0" step="0.01" name="budget_amount" value="{{ old('budget_amount') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.form_validity') }}</label>
+          <input type="number" min="0" name="validity_months" value="{{ old('validity_months') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.form_skills') }}</label>
+        <input type="text" name="skills" value="{{ old('skills') }}" placeholder="{{ __('personnel.ui.training.form_skills_placeholder') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.form_objectives') }}</label>
+        <textarea name="objectives" rows="2" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">{{ old('objectives') }}</textarea>
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.form_description') }}</label>
+        <textarea name="description" rows="3" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">{{ old('description') }}</textarea>
+      </div>
+      <div class="flex items-center gap-4">
+        <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="is_mandatory" value="1" {{ old('is_mandatory') ? 'checked' : '' }}> {{ __('personnel.ui.training.form_is_mandatory') }}</label>
+        <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="is_active" value="1" {{ old('is_active', '1') ? 'checked' : '' }}> {{ __('personnel.ui.training.form_is_active') }}</label>
+      </div>
+      <button type="submit" class="px-6 py-2.5 bg-[#2453d6] text-white rounded-xl text-sm font-semibold">{{ __('personnel.ui.training.btn_save_training') }}</button>
+    </form>
+  </section>
+
+  <section class="xl:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <div class="flex items-center justify-between gap-3 mb-4">
+      <div>
+        <h3 class="text-lg font-bold text-gray-800">{{ __('personnel.ui.training.assign_title') }}</h3>
+        <p class="text-sm text-gray-500">{{ __('personnel.ui.training.assign_description') }}</p>
+      </div>
+      <span class="text-xs rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 px-3 py-1">{{ number_format($personnelStats['enrollments'] ?? 0) }} affectation(s)</span>
+    </div>
+
+    @if($personnelEmployeeDirectory->isEmpty() || $personnelTrainings->isEmpty())
+    <div class="rounded-xl bg-amber-50 border border-amber-100 px-4 py-5 text-sm text-amber-800">{{ __('personnel.ui.training.need_employee_training') }}</div>
+    @else
+    <form method="POST" enctype="multipart/form-data" action="{{ route('admin.personnel.training-enrollments.store') }}" class="space-y-4">
+      @csrf
+      <input type="hidden" name="personnel_tab" value="training">
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.assign_form_employee') }}</label>
+        <select name="employee_id" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+          <option value="">{{ __('personnel.ui.training.select') }}</option>
+          @foreach($personnelEmployeeDirectory as $employee)
+          <option value="{{ $employee->id }}" {{ old('employee_id', $editingPersonnel->id ?? '') === $employee->id ? 'selected' : '' }}>{{ $employee->full_name }}</option>
+          @endforeach
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.assign_form_training') }}</label>
+        <select name="training_id" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+          <option value="">{{ __('personnel.ui.training.select') }}</option>
+          @foreach($personnelTrainings as $training)
+          <option value="{{ $training->id }}" {{ old('training_id') === $training->id ? 'selected' : '' }}>{{ $training->title }}</option>
+          @endforeach
+        </select>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.assign_form_status') }}</label>
+          <select name="status" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+            @foreach(['planned' => __('personnel.ui.training.assign_form_status_planned'), 'in_progress' => __('personnel.ui.training.assign_form_status_in_progress'), 'completed' => __('personnel.ui.training.assign_form_status_completed'), 'cancelled' => __('personnel.ui.training.assign_form_status_cancelled')] as $value => $label)
+            <option value="{{ $value }}" {{ old('status', 'planned') === $value ? 'selected' : '' }}>{{ $label }}</option>
+            @endforeach
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.assign_form_certificate') }}</label>
+          <input type="file" name="certificate" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.assign_form_planned_start') }}</label>
+          <input type="date" name="planned_start_date" value="{{ old('planned_start_date') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.assign_form_planned_end') }}</label>
+          <input type="date" name="planned_end_date" value="{{ old('planned_end_date') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.assign_form_attendance') }}</label>
+          <input type="number" min="0" max="100" step="0.01" name="attendance_rate" value="{{ old('attendance_rate') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.assign_form_score') }}</label>
+          <input type="number" min="0" max="100" step="0.01" name="score" value="{{ old('score') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.assign_form_notes') }}</label>
+        <textarea name="notes" rows="3" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">{{ old('notes') }}</textarea>
+      </div>
+      <button type="submit" class="px-6 py-2.5 bg-teal-600 text-white rounded-xl text-sm font-semibold">{{ __('personnel.ui.training.btn_assign') }}</button>
+    </form>
+    @endif
+  </section>
+
+  <section class="xl:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <div class="flex items-center justify-between gap-3 mb-4">
+      <div>
+        <h3 class="text-lg font-bold text-gray-800">{{ __('personnel.ui.training.skills_matrix_title') }}</h3>
+        <p class="text-sm text-gray-500">{{ __('personnel.ui.training.skills_matrix_description') }}</p>
+      </div>
+      <span class="text-xs rounded-full bg-amber-50 text-amber-700 border border-amber-100 px-3 py-1">{{ number_format($personnelStats['skills'] ?? 0) }} compétence(s)</span>
+    </div>
+
+    @if($personnelEmployeeDirectory->isEmpty())
+    <div class="rounded-xl bg-amber-50 border border-amber-100 px-4 py-5 text-sm text-amber-800">{{ __('personnel.ui.training.need_employee_skills') }}</div>
+    @else
+    <form method="POST" action="{{ route('admin.personnel.employees.skills.store') }}" class="space-y-4">
+      @csrf
+      <input type="hidden" name="personnel_tab" value="training">
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.assign_form_employee') }}</label>
+        <select name="employee_id" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+          <option value="">{{ __('personnel.ui.training.select') }}</option>
+          @foreach($personnelEmployeeDirectory as $employee)
+          <option value="{{ $employee->id }}" {{ old('employee_id', $editingPersonnel->id ?? '') === $employee->id ? 'selected' : '' }}>{{ $employee->full_name }}</option>
+          @endforeach
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.skills_form_skill') }}</label>
+        <input type="text" name="skill_name" value="{{ old('skill_name') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.skills_form_category') }}</label>
+        <input type="text" name="category" value="{{ old('category') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.skills_form_current_level') }}</label>
+          <input type="number" min="1" max="5" name="current_level" value="{{ old('current_level', 3) }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.skills_form_target_level') }}</label>
+          <input type="number" min="1" max="5" name="target_level" value="{{ old('target_level') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.skills_form_assessment_date') }}</label>
+          <input type="date" name="assessment_date" value="{{ old('assessment_date') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.skills_form_source') }}</label>
+          <input type="text" name="source" value="{{ old('source') }}" placeholder="{{ __('personnel.ui.training.skills_form_source_placeholder') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.skills_form_notes') }}</label>
+        <textarea name="notes" rows="3" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">{{ old('notes') }}</textarea>
+      </div>
+      <button type="submit" class="px-6 py-2.5 bg-amber-500 text-white rounded-xl text-sm font-semibold">{{ __('personnel.ui.training.btn_add_skill') }}</button>
+    </form>
+    @endif
+  </section>
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <h3 class="text-lg font-bold text-gray-800 mb-4">{{ __('personnel.ui.training.catalog_existing_title') }}</h3>
+    <div class="space-y-3">
+      @forelse($personnelTrainings as $training)
+      <div class="rounded-xl border border-gray-200 p-4">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <div class="font-semibold text-gray-800">{{ $training->title }}</div>
+            <div class="text-sm text-gray-500">{{ $training->category ?: __('personnel.ui.training.no_category') }} · {{ __('personnel.ui.statuses.' . $training->delivery_mode) }} · {{ $training->provider_name ?: __('personnel.ui.training.internal_provider') }}</div>
+          </div>
+          <span class="text-xs rounded-full bg-gray-100 text-gray-700 px-3 py-1">{{ $training->enrollments_count }} {{ __('personnel.ui.training.enrolled_count') }}</span>
+        </div>
+        <div class="text-xs text-gray-400 mt-2">{{ $training->skills ? implode(', ', $training->skills) : __('personnel.ui.training.no_skills_target') }}</div>
+      </div>
+      @empty
+      <div class="rounded-xl bg-gray-50 border border-gray-200 px-4 py-5 text-sm text-gray-500">{{ __('personnel.ui.training.no_trainings_created') }}</div>
+      @endforelse
+    </div>
+  </section>
+
+  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <h3 class="text-lg font-bold text-gray-800 mb-4">{{ __('personnel.ui.training.tracking_title') }}</h3>
+    <div class="space-y-3 mb-5">
+      @forelse($personnelTrainingEnrollments as $enrollment)
+      <div class="rounded-xl border border-gray-200 p-4 bg-gray-50">
+        <div class="font-semibold text-gray-800">{{ $enrollment->employee?->full_name ?? __('personnel.ui.training.deleted_employee') }} · {{ $enrollment->training?->title ?? __('personnel.ui.training.deleted_training') }}</div>
+        <div class="text-sm text-gray-500 mt-1">{{ __('personnel.ui.training.status_prefix') }} {{ __('personnel.ui.statuses.' . $enrollment->status) }}{{ $enrollment->planned_start_date ? ' · ' . __('personnel.ui.training.start_prefix') . ' ' . $enrollment->planned_start_date->format('d/m/Y') : '' }}</div>
+      </div>
+      @empty
+      <div class="rounded-xl bg-gray-50 border border-gray-200 px-4 py-5 text-sm text-gray-500">{{ __('personnel.ui.training.no_enrollments') }}</div>
+      @endforelse
+    </div>
+
+    <div class="border-t border-gray-200 pt-5">
+      <h4 class="font-semibold text-gray-800 mb-3">{{ __('personnel.ui.training.skills_recent_title') }}</h4>
+      <div class="space-y-3">
+        @forelse($personnelEmployeeSkills as $skill)
+        <div class="rounded-xl border border-gray-200 p-4">
+          <div class="font-semibold text-gray-800">{{ $skill->skill_name }}</div>
+          <div class="text-sm text-gray-500 mt-1">{{ $skill->employee?->full_name ?? __('personnel.ui.training.deleted_employee') }} · {{ __('personnel.ui.training.level_prefix') }} {{ $skill->current_level }}{{ $skill->target_level ? ' ' . __('personnel.ui.training.target_prefix') . ' ' . $skill->target_level : '' }}</div>
+        </div>
+        @empty
+        <div class="rounded-xl bg-gray-50 border border-gray-200 px-4 py-5 text-sm text-gray-500">{{ __('personnel.ui.training.no_skills_evaluated') }}</div>
+        @endforelse
+      </div>
+    </div>
+  </section>
+</div>
+@elseif($personnelTab === 'career')
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-5">
+  <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <div class="text-xs uppercase tracking-wide text-indigo-700">{{ __('personnel.ui.career.cards.goals_title') }}</div>
+    <div class="text-2xl font-black text-gray-800 mt-1">{{ number_format($personnelStats['goals'] ?? 0) }}</div>
+    <p class="text-sm text-gray-500 mt-2">{{ __('personnel.ui.career.cards.goals_description') }}</p>
+  </div>
+  <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <div class="text-xs uppercase tracking-wide text-emerald-700">{{ __('personnel.ui.career.cards.reviews_title') }}</div>
+    <div class="text-2xl font-black text-gray-800 mt-1">{{ number_format($personnelStats['reviews'] ?? 0) }}</div>
+    <p class="text-sm text-gray-500 mt-2">{{ __('personnel.ui.career.cards.reviews_description') }}</p>
+  </div>
+  <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <div class="text-xs uppercase tracking-wide text-amber-700">{{ __('personnel.ui.career.cards.path_title') }}</div>
+    <div class="text-2xl font-black text-gray-800 mt-1">{{ number_format($personnelStats['careerEvents'] ?? 0) }}</div>
+    <p class="text-sm text-gray-500 mt-2">{{ __('personnel.ui.career.cards.path_description') }}</p>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-6 gap-5 mb-5">
+  <section class="xl:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <h3 class="text-lg font-bold text-gray-800 mb-4">{{ __('personnel.ui.career.goals_section_title') }}</h3>
+    @if($personnelEmployeeDirectory->isEmpty())
+    <div class="rounded-xl bg-amber-50 border border-amber-100 px-4 py-5 text-sm text-amber-800">{{ __('personnel.ui.career.need_employee_goals') }}</div>
+    @else
+    <form method="POST" action="{{ route('admin.personnel.goals.store') }}" class="space-y-4">
+      @csrf
+      <input type="hidden" name="personnel_tab" value="career">
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.career.form_employee') }}</label>
+        <select name="employee_id" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+          <option value="">{{ __('personnel.ui.career.select') }}</option>
+          @foreach($personnelEmployeeDirectory as $employee)
+          <option value="{{ $employee->id }}">{{ $employee->full_name }}</option>
+          @endforeach
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.career.form_title') }}</label>
+        <input type="text" name="title" value="{{ old('title') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.career.form_goal_type') }}</label>
+          <select name="goal_type" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+            @foreach(['individual' => __('personnel.ui.career.form_goal_type_individual'), 'team' => __('personnel.ui.career.form_goal_type_team'), 'strategic' => __('personnel.ui.career.form_goal_type_strategic')] as $value => $label)
+            <option value="{{ $value }}">{{ $label }}</option>
+            @endforeach
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.training.assign_form_status') }}</label>
+          <select name="status" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+            @foreach(['draft' => __('personnel.ui.career.form_goal_status_draft'), 'active' => __('personnel.ui.career.form_goal_status_active'), 'completed' => __('personnel.ui.career.form_goal_status_completed'), 'on_hold' => __('personnel.ui.career.form_goal_status_on_hold'), 'cancelled' => __('personnel.ui.career.form_goal_status_cancelled')] as $value => $label)
+            <option value="{{ $value }}">{{ $label }}</option>
+            @endforeach
+          </select>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <input type="number" min="0" max="100" step="0.01" name="weight" value="{{ old('weight') }}" placeholder="{{ __('personnel.ui.career.form_goal_weight_placeholder') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        <input type="number" step="0.01" name="target_value" value="{{ old('target_value') }}" placeholder="{{ __('personnel.ui.career.form_goal_target_placeholder') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        <input type="number" min="0" max="100" step="0.01" name="progress_percent" value="{{ old('progress_percent', 0) }}" placeholder="{{ __('personnel.ui.career.form_goal_progress_placeholder') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <input type="date" name="start_date" value="{{ old('start_date') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        <input type="date" name="due_date" value="{{ old('due_date') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+      </div>
+      <textarea name="description" rows="3" placeholder="{{ __('personnel.ui.career.form_description_placeholder') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">{{ old('description') }}</textarea>
+      <textarea name="notes" rows="2" placeholder="{{ __('personnel.ui.career.form_notes_placeholder') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">{{ old('notes') }}</textarea>
+      <button type="submit" class="px-6 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-semibold">{{ __('personnel.ui.career.btn_create_goal') }}</button>
+    </form>
+    @endif
+  </section>
+
+  <section class="xl:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <h3 class="text-lg font-bold text-gray-800 mb-4">{{ __('personnel.ui.career.reviews_section_title') }}</h3>
+    @if($personnelEmployeeDirectory->isEmpty())
+    <div class="rounded-xl bg-amber-50 border border-amber-100 px-4 py-5 text-sm text-amber-800">{{ __('personnel.ui.career.need_employee_review') }}</div>
+    @else
+    <form method="POST" action="{{ route('admin.personnel.performance-reviews.store') }}" class="space-y-4">
+      @csrf
+      <input type="hidden" name="personnel_tab" value="career">
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.career.form_employee') }}</label>
+        <select name="employee_id" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+          <option value="">{{ __('personnel.ui.career.select') }}</option>
+          @foreach($personnelEmployeeDirectory as $employee)
+          <option value="{{ $employee->id }}">{{ $employee->full_name }}</option>
+          @endforeach
+        </select>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <input type="text" name="title" value="{{ old('title') }}" placeholder="{{ __('personnel.ui.career.review_title_placeholder') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        <input type="text" name="period_label" value="{{ old('period_label') }}" placeholder="{{ __('personnel.ui.career.review_period_placeholder') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <select name="review_type" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+          @foreach(['annual' => __('personnel.ui.career.review_type_annual'), 'midyear' => __('personnel.ui.career.review_type_midyear'), 'probation' => __('personnel.ui.career.review_type_probation'), '360' => __('personnel.ui.career.review_type_360'), 'continuous' => __('personnel.ui.career.review_type_continuous')] as $value => $label)
+          <option value="{{ $value }}">{{ $label }}</option>
+          @endforeach
+        </select>
+        <select name="status" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+          @foreach(['scheduled' => __('personnel.ui.career.review_status_scheduled'), 'in_progress' => __('personnel.ui.career.review_status_in_progress'), 'completed' => __('personnel.ui.career.review_status_completed'), 'cancelled' => __('personnel.ui.career.review_status_cancelled')] as $value => $label)
+          <option value="{{ $value }}">{{ $label }}</option>
+          @endforeach
+        </select>
+        <input type="number" min="0" max="100" step="0.01" name="overall_score" value="{{ old('overall_score') }}" placeholder="{{ __('personnel.ui.career.overall_score_placeholder') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+      </div>
+      <input type="date" name="scheduled_at" value="{{ old('scheduled_at') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+      <textarea name="strengths" rows="2" placeholder="{{ __('personnel.ui.career.strengths_placeholder') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">{{ old('strengths') }}</textarea>
+      <textarea name="improvements" rows="2" placeholder="{{ __('personnel.ui.career.improvements_placeholder') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">{{ old('improvements') }}</textarea>
+      <textarea name="recommendations" rows="2" placeholder="{{ __('personnel.ui.career.recommendations_placeholder') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">{{ old('recommendations') }}</textarea>
+      <button type="submit" class="px-6 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-semibold">{{ __('personnel.ui.career.btn_save_review') }}</button>
+    </form>
+    @endif
+  </section>
+
+  <section class="xl:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <h3 class="text-lg font-bold text-gray-800 mb-4">{{ __('personnel.ui.career.events_section_title') }}</h3>
+    @if($personnelEmployeeDirectory->isEmpty())
+    <div class="rounded-xl bg-amber-50 border border-amber-100 px-4 py-5 text-sm text-amber-800">{{ __('personnel.ui.career.need_employee_events') }}</div>
+    @else
+    <form method="POST" action="{{ route('admin.personnel.career-events.store') }}" class="space-y-4">
+      @csrf
+      <input type="hidden" name="personnel_tab" value="career">
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.career.form_employee') }}</label>
+        <select name="employee_id" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+          <option value="">{{ __('personnel.ui.career.select') }}</option>
+          @foreach($personnelEmployeeDirectory as $employee)
+          <option value="{{ $employee->id }}">{{ $employee->full_name }}</option>
+          @endforeach
+        </select>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <input type="text" name="title" value="{{ old('title') }}" placeholder="{{ __('personnel.ui.career.event_title_placeholder') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        <select name="event_type" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+          @foreach(['promotion' => __('personnel.ui.career.event_type_promotion'), 'mobility' => __('personnel.ui.career.event_type_mobility'), 'succession' => __('personnel.ui.career.event_type_succession'), 'job_change' => __('personnel.ui.career.event_type_job_change'), 'interview' => __('personnel.ui.career.event_type_interview')] as $value => $label)
+          <option value="{{ $value }}">{{ $label }}</option>
+          @endforeach
+        </select>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <input type="date" name="effective_date" value="{{ old('effective_date') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        <input type="text" name="previous_job_title" value="{{ old('previous_job_title') }}" placeholder="{{ __('personnel.ui.career.prev_job_placeholder') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        <input type="text" name="new_job_title" value="{{ old('new_job_title') }}" placeholder="{{ __('personnel.ui.career.new_job_placeholder') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+      </div>
+      <select name="status" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+        @foreach(['planned' => __('personnel.ui.career.event_status_planned'), 'validated' => __('personnel.ui.career.event_status_validated'), 'completed' => __('personnel.ui.career.event_status_completed'), 'cancelled' => __('personnel.ui.career.event_status_cancelled')] as $value => $label)
+        <option value="{{ $value }}">{{ $label }}</option>
+        @endforeach
+      </select>
+      <textarea name="summary" rows="2" placeholder="{{ __('personnel.ui.career.summary_placeholder') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">{{ old('summary') }}</textarea>
+      <textarea name="notes" rows="2" placeholder="{{ __('personnel.ui.career.form_notes_placeholder') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">{{ old('notes') }}</textarea>
+      <button type="submit" class="px-6 py-2.5 bg-amber-500 text-white rounded-xl text-sm font-semibold">{{ __('personnel.ui.career.btn_trace_event') }}</button>
+    </form>
+    @endif
+  </section>
+</div>
+
+<div class="grid grid-cols-1 xl:grid-cols-3 gap-5">
+  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <h3 class="text-lg font-bold text-gray-800 mb-4">{{ __('personnel.ui.career.goals_recent_title') }}</h3>
+    <div class="space-y-3">
+      @forelse($personnelGoals as $goal)
+      <div class="rounded-xl border border-gray-200 p-4">
+        <div class="font-semibold text-gray-800">{{ $goal->title }}</div>
+        <div class="text-sm text-gray-500 mt-1">{{ $goal->employee?->full_name ?? __('personnel.ui.career.deleted_employee') }} · {{ __('personnel.ui.statuses.' . $goal->goal_type) }} · {{ $goal->progress_percent }}%</div>
+      </div>
+      @empty
+      <div class="rounded-xl bg-gray-50 border border-gray-200 px-4 py-5 text-sm text-gray-500">{{ __('personnel.ui.career.no_goals') }}</div>
+      @endforelse
+    </div>
+  </section>
+
+  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <h3 class="text-lg font-bold text-gray-800 mb-4">{{ __('personnel.ui.career.reviews_recent_title') }}</h3>
+    <div class="space-y-3">
+      @forelse($personnelPerformanceReviews as $review)
+      <div class="rounded-xl border border-gray-200 p-4">
+        <div class="font-semibold text-gray-800">{{ $review->title }}</div>
+        <div class="text-sm text-gray-500 mt-1">{{ $review->employee?->full_name ?? __('personnel.ui.career.deleted_employee') }} · {{ __('personnel.ui.statuses.' . $review->review_type) }} · {{ __('personnel.ui.statuses.' . $review->status) }}</div>
+      </div>
+      @empty
+      <div class="rounded-xl bg-gray-50 border border-gray-200 px-4 py-5 text-sm text-gray-500">{{ __('personnel.ui.career.no_reviews') }}</div>
+      @endforelse
+    </div>
+  </section>
+
+  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <h3 class="text-lg font-bold text-gray-800 mb-4">{{ __('personnel.ui.career.path_recent_title') }}</h3>
+    <div class="space-y-3">
+      @forelse($personnelCareerEvents as $event)
+      <div class="rounded-xl border border-gray-200 p-4">
+        <div class="font-semibold text-gray-800">{{ $event->title }}</div>
+        <div class="text-sm text-gray-500 mt-1">{{ $event->employee?->full_name ?? __('personnel.ui.career.deleted_employee') }} · {{ __('personnel.ui.statuses.' . $event->event_type) }} · {{ __('personnel.ui.statuses.' . $event->status) }}</div>
+      </div>
+      @empty
+      <div class="rounded-xl bg-gray-50 border border-gray-200 px-4 py-5 text-sm text-gray-500">{{ __('personnel.ui.career.no_events') }}</div>
+      @endforelse
+    </div>
+  </section>
+</div>
+@endif
 
 {{-- ══════════════════════ TEMPLATES ══════════════════════ --}}
 @elseif($tab === 'templates')
@@ -2280,7 +3567,7 @@ $_oc = [
             @endforeach
           </select>
         </div>
-        <textarea name="description" rows="2" placeholder="Description"
+        <textarea name="description" rows="2" placeholder="{{ __('personnel.ui.career.form_description_placeholder') }}"
                   class="w-full border rounded-lg px-3 py-2 text-xs">{{ old('description', $emMeta['description'] ?? '') }}</textarea>
       </fieldset>
 
@@ -3432,7 +4719,7 @@ document.addEventListener('DOMContentLoaded', function() {
         class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm placeholder:text-gray-400 focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400 outline-none">
 
       <textarea name="description" rows="4"
-        placeholder="Description"
+        placeholder="{{ __('personnel.ui.career.form_description_placeholder') }}"
         class="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm resize-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-400 outline-none">{{ old('description', $editDt?->description) }}</textarea>
 
       <div class="grid grid-cols-2 gap-3 pt-1">

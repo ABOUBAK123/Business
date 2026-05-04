@@ -1,7 +1,20 @@
 @extends('layouts.auth')
 @section('title', __('auth.login'))
 @section('content')
-<h2 class="text-xl font-bold text-gray-800 mb-6">{{ __('auth.login') }}</h2>
+<div class="flex items-center justify-between mb-6">
+    <h2 class="text-xl font-bold text-gray-800">{{ __('auth.login') }}</h2>
+    <form method="POST" action="{{ route('lang.switch', app()->getLocale()) }}" id="lang-form-login">
+        @csrf
+        <select onchange="document.getElementById('lang-form-login').action='{{ url('/lang') }}/'+this.value; document.getElementById('lang-form-login').submit();"
+                class="text-sm border border-gray-300 rounded-lg px-2 py-1.5 text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white cursor-pointer">
+            <option value="fr" {{ app()->getLocale() === 'fr' ? 'selected' : '' }}>🇫🇷 FR</option>
+            <option value="en" {{ app()->getLocale() === 'en' ? 'selected' : '' }}>🇬🇧 EN</option>
+            <option value="es" {{ app()->getLocale() === 'es' ? 'selected' : '' }}>🇪🇸 ES</option>
+            <option value="pt" {{ app()->getLocale() === 'pt' ? 'selected' : '' }}>🇵🇹 PT</option>
+            <option value="ar" {{ app()->getLocale() === 'ar' ? 'selected' : '' }}>🇸🇦 AR</option>
+        </select>
+    </form>
+</div>
 
 @if($errors->any())
 <div class="mb-4 bg-red-50 border border-red-200 text-red-600 rounded-lg p-3 text-sm">
