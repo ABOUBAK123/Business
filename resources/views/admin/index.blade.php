@@ -815,7 +815,7 @@ $_oc = [
     ->values();
 
   // Annual leave type (code = ANNUAL)
-  $annualLeaveType = $empLeaveTypes->firstWhere('code', 'ANNUAL');
+  $annualLeaveType = $empLeaveTypes->first(fn($t) => strtoupper((string) ($t->code ?? '')) === 'ANNUAL');
 
   // Employee leave requests
   $myLeaveRequests = $agentSpaceLeaveRequests;
@@ -850,7 +850,7 @@ $_oc = [
   ];
 
   // Other leave types (not ANNUAL)
-  $otherLeaveTypes = $empLeaveTypes->reject(fn($t) => $t->code === 'ANNUAL')->values();
+  $otherLeaveTypes = $empLeaveTypes->reject(fn($t) => strtoupper((string) ($t->code ?? '')) === 'ANNUAL')->values();
 @endphp
 
 {{-- ── Header + Action Buttons ── --}}
@@ -1036,7 +1036,8 @@ $_oc = [
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-1.5">
-                  <i class="fas fa-calendar mr-1 text-blue-400"></i> Date de début <span class="text-red-500">*</span>
+                  <i class="fas fa-calendar mr-1 text-blue-400"></i> Date de début
+                  @if($i === 1)<span class="text-red-500">*</span>@else<span class="text-gray-400 font-normal">(optionnel)</span>@endif
                 </label>
                 <input type="date"
                   name="annual_segment_start_{{ $i }}"
@@ -1046,7 +1047,8 @@ $_oc = [
               </div>
               <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-1.5">
-                  <i class="fas fa-calendar mr-1 text-blue-400"></i> Date de fin <span class="text-red-500">*</span>
+                  <i class="fas fa-calendar mr-1 text-blue-400"></i> Date de fin
+                  @if($i === 1)<span class="text-red-500">*</span>@else<span class="text-gray-400 font-normal">(optionnel)</span>@endif
                 </label>
                 <input type="date"
                   name="annual_segment_end_{{ $i }}"
@@ -1062,7 +1064,21 @@ $_oc = [
           <input type="hidden" name="end_date" id="annual-end" value="{{ old('end_date') }}">
         </div>
 
-        <div id="annual-days-preview" class="hidden rounded-xl bg-blue-50 border border-blue-100 px-4 py-2.5 text-sm text-blue-700 font-semibold"></div>
+        <div id="annual-days-preview" class="hidden rounded-xl bg-blue-50 border border-blue-100 px-4 py-2.5">
+          <div class="flex items-center justify-between gap-4 flex-wrap">
+            <span class="text-sm font-bold text-blue-700" id="annual-days-preview-text"></span>
+            <div class="flex gap-4 text-center">
+              <div>
+                <div class="text-lg font-black text-amber-500" id="annual-preview-used">0</div>
+                <div class="text-xs text-gray-500">Jours utilisés</div>
+              </div>
+              <div>
+                <div class="text-lg font-black text-green-600" id="annual-preview-remaining">{{ $annualRemaining }}</div>
+                <div class="text-xs text-gray-500">Jours restants</div>
+              </div>
+            </div>
+          </div>
+        </div>
 
         <div>
           <label class="block text-sm font-semibold text-gray-700 mb-1.5">
@@ -1217,6 +1233,12 @@ $_oc = [
   var annualStarts = Array.prototype.slice.call(document.querySelectorAll('.annual-start'));
   var annualEnds = Array.prototype.slice.call(document.querySelectorAll('.annual-end'));
 
+  var annualQuota = {{ $annualQuota }};
+  var annualAlreadyApproved = {{ (int) $annualApproved }};
+  var annualPreviewText = document.getElementById('annual-days-preview-text');
+  var annualPreviewUsed = document.getElementById('annual-preview-used');
+  var annualPreviewRemaining = document.getElementById('annual-preview-remaining');
+
   function setAnnualVisibleRows() {
     if (!annualSectionsCount) return;
     var count = parseInt(annualSectionsCount.value || '1', 10);
@@ -1228,19 +1250,16 @@ $_oc = [
       var s = row.querySelector('.annual-start');
       var e = row.querySelector('.annual-end');
       row.classList.toggle('hidden', !visible);
+      // Only section 1 (idx 0) stays required; others are always optional
       if (s) {
-        if (visible) s.setAttribute('required', 'required');
-        else {
-          s.removeAttribute('required');
-          s.value = '';
-        }
+        if (!visible) { s.removeAttribute('required'); s.value = ''; }
+        else if (idx === 0) s.setAttribute('required', 'required');
+        else s.removeAttribute('required');
       }
       if (e) {
-        if (visible) e.setAttribute('required', 'required');
-        else {
-          e.removeAttribute('required');
-          e.value = '';
-        }
+        if (!visible) { e.removeAttribute('required'); e.value = ''; }
+        else if (idx === 0) e.setAttribute('required', 'required');
+        else e.removeAttribute('required');
       }
     });
   }
@@ -1274,7 +1293,11 @@ $_oc = [
     });
 
     var total = segments.reduce(function (acc, x) { return acc + (x.days || 0); }, 0);
-    annualPreview.textContent = total + ' jour(s) demandé(s) sur ' + segments.length + ' section(s)';
+    var used = annualAlreadyApproved + total;
+    var remaining = Math.max(0, annualQuota - used);
+    if (annualPreviewText) annualPreviewText.textContent = total + ' jour(s) demandé(s) sur ' + segments.length + ' section(s)';
+    if (annualPreviewUsed) annualPreviewUsed.textContent = used;
+    if (annualPreviewRemaining) annualPreviewRemaining.textContent = remaining;
     annualPreview.classList.remove('hidden');
 
     if (annualSegmentsJson) annualSegmentsJson.value = JSON.stringify(segments);

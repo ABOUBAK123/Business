@@ -151,6 +151,7 @@ fi
 
 echo "[6/11] Optimisation et migration Laravel..."
 php artisan migrate --force
+php artisan db:seed --class=PersonnelReferenceSeeder --force
 php artisan storage:link || true
 php artisan config:clear
 php artisan cache:clear
