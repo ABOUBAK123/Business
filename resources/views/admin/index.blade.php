@@ -34,7 +34,6 @@ $allTabs = [
     'user-profiles'      => ['fas fa-user-shield',       'Rôles',                 '#64748b', 'administration.user-profiles'],
     'instructions'       => ['fas fa-list-check',        'Instructions',          '#0891b2', 'administration.instructions'],
     'courrier-archiving' => ['fas fa-archive',           'Archivage courrier',    '#78716c', 'administration.courrier-archiving'],
-    'personnel'          => ['fas fa-users-cog',         'Gestion du personnel',  '#0d9488', 'personnel'],
 ];
 $permSvcAdmin = app(\App\Services\UserPermissionsService::class);
 $permSetAdmin = $permSvcAdmin->permissionsSet(auth()->user());
