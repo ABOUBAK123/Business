@@ -21,8 +21,8 @@ return new class extends Migration
             $table->string('mail_from_name')->nullable();
             $table->timestamps();
 
-            $table->unique(['administration_id', 'administration_type']);
-            $table->index('administration_id');
+            $table->unique(['administration_id', 'administration_type'], 'adm_smtp_admin_type_uq');
+            $table->index('administration_id', 'adm_smtp_admin_idx');
         });
     }
 
