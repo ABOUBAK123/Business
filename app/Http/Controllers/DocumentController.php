@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
@@ -597,10 +598,10 @@ class DocumentController extends Controller
                     return response()->json(['ok' => false, 'message' => 'Utilisateur destinataire introuvable.'], 422);
                 }
 
-                $createdShares->push(DocumentShare::create($basePayload + [
+                $createdShares->push(DocumentShare::create($this->filterDocumentSharePayload($basePayload + [
                     'recipient_name'  => 'user:' . $targetUser->id,
                     'recipient_email' => $targetUser->email,
-                ]));
+                ])));
 
                 Notification::create([
                     'recipient_id' => $targetUser->id,
@@ -643,10 +644,10 @@ class DocumentController extends Controller
                 }
 
                 foreach ($targetUsers as $targetUser) {
-                    $createdShares->push(DocumentShare::create($basePayload + [
+                    $createdShares->push(DocumentShare::create($this->filterDocumentSharePayload($basePayload + [
                         'recipient_name'  => 'user:' . $targetUser->id,
                         'recipient_email' => $targetUser->email,
-                    ]));
+                    ])));
 
                     Notification::create([
                         'recipient_id' => $targetUser->id,
@@ -666,10 +667,10 @@ class DocumentController extends Controller
                 return response()->json(['ok' => false, 'message' => 'Adresse email externe invalide.'], 422);
             }
 
-            $share = DocumentShare::create($basePayload + [
+            $share = DocumentShare::create($this->filterDocumentSharePayload($basePayload + [
                 'recipient_name'  => trim((string) $request->input('recipientName', 'Destinataire externe')),
                 'recipient_email' => $recipientEmail,
-            ]);
+            ]));
             $createdShares->push($share);
 
             $linkExpiry = $share->expires_at ?: now()->addDays(7);
@@ -706,11 +707,11 @@ class DocumentController extends Controller
             }
 
             // Trace de partage administration (audit)
-            $createdShares->push(DocumentShare::create($basePayload + [
+            $createdShares->push(DocumentShare::create($this->filterDocumentSharePayload($basePayload + [
                 'recipient_name' => 'admin:' . $recipientAdministration->id,
                 'recipient_email' => $request->input('applicantEmail'),
                 'recipient_administration_id' => $recipientAdministration->id,
-            ]));
+            ])));
 
             // Chercher les utilisateurs dont le profil appartient directement à cette administration destinataire
             $targetUsers = User::query()
@@ -816,6 +817,34 @@ class DocumentController extends Controller
                 'error' => $e->getMessage(),
             ]);
         }
+    }
+
+    private function filterDocumentSharePayload(array $payload): array
+    {
+        static $allowed = null;
+
+        if ($allowed === null) {
+            try {
+                $allowed = Schema::hasTable('document_shares')
+                    ? array_flip(Schema::getColumnListing('document_shares'))
+                    : [];
+            } catch (\Throwable $e) {
+                Log::warning('DocumentController@share unable to read document_shares columns', [
+                    'error' => $e->getMessage(),
+                ]);
+                $allowed = [];
+            }
+        }
+
+        if ($allowed === []) {
+            return $payload;
+        }
+
+        return array_filter(
+            $payload,
+            static fn ($key) => isset($allowed[$key]),
+            ARRAY_FILTER_USE_KEY
+        );
     }
 
     public function lookupActRequestByTracking(Request $request)
