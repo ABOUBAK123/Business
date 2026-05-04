@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AppSetting;
 use App\Models\IssuingAdministration;
 use App\Models\Meeting;
 use App\Models\MeetingAttendance;
@@ -340,26 +341,75 @@ class MeetingAttendanceController extends Controller
     {
         $logoUrl = null;
         $tutelleEntityName = null;
-        $assignment = optional($meeting->organizer)->directionAssignments
-            ?->sortByDesc('created_at')
-            ?->first();
 
-        if ($assignment) {
-            $issuingAdmin = IssuingAdministration::find($assignment->direction_scope_id);
+        // ── 1. Résoudre l'administration via issuing_administration_id (priorité directe)
+        //       ou via l'assignment de l'organisateur (fallback)
+        $issuingAdmin = null;
+        $adminType    = 'emitter';
 
-            if ($issuingAdmin && !empty($issuingAdmin->logo)) {
-                $rawLogo = (string) $issuingAdmin->logo;
+        if (!empty($meeting->issuing_administration_id)) {
+            $issuingAdmin = IssuingAdministration::find($meeting->issuing_administration_id);
+        }
+
+        if (!$issuingAdmin) {
+            $assignment = optional($meeting->organizer)->directionAssignments
+                ?->sortByDesc('created_at')
+                ?->first();
+
+            if ($assignment) {
+                $issuingAdmin = IssuingAdministration::find($assignment->direction_scope_id);
+
+                if (!empty($assignment->direction_label)) {
+                    $tutelleEntityName = (string) $assignment->direction_label;
+                }
+
+                if (!$tutelleEntityName && !empty($assignment->sub_entity_code)) {
+                    $subEntity = SubEntity::query()
+                        ->where('scope_id', $assignment->direction_scope_id)
+                        ->where('code', $assignment->sub_entity_code)
+                        ->first();
+                    $tutelleEntityName = $subEntity?->name ?? (string) $assignment->sub_entity_code;
+                }
+            }
+        }
+
+        if ($issuingAdmin && !$tutelleEntityName) {
+            $tutelleEntityName = (string) $issuingAdmin->name;
+        }
+
+        if (!$issuingAdmin) {
+            return ['logo_url' => null, 'tutelle_entity_name' => $tutelleEntityName];
+        }
+
+        // ── 2. Stratégie 1 : logo theming via AppSetting (même mécanisme que le sidebar)
+        //       clé : theme_{emitter|recipient}_{adminId}_logo
+        foreach (['emitter', 'recipient'] as $type) {
+            $themKey  = 'theme_' . $type . '_' . $issuingAdmin->id . '_logo';
+            $themPath = AppSetting::where('key', $themKey)->value('value');
+            if ($themPath && Storage::disk('public')->exists($themPath)) {
+                $logoUrl = asset('storage/' . $themPath);
+                break;
+            }
+        }
+
+        // ── 3. Stratégie 2 : champ logo direct ou metadata['logoPath'] (même que le sidebar)
+        if (!$logoUrl) {
+            $rawLogoField = $issuingAdmin->logo ?? null;
+            if (!$rawLogoField && isset($issuingAdmin->metadata['logoPath'])) {
+                $rawLogoField = $issuingAdmin->metadata['logoPath'];
+            }
+
+            if ($rawLogoField) {
+                $rawLogo = (string) $rawLogoField;
+
                 if (str_starts_with($rawLogo, 'http://') || str_starts_with($rawLogo, 'https://') || str_starts_with($rawLogo, 'data:image/')) {
                     $logoUrl = $rawLogo;
                 } else {
                     $normalized = ltrim($rawLogo, '/');
 
-                    // Common legacy values: "storage/..." or "/storage/..."
                     if (str_starts_with($normalized, 'storage/')) {
                         $normalized = ltrim(substr($normalized, strlen('storage/')), '/');
                     }
-
-                    // Common values from older uploads: "public/..."
                     if (str_starts_with($normalized, 'public/')) {
                         $normalized = ltrim(substr($normalized, strlen('public/')), '/');
                     }
@@ -367,39 +417,25 @@ class MeetingAttendanceController extends Controller
                     if (Storage::disk('public')->exists($normalized)) {
                         $logoUrl = url('/storage/' . $normalized);
                     } elseif (str_starts_with($rawLogo, '/')) {
-                        // Relative public path fallback
                         $logoUrl = url($rawLogo);
                     } elseif (is_file(public_path($normalized))) {
                         $logoUrl = url('/' . $normalized);
+                    } elseif (str_starts_with($normalized, 'images/')) {
+                        if (is_file(public_path($normalized))) {
+                            $logoUrl = asset($normalized);
+                        }
+                    } else {
+                        $fallback = 'images/logos/' . basename($normalized);
+                        if (is_file(public_path($fallback))) {
+                            $logoUrl = asset($fallback);
+                        }
                     }
                 }
-            }
-
-            if (!empty($assignment->direction_label)) {
-                $tutelleEntityName = (string) $assignment->direction_label;
-            }
-
-            if (!$tutelleEntityName && !empty($assignment->sub_entity_code)) {
-                $subEntity = SubEntity::query()
-                    ->where('scope_id', $assignment->direction_scope_id)
-                    ->where('code', $assignment->sub_entity_code)
-                    ->first();
-                if ($subEntity) {
-                    $tutelleEntityName = $subEntity->name;
-                }
-            }
-
-            if (!$tutelleEntityName && !empty($assignment->sub_entity_code)) {
-                $tutelleEntityName = (string) $assignment->sub_entity_code;
-            }
-
-            if (!$tutelleEntityName && $issuingAdmin) {
-                $tutelleEntityName = (string) $issuingAdmin->name;
             }
         }
 
         return [
-            'logo_url' => $logoUrl,
+            'logo_url'            => $logoUrl,
             'tutelle_entity_name' => $tutelleEntityName,
         ];
     }
