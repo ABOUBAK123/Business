@@ -10,8 +10,8 @@ return new class extends Migration
     {
         Schema::create('personnel_employees', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->foreignUuid('user_id')->nullable()->constrained('users')->nullOnDelete();
-            $table->foreignUuid('sub_entity_id')->nullable()->constrained('sub_entities')->nullOnDelete();
+            $table->uuid('user_id')->nullable()->index();
+            $table->char('sub_entity_id', 36)->nullable()->index();
             $table->string('administration_type', 20)->default('emitter');
             $table->string('administration_id', 36)->nullable();
             $table->string('employee_number', 100)->nullable();
