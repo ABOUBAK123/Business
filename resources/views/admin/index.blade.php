@@ -542,11 +542,6 @@ $_oc = [
       @endif
     </div>
   </section>
-</div>ée s’active dès qu’une fiche agent est sélectionnée.</div>
-      @endif
-    </div>
-  </section>
-</div>
 @elseif($personnelTab === 'agent-space')
 @php
   $agentSpaceEmployee = $selectedPersonnelEmployee;
