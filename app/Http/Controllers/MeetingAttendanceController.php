@@ -341,11 +341,15 @@ class MeetingAttendanceController extends Controller
     {
         $logoUrl = null;
         $tutelleEntityName = null;
+        $tutelleEntityCode = null;
 
         // ── 1. Résoudre l'administration via issuing_administration_id (priorité directe)
         //       ou via l'assignment de l'organisateur (fallback)
         $issuingAdmin = null;
-        $adminType    = 'emitter';
+
+        if (!empty($meeting->sub_entity_code)) {
+            $tutelleEntityCode = strtoupper((string) $meeting->sub_entity_code);
+        }
 
         if (!empty($meeting->issuing_administration_id)) {
             $issuingAdmin = IssuingAdministration::find($meeting->issuing_administration_id);
@@ -363,6 +367,10 @@ class MeetingAttendanceController extends Controller
                     $tutelleEntityName = (string) $assignment->direction_label;
                 }
 
+                if (!$tutelleEntityCode && !empty($assignment->sub_entity_code)) {
+                    $tutelleEntityCode = strtoupper((string) $assignment->sub_entity_code);
+                }
+
                 if (!$tutelleEntityName && !empty($assignment->sub_entity_code)) {
                     $subEntity = SubEntity::query()
                         ->where('scope_id', $assignment->direction_scope_id)
@@ -378,7 +386,11 @@ class MeetingAttendanceController extends Controller
         }
 
         if (!$issuingAdmin) {
-            return ['logo_url' => null, 'tutelle_entity_name' => $tutelleEntityName];
+            return [
+                'logo_url' => null,
+                'tutelle_entity_name' => $tutelleEntityName,
+                'tutelle_entity_code' => $tutelleEntityCode,
+            ];
         }
 
         // ── 2. Stratégie 1 : logo theming via AppSetting (même mécanisme que le sidebar)
@@ -437,6 +449,7 @@ class MeetingAttendanceController extends Controller
         return [
             'logo_url'            => $logoUrl,
             'tutelle_entity_name' => $tutelleEntityName,
+            'tutelle_entity_code' => $tutelleEntityCode,
         ];
     }
 

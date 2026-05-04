@@ -120,6 +120,9 @@
     @if(!empty($branding['tutelle_entity_name']))
         <div class="entity">{{ $branding['tutelle_entity_name'] }}</div>
     @endif
+    @if(!empty($branding['tutelle_entity_code']))
+        <div class="entity"><strong>{{ $branding['tutelle_entity_code'] }}</strong></div>
+    @endif
     <div class="label">Liste de présence</div>
 </div>
 

@@ -244,6 +244,9 @@
         @if(!empty($branding['tutelle_entity_name']))
             <div class="text-base font-bold text-gray-800 leading-tight">{{ $branding['tutelle_entity_name'] }}</div>
         @endif
+        @if(!empty($branding['tutelle_entity_code']))
+            <div class="text-sm font-bold text-gray-900 leading-tight">{{ $branding['tutelle_entity_code'] }}</div>
+        @endif
         <div class="text-xs uppercase tracking-widest text-gray-400 font-medium mt-1">Formulaire d'émargement</div>
     </div>
 

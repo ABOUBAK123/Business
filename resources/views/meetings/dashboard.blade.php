@@ -14,6 +14,9 @@
             @if(!empty($branding['tutelle_entity_name']))
                 <div class="text-xs uppercase tracking-wide text-gray-500">{{ $branding['tutelle_entity_name'] }}</div>
             @endif
+            @if(!empty($branding['tutelle_entity_code']))
+                <div class="text-sm font-bold text-gray-900">{{ $branding['tutelle_entity_code'] }}</div>
+            @endif
         <div class="text-sm text-gray-700">Participants attendus: <strong>{{ $meeting->participants->count() }}</strong></div>
         <div class="text-sm text-gray-700">Présents: <strong>{{ $meeting->attendances->count() }}</strong></div>
         </div>
