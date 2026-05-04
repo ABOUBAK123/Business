@@ -702,6 +702,7 @@ class AdminController extends Controller
     private const ALLOWED_SETTING_KEYS = [
         'app_name', 'app_public_url', 'app_logo',
         'onlyoffice_server_url', 'onlyoffice_secret', 'onlyoffice_doc_viewer',
+        'mail_host', 'mail_port', 'mail_username', 'mail_password', 'mail_encryption',
         'mail_from_address', 'mail_from_name',
         'qr_image_page', 'qr_image_x', 'qr_image_y', 'qr_image_width', 'qr_image_height',
         'signature_qr_position',
