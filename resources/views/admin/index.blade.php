@@ -7776,6 +7776,7 @@ function profilesSearch(q) {
             </div>
             <div>
                 <label class="block text-sm font-semibold text-gray-700 mb-2">Permissions initiales</label>
+              <p class="text-xs text-gray-500 mb-2">Les onglets et sous-onglets sont indépendants : vous pouvez sélectionner uniquement l'onglet, ou un ou plusieurs sous-onglets.</p>
                 <div class="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100 max-h-64 overflow-y-auto">
                     @foreach($permissionTree as $parentKey => $parent)
                     <div>
@@ -7870,6 +7871,7 @@ function profilesSearch(q) {
                         <button type="button" onclick="editModalCheckAll(false)" class="text-xs text-gray-400 hover:underline">Tout décocher</button>
                     </div>
                 </div>
+              <p class="text-xs text-gray-500 mb-2">Les onglets et sous-onglets sont indépendants : vous pouvez sélectionner uniquement l'onglet, ou un ou plusieurs sous-onglets.</p>
                 <div class="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100 max-h-72 overflow-y-auto">
                     @foreach($permissionTree as $parentKey => $parent)
                     <div>
@@ -8319,15 +8321,10 @@ function togglePermGroup(headerEl) {
 }
 // modal permission helpers (create)
 function modalHandleParent(parentCb) {
-    const group = parentCb.dataset.group;
-    document.querySelectorAll(`#modal-profile-create .modal-child-perm[data-parent="${group}"]`).forEach(cb => cb.checked = parentCb.checked);
+  // Parent and child permissions are intentionally independent.
 }
 function modalHandleChild(childCb) {
-    const group    = childCb.dataset.parent;
-    const allCbs   = document.querySelectorAll(`#modal-profile-create .modal-child-perm[data-parent="${group}"]`);
-    const allOk    = Array.from(allCbs).every(cb => cb.checked);
-    const parentCb = document.querySelector(`#modal-profile-create .modal-parent-perm[data-group="${group}"]`);
-    if (parentCb) parentCb.checked = allOk;
+  // Parent and child permissions are intentionally independent.
 }
 var profileAdministrationOptions = {
   emitter: @json($profileEmitterOptions ?? []),
@@ -8393,15 +8390,10 @@ function editModalCheckAll(state) {
     document.querySelectorAll('#modal-profile-edit input[type=checkbox]').forEach(cb => cb.checked = state);
 }
 function editModalHandleParent(parentCb) {
-    const group = parentCb.dataset.group;
-    document.querySelectorAll(`#modal-profile-edit .edit-modal-child-perm[data-parent="${group}"]`).forEach(cb => cb.checked = parentCb.checked);
+  // Parent and child permissions are intentionally independent.
 }
 function editModalHandleChild(childCb) {
-    const group    = childCb.dataset.parent;
-    const allCbs   = document.querySelectorAll(`#modal-profile-edit .edit-modal-child-perm[data-parent="${group}"]`);
-    const allOk    = Array.from(allCbs).every(cb => cb.checked);
-    const parentCb = document.querySelector(`#modal-profile-edit .edit-modal-parent-perm[data-group="${group}"]`);
-    if (parentCb) parentCb.checked = allOk;
+  // Parent and child permissions are intentionally independent.
 }
 </script>
 @endpush
