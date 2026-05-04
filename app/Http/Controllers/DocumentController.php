@@ -603,7 +603,7 @@ class DocumentController extends Controller
                     'recipient_email' => $targetUser->email,
                 ])));
 
-                Notification::create([
+                $this->createShareNotification([
                     'recipient_id' => $targetUser->id,
                     'title' => 'Nouveau document partagé',
                     'message' => 'Le document "' . $document->title . '" vous a été partagé.',
@@ -649,7 +649,7 @@ class DocumentController extends Controller
                         'recipient_email' => $targetUser->email,
                     ])));
 
-                    Notification::create([
+                    $this->createShareNotification([
                         'recipient_id' => $targetUser->id,
                         'title' => 'Nouveau document partagé',
                         'message' => 'Le document "' . $document->title . '" a été partagé à votre entité sous tutelle.',
@@ -723,7 +723,7 @@ class DocumentController extends Controller
                 ->get(['id', 'email']);
 
             foreach ($targetUsers as $targetUser) {
-                Notification::create([
+                $this->createShareNotification([
                     'recipient_id' => $targetUser->id,
                     'title' => 'Document recu (administration)',
                     'message' => 'Le document "' . $document->title . '" a ete partage a votre administration.',
@@ -745,10 +745,19 @@ class DocumentController extends Controller
                 ]);
 
                 if ($submission) {
-                    $submission->status = 'sent';
-                    $submission->save();
-                    $updatedTrackingStatus = true;
-                    Log::info('DocumentController@share submission status set to sent', ['submission_id' => $submission->id]);
+                    try {
+                        // Conserver une valeur de statut généralement admise sur tous les schémas existants.
+                        $submission->status = 'in_progress';
+                        $submission->save();
+                        $updatedTrackingStatus = true;
+                        Log::info('DocumentController@share submission status set to in_progress', ['submission_id' => $submission->id]);
+                    } catch (\Throwable $e) {
+                        Log::warning('DocumentController@share unable to update submission status', [
+                            'submission_id' => (string) $submission->id,
+                            'tracking_number' => $trackingNumber,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
                 }
             }
 
@@ -845,6 +854,19 @@ class DocumentController extends Controller
             static fn ($key) => isset($allowed[$key]),
             ARRAY_FILTER_USE_KEY
         );
+    }
+
+    private function createShareNotification(array $payload): void
+    {
+        try {
+            Notification::create($payload);
+        } catch (\Throwable $e) {
+            Log::warning('DocumentController@share notification skipped', [
+                'recipient_id' => (string) ($payload['recipient_id'] ?? ''),
+                'title' => (string) ($payload['title'] ?? ''),
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     public function lookupActRequestByTracking(Request $request)
