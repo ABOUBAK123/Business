@@ -50,7 +50,7 @@ $tabs = array_filter($allTabs, function($v) use ($permSetAdmin) {
     return false;
 });
 
-if (!array_key_exists($tab, $tabs)) {
+if ($tab !== 'personnel' && !array_key_exists($tab, $tabs)) {
   $tab = 'overview';
 }
 @endphp
