@@ -118,17 +118,6 @@
             letter-spacing:.08em; text-transform:uppercase;
             color:rgba(255,255,255,.4); padding:12px 20px 4px;
         }
-        .nav-sub-link {
-            display:flex; align-items:center; gap:10px;
-            padding:7px 14px 7px 44px; border-radius:10px;
-            font-size:.82rem; font-weight:500;
-            color:rgba(255,255,255,.7); text-decoration:none;
-            transition:background .15s;
-        }
-        .nav-sub-link:hover { background:rgba(255,255,255,.08); color:#fff; }
-        .nav-sub-link.active { background:rgba(255,255,255,.15); color:#fff; }
-        .nav-sub-link i { width:16px; text-align:center; font-size:.78rem; opacity:.7; }
-        .nav-sub-link.active i { opacity:1; }
         /* ── Couleur principale → boutons, focus rings ── */
         .btn-primary, button[type="submit"].btn-primary {
             background-color: var(--primary) !important;
@@ -301,33 +290,11 @@
         </a>
         @endif
 
-        @if($canMenu('personnel'))
-        @php
-            $_personnelActive = request()->routeIs('admin.*') && request('tab') === 'personnel';
-            $_personnelTab    = request('personnel_tab', 'dashboard');
-            $_personnelSubTabs = [
-                'dashboard'   => ['fas fa-chart-line',     'Tableau de bord'],
-                'employees'   => ['fas fa-id-card',        'Gestion des employés'],
-                'agent-space' => ['fas fa-user-clock',     'Espace agent'],
-                'leave'       => ['fas fa-calendar-check', 'Congés & permissions'],
-                'training'    => ['fas fa-graduation-cap', 'Formation & compétences'],
-                'career'      => ['fas fa-ranking-star',   'Carrière & performance'],
-            ];
-        @endphp
-        <a href="{{ route('admin.index', ['tab' => 'personnel', 'personnel_tab' => 'dashboard']) }}"
-           class="nav-link {{ $_personnelActive ? 'active' : '' }}">
+        @if($canMenu('administration'))
+        <a href="{{ route('admin.index', ['tab' => 'personnel']) }}"
+           class="nav-link {{ request()->routeIs('admin.*') && request('tab') === 'personnel' ? 'active' : '' }}">
             <i class="fas fa-id-badge"></i> Gestion du personnel
         </a>
-        @if($_personnelActive)
-            @foreach($_personnelSubTabs as $_ptKey => [$_ptIcon, $_ptLabel])
-                @if($canMenu('personnel.' . $_ptKey) || $canMenu('personnel'))
-                <a href="{{ route('admin.index', ['tab' => 'personnel', 'personnel_tab' => $_ptKey]) }}"
-                   class="nav-sub-link {{ $_personnelTab === $_ptKey ? 'active' : '' }}">
-                    <i class="{{ $_ptIcon }}"></i> {{ $_ptLabel }}
-                </a>
-                @endif
-            @endforeach
-        @endif
         @endif
 
         @if($canMenu('meetings'))
