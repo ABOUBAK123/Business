@@ -574,6 +574,16 @@ $_oc = [
       ->take(12)
       ->values();
   }
+  $agentSpaceTab = request('agent_space_tab', 'profile');
+  $agentSpaceTabs = [
+    'profile' => ['fas fa-user', __('personnel.ui.agent_space.subtab_profile')],
+    'leave' => ['fas fa-calendar-check', __('personnel.ui.agent_space.subtab_leave')],
+    'training' => ['fas fa-graduation-cap', __('personnel.ui.agent_space.subtab_training')],
+    'documents' => ['fas fa-folder-open', __('personnel.ui.agent_space.subtab_documents')],
+  ];
+  if (!array_key_exists($agentSpaceTab, $agentSpaceTabs)) {
+    $agentSpaceTab = 'profile';
+  }
 @endphp
 
 <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-5">
@@ -585,6 +595,7 @@ $_oc = [
     <form method="GET" action="{{ route('admin.index') }}" class="flex items-center gap-2">
       <input type="hidden" name="tab" value="personnel">
       <input type="hidden" name="personnel_tab" value="agent-space">
+      <input type="hidden" name="agent_space_tab" value="{{ $agentSpaceTab }}">
       <label class="text-sm font-semibold text-gray-700">{{ __('personnel.ui.agent_space.agent_label') }}</label>
       <select name="selected_employee" class="border border-gray-300 rounded-xl px-3 py-2 text-sm" onchange="this.form.submit()">
         <option value="">{{ __('personnel.ui.agent_space.select') }}</option>
@@ -601,15 +612,84 @@ $_oc = [
   {{ __('personnel.ui.agent_space.select_employee_hint') }}
 </div>
 @else
-<div class="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-5">
+<div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-3 mb-5">
+  <div class="flex flex-wrap gap-2">
+    @foreach($agentSpaceTabs as $key => [$icon, $label])
+    <a href="{{ route('admin.index', ['tab' => 'personnel', 'personnel_tab' => 'agent-space', 'selected_employee' => $agentSpaceEmployee->id, 'agent_space_tab' => $key]) }}"
+       class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition {{ $agentSpaceTab === $key ? 'bg-[#2453d6] text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200' }}">
+      <i class="{{ $icon }} text-xs"></i>
+      <span>{{ $label }}</span>
+    </a>
+    @endforeach
+  </div>
+</div>
+
+@if($agentSpaceTab === 'profile')
+@php
+  $agentAdminLabel = $agentSpaceEmployee->administration_type === 'recipient'
+    ? ($recipients->firstWhere('id', $agentSpaceEmployee->administration_id)?->name ?? '-')
+    : ($emitters->firstWhere('id', $agentSpaceEmployee->administration_id)?->name ?? '-');
+@endphp
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <h4 class="text-base font-bold text-gray-800 mb-4">{{ __('personnel.ui.agent_space.profile_identity_title') }}</h4>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+      <div class="rounded-xl border border-gray-200 px-4 py-3">
+        <div class="text-xs text-gray-500 mb-1">{{ __('personnel.ui.agent_space.field_employee_number') }}</div>
+        <div class="font-semibold text-gray-800">{{ $agentSpaceEmployee->employee_number ?: 'N/A' }}</div>
+      </div>
+      <div class="rounded-xl border border-gray-200 px-4 py-3">
+        <div class="text-xs text-gray-500 mb-1">{{ __('personnel.ui.agent_space.field_job_title') }}</div>
+        <div class="font-semibold text-gray-800">{{ $agentSpaceEmployee->job_title ?: '-' }}</div>
+      </div>
+      <div class="rounded-xl border border-gray-200 px-4 py-3">
+        <div class="text-xs text-gray-500 mb-1">{{ __('personnel.ui.agent_space.field_hire_date') }}</div>
+        <div class="font-semibold text-gray-800">{{ optional($agentSpaceEmployee->hire_date)->format('d/m/Y') ?: '-' }}</div>
+      </div>
+      <div class="rounded-xl border border-gray-200 px-4 py-3">
+        <div class="text-xs text-gray-500 mb-1">{{ __('personnel.ui.agent_space.field_status') }}</div>
+        <div class="font-semibold text-gray-800">{{ __('personnel.ui.statuses.' . ($agentSpaceEmployee->employment_status ?: 'active')) }}</div>
+      </div>
+      <div class="rounded-xl border border-gray-200 px-4 py-3 md:col-span-2">
+        <div class="text-xs text-gray-500 mb-1">{{ __('personnel.ui.agent_space.field_administration') }}</div>
+        <div class="font-semibold text-gray-800">{{ $agentAdminLabel }}</div>
+      </div>
+      <div class="rounded-xl border border-gray-200 px-4 py-3">
+        <div class="text-xs text-gray-500 mb-1">{{ __('personnel.ui.agent_space.field_email') }}</div>
+        <div class="font-semibold text-gray-800">{{ $agentSpaceEmployee->email ?: '-' }}</div>
+      </div>
+      <div class="rounded-xl border border-gray-200 px-4 py-3">
+        <div class="text-xs text-gray-500 mb-1">{{ __('personnel.ui.agent_space.field_phone') }}</div>
+        <div class="font-semibold text-gray-800">{{ $agentSpaceEmployee->phone ?: '-' }}</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <h4 class="text-base font-bold text-gray-800 mb-3">{{ __('personnel.ui.agent_space.mobility_history_title') }}</h4>
+    <div class="space-y-2">
+      @forelse($agentSpaceCareerHistory as $event)
+      <div class="rounded-xl border border-gray-200 px-3 py-2">
+        <div class="text-sm font-semibold text-gray-800">{{ $event->title }}</div>
+        <div class="text-xs text-gray-500">{{ optional($event->effective_date)->format('d/m/Y') ?: '-' }} · {{ $event->event_type === 'mobility' ? __('personnel.ui.agent_space.event_mutation') : __('personnel.ui.agent_space.event_assignment') }} · {{ __('personnel.ui.statuses.' . $event->status) }}</div>
+      </div>
+      @empty
+      <div class="rounded-xl bg-gray-50 border border-gray-200 px-3 py-3 text-sm text-gray-500">{{ __('personnel.ui.agent_space.no_mobility') }}</div>
+      @endforelse
+    </div>
+  </section>
+</div>
+@elseif($agentSpaceTab === 'leave')
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
   <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
     <h4 class="text-base font-bold text-gray-800 mb-3">{{ __('personnel.ui.agent_space.leave_request_title') }}</h4>
     @if($personnelLeaveTypes->isEmpty())
-    <div class="rounded-xl bg-amber-50 border border-amber-100 px-4 py-4 text-sm text-amber-800">Aucun type de congé disponible pour l’instant.</div>
+    <div class="rounded-xl bg-amber-50 border border-amber-100 px-4 py-4 text-sm text-amber-800">{{ __('personnel.ui.agent_space.no_leave_types') }}</div>
     @else
     <form method="POST" action="{{ route('admin.personnel.leave-requests.store') }}" class="space-y-3">
       @csrf
       <input type="hidden" name="personnel_tab" value="agent-space">
+      <input type="hidden" name="agent_space_tab" value="leave">
       <input type="hidden" name="employee_id" value="{{ $agentSpaceEmployee->id }}">
       <div>
         <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.agent_space.leave_type_label') }}</label>
@@ -631,19 +711,36 @@ $_oc = [
   </section>
 
   <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <h4 class="text-base font-bold text-gray-800 mb-3">{{ __('personnel.ui.agent_space.recent_requests_title') }}</h4>
+    <div class="space-y-2">
+      @forelse($agentSpaceLeaveRequests as $leaveRequest)
+      <div class="rounded-xl border border-gray-200 px-3 py-2">
+        <div class="text-sm font-semibold text-gray-800">{{ $leaveRequest->leaveType?->name ?? __('personnel.ui.agent_space.deleted_leave_type') }}</div>
+        <div class="text-xs text-gray-500">{{ optional($leaveRequest->start_date)->format('d/m/Y') }} au {{ optional($leaveRequest->end_date)->format('d/m/Y') }} · {{ __('personnel.ui.statuses.' . $leaveRequest->status) }}</div>
+      </div>
+      @empty
+      <div class="rounded-xl bg-gray-50 border border-gray-200 px-3 py-3 text-sm text-gray-500">{{ __('personnel.ui.agent_space.no_leave_requests') }}</div>
+      @endforelse
+    </div>
+  </section>
+</div>
+@elseif($agentSpaceTab === 'training')
+@php
+  $agentSpaceTrainings = $personnelTrainings
+    ->where('administration_type', $agentSpaceEmployee->administration_type)
+    ->where('administration_id', $agentSpaceEmployee->administration_id)
+    ->values();
+@endphp
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
     <h4 class="text-base font-bold text-gray-800 mb-3">{{ __('personnel.ui.agent_space.training_request_title') }}</h4>
-    @php
-      $agentSpaceTrainings = $personnelTrainings
-        ->where('administration_type', $agentSpaceEmployee->administration_type)
-        ->where('administration_id', $agentSpaceEmployee->administration_id)
-        ->values();
-    @endphp
     @if($agentSpaceTrainings->isEmpty())
     <div class="rounded-xl bg-amber-50 border border-amber-100 px-4 py-4 text-sm text-amber-800">{{ __('personnel.ui.agent_space.no_trainings') }}</div>
     @else
     <form method="POST" action="{{ route('admin.personnel.training-enrollments.store') }}" class="space-y-3">
       @csrf
       <input type="hidden" name="personnel_tab" value="agent-space">
+      <input type="hidden" name="agent_space_tab" value="training">
       <input type="hidden" name="employee_id" value="{{ $agentSpaceEmployee->id }}">
       <input type="hidden" name="status" value="planned">
       <div>
@@ -666,10 +763,27 @@ $_oc = [
   </section>
 
   <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <h4 class="text-base font-bold text-gray-800 mb-3">{{ __('personnel.ui.agent_space.requested_training_title') }}</h4>
+    <div class="space-y-2">
+      @forelse($agentSpaceTrainingEnrollments as $enrollment)
+      <div class="rounded-xl border border-gray-200 px-3 py-2">
+        <div class="text-sm font-semibold text-gray-800">{{ $enrollment->training?->title ?? __('personnel.ui.agent_space.deleted_training') }}</div>
+        <div class="text-xs text-gray-500">{{ __('personnel.ui.agent_space.status_prefix') }} {{ __('personnel.ui.statuses.' . $enrollment->status) }} · {{ __('personnel.ui.agent_space.start_prefix') }} {{ optional($enrollment->planned_start_date)->format('d/m/Y') ?: '-' }}</div>
+      </div>
+      @empty
+      <div class="rounded-xl bg-gray-50 border border-gray-200 px-3 py-3 text-sm text-gray-500">{{ __('personnel.ui.agent_space.no_training_requests') }}</div>
+      @endforelse
+    </div>
+  </section>
+</div>
+@else
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
     <h4 class="text-base font-bold text-gray-800 mb-3">{{ __('personnel.ui.agent_space.job_description_title') }}</h4>
     <form method="POST" enctype="multipart/form-data" action="{{ route('admin.personnel.employees.documents.store', $agentSpaceEmployee) }}" class="space-y-3">
       @csrf
       <input type="hidden" name="personnel_tab" value="agent-space">
+      <input type="hidden" name="agent_space_tab" value="documents">
       <input type="hidden" name="category" value="job_description">
       <div>
         <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.agent_space.label_label') }}</label>
@@ -681,9 +795,12 @@ $_oc = [
       </div>
       <button type="submit" class="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold">{{ __('personnel.ui.agent_space.btn_submit_job_desc') }}</button>
     </form>
+  </section>
 
-    <div class="mt-4 space-y-2">
-      @forelse($agentSpaceEmployee->documents->where('category', 'job_description')->sortByDesc('created_at')->take(5) as $doc)
+  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <h4 class="text-base font-bold text-gray-800 mb-3">{{ __('personnel.ui.agent_space.subtab_documents') }}</h4>
+    <div class="space-y-2">
+      @forelse($agentSpaceEmployee->documents->where('category', 'job_description')->sortByDesc('created_at')->take(8) as $doc)
       <a href="{{ route('admin.personnel.documents.download', $doc) }}" class="flex items-center justify-between rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
         <span>{{ $doc->label }}</span>
         <i class="fas fa-download text-gray-400"></i>
@@ -694,50 +811,7 @@ $_oc = [
     </div>
   </section>
 </div>
-
-<div class="grid grid-cols-1 xl:grid-cols-3 gap-5">
-  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-    <h4 class="text-base font-bold text-gray-800 mb-3">{{ __('personnel.ui.agent_space.recent_requests_title') }}</h4>
-    <div class="space-y-2">
-      @forelse($agentSpaceLeaveRequests as $leaveRequest)
-      <div class="rounded-xl border border-gray-200 px-3 py-2">
-        <div class="text-sm font-semibold text-gray-800">{{ $leaveRequest->leaveType?->name ?? 'Type supprimé' }}</div>
-        <div class="text-xs text-gray-500">{{ optional($leaveRequest->start_date)->format('d/m/Y') }} au {{ optional($leaveRequest->end_date)->format('d/m/Y') }} · {{ __('personnel.ui.statuses.' . $leaveRequest->status) }}</div>
-      </div>
-      @empty
-      <div class="rounded-xl bg-gray-50 border border-gray-200 px-3 py-3 text-sm text-gray-500">{{ __('personnel.ui.agent_space.no_leave_requests') }}</div>
-      @endforelse
-    </div>
-  </section>
-
-  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-    <h4 class="text-base font-bold text-gray-800 mb-3">{{ __('personnel.ui.agent_space.requested_training_title') }}</h4>
-    <div class="space-y-2">
-      @forelse($agentSpaceTrainingEnrollments as $enrollment)
-      <div class="rounded-xl border border-gray-200 px-3 py-2">
-        <div class="text-sm font-semibold text-gray-800">{{ $enrollment->training?->title ?? 'Formation supprimée' }}</div>
-        <div class="text-xs text-gray-500">{{ __('personnel.ui.agent_space.status_prefix') }} {{ __('personnel.ui.statuses.' . $enrollment->status) }} · {{ __('personnel.ui.agent_space.start_prefix') }} {{ optional($enrollment->planned_start_date)->format('d/m/Y') ?: '-' }}</div>
-      </div>
-      @empty
-      <div class="rounded-xl bg-gray-50 border border-gray-200 px-3 py-3 text-sm text-gray-500">{{ __('personnel.ui.agent_space.no_training_requests') }}</div>
-      @endforelse
-    </div>
-  </section>
-
-  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-    <h4 class="text-base font-bold text-gray-800 mb-3">{{ __('personnel.ui.agent_space.mobility_history_title') }}</h4>
-    <div class="space-y-2">
-      @forelse($agentSpaceCareerHistory as $event)
-      <div class="rounded-xl border border-gray-200 px-3 py-2">
-        <div class="text-sm font-semibold text-gray-800">{{ $event->title }}</div>
-        <div class="text-xs text-gray-500">{{ optional($event->effective_date)->format('d/m/Y') ?: '-' }} · {{ $event->event_type === 'mobility' ? __('personnel.ui.agent_space.event_mutation') : __('personnel.ui.agent_space.event_assignment') }} · {{ __('personnel.ui.statuses.' . $event->status) }}</div>
-      </div>
-      @empty
-      <div class="rounded-xl bg-gray-50 border border-gray-200 px-3 py-3 text-sm text-gray-500">{{ __('personnel.ui.agent_space.no_mobility') }}</div>
-      @endforelse
-    </div>
-  </section>
-</div>
+@endif
 @endif
 @elseif($personnelTab === 'leave')
 <div class="grid grid-cols-1 xl:grid-cols-5 gap-5 mb-5">
