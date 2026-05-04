@@ -1435,7 +1435,7 @@ $_oc = [
 @endif
 
 {{-- ══════════════════════ TEMPLATES ══════════════════════ --}}
-@elseif($tab === 'templates')
+@if($tab === 'templates')
 @php
     $selectedTplId = old('selected_template', request('selected_template', ''));
     $selectedTpl   = $templates->firstWhere('id', $selectedTplId);

@@ -128,7 +128,7 @@
                         @if($meeting->template_variables)
                             @foreach($meeting->template_variables as $var)
                             <div class="flex flex-col gap-1">
-                                <label class="text-xs font-semibold text-gray-700 font-mono">{{ '{{ ' . $var . ' }}' }}</label>
+                                <label class="text-xs font-semibold text-gray-700 font-mono">{{ '{' . '{ ' . $var . ' }' . '}' }}</label>
                                 <input type="text" data-varname="{{ $var }}"
                                        class="tpl-var-input border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:border-blue-400 focus:ring-1 focus:ring-blue-200"
                                        placeholder="{{ $var }}">
@@ -152,7 +152,7 @@
             <div id="tpl-not-analyzed"
                  class="{{ ($meeting->template_variables && count($meeting->template_variables)) ? 'hidden' : '' }} text-xs text-gray-500 italic flex items-center gap-2 py-1">
                 <i class="fas fa-info-circle text-blue-400"></i>
-                Cliquez sur "Analyser le modèle" pour détecter les variables <code class="bg-gray-100 px-1 rounded">{{ '{{ variable }}' }}</code>
+                Cliquez sur "Analyser le modèle" pour détecter les variables <code class="bg-gray-100 px-1 rounded">{{ '{' . '{ variable }' . '}' }}</code>
                 et sceller les zones de signature <code class="bg-gray-100 px-1 rounded">@@@</code>.
             </div>
 
@@ -463,7 +463,7 @@ document.getElementById('oo-tpl-modal')?.addEventListener('click', function (e) 
             const inputsEl = document.getElementById('tpl-var-inputs');
             inputsEl.innerHTML = data.variables.map(v => `
                 <div class="flex flex-col gap-1">
-                    <label class="text-xs font-semibold text-gray-700 font-mono">{{ '{{ ' }}" + v + " {{ ' }}' }}</label>
+                    <label class="text-xs font-semibold text-gray-700 font-mono">${'{{ ' + v + ' }}'}</label>
                     <input type="text" data-varname="${v}"
                            class="tpl-var-input border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:border-blue-400"
                            placeholder="${v}">
