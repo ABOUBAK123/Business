@@ -83,9 +83,20 @@ if ($tab !== 'personnel' && !array_key_exists($tab, $tabs)) {
     'training'  => ['fas fa-graduation-cap', __('personnel.ui.tabs.training')],
     'career'    => ['fas fa-ranking-star', __('personnel.ui.tabs.career')],
   ];
+  // Filtrer selon les permissions : si l'utilisateur a 'personnel' (parent), tout est accessible
+  // Sinon, uniquement les sous-onglets explicitement accordés (personnel.dashboard, etc.)
+  $_personnelHasParent = $permSetAdmin['isElevated'] || isset($permSetAdmin['permissions']['personnel']);
+  $_personnelNavTabsFiltered = array_filter($_personnelNavTabs, function($v, $k) use ($permSetAdmin, $_personnelHasParent) {
+      if ($_personnelHasParent) return true;
+      return isset($permSetAdmin['permissions']['personnel.' . $k]);
+  }, ARRAY_FILTER_USE_BOTH);
+  // Si l'onglet actif n'est pas accessible, rediriger vers le premier accessible
+  if (!isset($_personnelNavTabsFiltered[$personnelTab])) {
+      $personnelTab = array_key_first($_personnelNavTabsFiltered) ?? 'dashboard';
+  }
 @endphp
 <div class="flex flex-wrap gap-1.5 mb-6 bg-white rounded-2xl border border-gray-200 p-2 shadow-sm">
-    @foreach($_personnelNavTabs as $key => [$icon, $label])
+    @foreach($_personnelNavTabsFiltered as $key => [$icon, $label])
     <a href="{{ route('admin.index', ['tab' => 'personnel', 'personnel_tab' => $key]) }}"
        title="{{ $label }}"
        class="flex items-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition
