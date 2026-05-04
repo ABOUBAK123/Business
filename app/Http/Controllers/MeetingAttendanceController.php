@@ -65,6 +65,7 @@ class MeetingAttendanceController extends Controller
         ]);
 
         $identifier = trim($validated['identifier']);
+        $normalizedIdentifier = mb_strtolower($identifier, 'UTF-8');
 
         $participant = MeetingParticipant::where('meeting_id', $meeting->id)
             ->where(function ($query) use ($identifier) {
@@ -74,6 +75,39 @@ class MeetingAttendanceController extends Controller
                     });
             })
             ->first();
+
+        $resolvedEmail = trim((string) ($participant?->email ?: $participant?->user?->email ?: ($validated['email'] ?? '')));
+        $normalizedEmail = $resolvedEmail !== '' ? mb_strtolower($resolvedEmail, 'UTF-8') : null;
+
+        $existingAttendance = MeetingAttendance::query()
+            ->where('meeting_id', $meeting->id)
+            ->where(function ($query) use ($normalizedIdentifier, $normalizedEmail) {
+                $query->whereRaw('LOWER(identifier) = ?', [$normalizedIdentifier]);
+
+                if ($normalizedEmail) {
+                    $query->orWhereRaw('LOWER(email) = ?', [$normalizedEmail]);
+                }
+            })
+            ->orderBy('signed_at')
+            ->first();
+
+        if ($existingAttendance) {
+            $registeredName = trim((string) ($existingAttendance->full_name ?? ''));
+            $registeredTime = $existingAttendance->signed_at?->format('H:i');
+            $message = $registeredName !== ''
+                ? 'Vous êtes déjà inscrit à cette réunion : ' . $registeredName
+                : 'Vous êtes déjà inscrit à cette réunion';
+
+            if ($registeredTime) {
+                $message .= ' à ' . $registeredTime;
+            }
+
+            $message .= '.';
+
+            return back()
+                ->withInput()
+                ->with('error', $message);
+        }
 
         $name = $participant?->full_name ?: ($validated['full_name'] ?? null);
         if (!$name && $participant?->user) {
@@ -95,22 +129,21 @@ class MeetingAttendanceController extends Controller
             }
         }
 
-        MeetingAttendance::updateOrCreate(
-            ['meeting_id' => $meeting->id, 'identifier' => $identifier],
-            [
-                'meeting_participant_id' => $participant?->id,
-                'full_name' => $name,
-                'email' => $participant?->email ?: ($validated['email'] ?? null),
-                'phone' => $validated['phone'] ?? null,
-                'job_title' => $validated['job_title'] ?? null,
-                'organization' => $validated['organization'] ?? null,
-                'attendance_status' => now()->greaterThan($meeting->starts_at) ? 'present' : 'present',
-                'signed_at' => now(),
-                'signature_path' => $signaturePath,
-            ]
-        );
+        MeetingAttendance::create([
+            'meeting_id' => $meeting->id,
+            'meeting_participant_id' => $participant?->id,
+            'identifier' => $identifier,
+            'full_name' => $name,
+            'email' => $resolvedEmail !== '' ? $resolvedEmail : null,
+            'phone' => $validated['phone'] ?? null,
+            'job_title' => $validated['job_title'] ?? null,
+            'organization' => $validated['organization'] ?? null,
+            'attendance_status' => 'present',
+            'signed_at' => now(),
+            'signature_path' => $signaturePath,
+        ]);
 
-        return back()->with('success', 'Présence enregistrée avec succès.');
+        return back()->with('success', 'Inscription avec succès.');
     }
 
     public function lookupByToken(Request $request, string $token)
@@ -122,10 +155,34 @@ class MeetingAttendanceController extends Controller
             return response()->json(null);
         }
 
-        // Search in previous attendances for this identifier
-        $attendance = MeetingAttendance::where('identifier', $identifier)->latest()->first();
+        $normalizedIdentifier = mb_strtolower($identifier, 'UTF-8');
+
+        // Search in current meeting attendances for this identifier or email
+        $attendance = MeetingAttendance::query()
+            ->where('meeting_id', $meeting->id)
+            ->where(function ($query) use ($normalizedIdentifier) {
+                $query->whereRaw('LOWER(identifier) = ?', [$normalizedIdentifier])
+                    ->orWhereRaw('LOWER(email) = ?', [$normalizedIdentifier]);
+            })
+            ->orderBy('signed_at')
+            ->first();
+
         if ($attendance) {
+            $registeredName = trim((string) ($attendance->full_name ?? ''));
+            $registeredTime = $attendance->signed_at?->format('H:i');
+            $message = $registeredName !== ''
+                ? 'Vous êtes déjà inscrit à cette réunion : ' . $registeredName
+                : 'Vous êtes déjà inscrit à cette réunion';
+
+            if ($registeredTime) {
+                $message .= ' à ' . $registeredTime;
+            }
+
+            $message .= '.';
+
             return response()->json([
+                'already_registered' => true,
+                'message'      => $message,
                 'full_name'    => $attendance->full_name,
                 'email'        => $attendance->email,
                 'phone'        => $attendance->phone,
@@ -145,6 +202,7 @@ class MeetingAttendanceController extends Controller
 
         if ($participant) {
             return response()->json([
+                'already_registered' => false,
                 'full_name'    => $participant->full_name ?: $participant->user?->name,
                 'email'        => $participant->email ?: $participant->user?->email,
                 'phone'        => null,

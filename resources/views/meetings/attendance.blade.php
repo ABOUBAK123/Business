@@ -234,6 +234,7 @@
     @if(session('error'))
     <div class="mt-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm qr-alert qr-alert-error">{{ session('error') }}</div>
     @endif
+    <div id="lookup-error" class="mt-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm qr-alert qr-alert-error hidden qr-hidden"></div>
 
     <form method="POST" class="mt-4 space-y-4 qr-form">
         @csrf
@@ -287,6 +288,7 @@
     const lookupUrl = '{{ route("meetings.qr.lookup", $meeting->qr_token) }}';
     const identifierInput = document.getElementById('field-identifier');
     const badge = document.getElementById('autofill-badge');
+    const lookupError = document.getElementById('lookup-error');
     const fields = ['full_name', 'email', 'phone', 'job_title', 'organization'];
     const signatureCanvas = document.getElementById('signature-pad');
     const signatureClear = document.getElementById('signature-clear');
@@ -357,6 +359,18 @@
         signatureData.value = '';
     }
 
+    function showLookupError(message) {
+        if (!lookupError) return;
+        lookupError.textContent = message;
+        lookupError.classList.remove('hidden', 'qr-hidden');
+    }
+
+    function hideLookupError() {
+        if (!lookupError) return;
+        lookupError.textContent = '';
+        lookupError.classList.add('hidden', 'qr-hidden');
+    }
+
     function fill(data) {
         fields.forEach(function (key) {
             const el = document.getElementById('field-' + key);
@@ -378,14 +392,25 @@
     identifierInput.addEventListener('input', function () {
         clearTimeout(debounceTimer);
         badge.classList.add('hidden', 'qr-hidden');
+        hideLookupError();
         const val = this.value.trim();
-        if (val.length < 3) { return; }
+        if (val.length < 3) {
+            clear();
+            return;
+        }
 
         debounceTimer = setTimeout(function () {
             fetch(lookupUrl + '?identifier=' + encodeURIComponent(val))
                 .then(function (r) { return r.json(); })
                 .then(function (data) {
-                    if (data) { fill(data); } else { clear(); }
+                    if (data) {
+                        fill(data);
+                        if (data.already_registered) {
+                            showLookupError(data.message || 'Vous êtes déjà inscrit à cette réunion.');
+                        }
+                    } else {
+                        clear();
+                    }
                 })
                 .catch(function () {});
         }, 400);
@@ -404,7 +429,11 @@
     signatureCanvas.addEventListener('touchcancel', stopDrawing);
     signatureClear.addEventListener('click', clearSignature);
 
-    form.addEventListener('submit', function () {
+    form.addEventListener('submit', function (event) {
+        if (lookupError && !lookupError.classList.contains('hidden')) {
+            event.preventDefault();
+            return;
+        }
         if (hasSignature) {
             signatureData.value = signatureCanvas.toDataURL('image/png');
         }

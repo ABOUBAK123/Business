@@ -210,6 +210,262 @@ class AdminController extends Controller
         abort_unless($this->personnelScopeAllows($administrationType, $administrationId, $adminScope), 403, $message);
     }
 
+    private function normalizeProfileName(?string $name): string
+    {
+        $normalized = strtoupper(trim(str_replace(['_', '-'], ' ', Str::ascii((string) $name))));
+        return preg_replace('/\s+/', ' ', $normalized) ?? $normalized;
+    }
+
+    private function isDirectorOrGeneralProfile(?string $profileName): bool
+    {
+        $n = $this->normalizeProfileName($profileName);
+        if ($n === '') {
+            return false;
+        }
+
+        if (str_contains($n, 'SOUS DIRECTEUR')) {
+            return false;
+        }
+
+        return str_contains($n, 'DIRECTEUR');
+    }
+
+    private function isDrhAdministration(?string $type, ?string $administrationId): bool
+    {
+        if (!$type || !$administrationId) {
+            return false;
+        }
+
+        $admin = $type === 'recipient'
+            ? RecipientAdministration::find($administrationId)
+            : IssuingAdministration::find($administrationId);
+
+        $label = $this->normalizeProfileName($admin?->name ?? '');
+        return str_contains($label, 'RESSOURCES HUMAINES') || str_contains($label, 'DRH');
+    }
+
+    private function resolveDrhScope(string $preferredType): ?array
+    {
+        $preferredType = $this->normalizeAdministrationType($preferredType);
+
+        if ($preferredType === 'recipient') {
+            $recipient = RecipientAdministration::query()->get()->first(function ($row) {
+                $name = $this->normalizeProfileName($row->name ?? '');
+                return str_contains($name, 'RESSOURCES HUMAINES') || str_contains($name, 'DRH');
+            });
+            if ($recipient) {
+                return ['type' => 'recipient', 'id' => $recipient->id];
+            }
+        }
+
+        $issuer = IssuingAdministration::query()->get()->first(function ($row) {
+            $name = $this->normalizeProfileName($row->name ?? '');
+            return str_contains($name, 'RESSOURCES HUMAINES') || str_contains($name, 'DRH');
+        });
+        if ($issuer) {
+            return ['type' => 'emitter', 'id' => $issuer->id];
+        }
+
+        if ($preferredType === 'emitter') {
+            $recipient = RecipientAdministration::query()->get()->first(function ($row) {
+                $name = $this->normalizeProfileName($row->name ?? '');
+                return str_contains($name, 'RESSOURCES HUMAINES') || str_contains($name, 'DRH');
+            });
+            if ($recipient) {
+                return ['type' => 'recipient', 'id' => $recipient->id];
+            }
+        }
+
+        return null;
+    }
+
+    private function resolveDirectorUserForScope(string $scopeType, string $scopeId): ?User
+    {
+        $users = UserDirectionAssignment::query()
+            ->where('direction_scope_type', $scopeType)
+            ->where('direction_scope_id', $scopeId)
+            ->with('user.profile')
+            ->get()
+            ->map(fn($a) => $a->user)
+            ->filter()
+            ->unique('id')
+            ->values();
+
+        if ($users->isEmpty()) {
+            return null;
+        }
+
+        $directors = $users->filter(function (User $u) {
+            return $this->isDirectorOrGeneralProfile($u->profile?->name);
+        })->values();
+
+        if ($directors->isEmpty()) {
+            return null;
+        }
+
+        return $directors->sortByDesc(function (User $u) {
+            $p = $this->normalizeProfileName($u->profile?->name);
+            return str_contains($p, 'GENERAL') ? 10 : 1;
+        })->first();
+    }
+
+    private function resolveSuperiorUserId(User $user, PersonnelEmployee $referenceEmployee): ?string
+    {
+        if (empty($user->email)) {
+            return null;
+        }
+
+        $employee = PersonnelEmployee::query()
+            ->where('administration_type', $referenceEmployee->administration_type)
+            ->where('administration_id', $referenceEmployee->administration_id)
+            ->where('email', $user->email)
+            ->first();
+
+        if (!$employee || !$employee->user_id || $employee->user_id === $user->id) {
+            return null;
+        }
+
+        return (string) $employee->user_id;
+    }
+
+    private function buildAnnualApprovalWorkflow(PersonnelEmployee $employee): array
+    {
+        $steps = [];
+        $visited = [];
+        $currentApproverId = $employee->user_id;
+        $requiresDirector = true;
+
+        for ($i = 0; $i < 8 && $currentApproverId; $i++) {
+            if (isset($visited[$currentApproverId])) {
+                break;
+            }
+            $visited[$currentApproverId] = true;
+
+            $approver = User::with('profile')->find($currentApproverId);
+            if (!$approver) {
+                break;
+            }
+
+            $profileName = $approver->profile?->name;
+            $steps[] = [
+                'user_id' => $approver->id,
+                'profile' => (string) $profileName,
+                'kind' => 'hierarchy',
+            ];
+
+            if ($this->isDirectorOrGeneralProfile($profileName)) {
+                if (!$this->isDrhAdministration($employee->administration_type, $employee->administration_id)) {
+                    $drhScope = $this->resolveDrhScope($employee->administration_type);
+                    if ($drhScope) {
+                        $drhDirector = $this->resolveDirectorUserForScope($drhScope['type'], $drhScope['id']);
+                        if ($drhDirector && $drhDirector->id !== $approver->id && !isset($visited[$drhDirector->id])) {
+                            $steps[] = [
+                                'user_id' => $drhDirector->id,
+                                'profile' => (string) ($drhDirector->profile?->name ?? ''),
+                                'kind' => 'drh_final',
+                            ];
+                        }
+                    }
+                }
+                break;
+            }
+
+            $currentApproverId = $this->resolveSuperiorUserId($approver, $employee);
+        }
+
+        if ($requiresDirector && !empty($steps)) {
+            $hasDirector = collect($steps)->contains(function (array $step) {
+                return $this->isDirectorOrGeneralProfile($step['profile'] ?? null);
+            });
+            if (!$hasDirector) {
+                return [];
+            }
+        }
+
+        if (empty($steps)) {
+            $drhScope = $this->resolveDrhScope($employee->administration_type);
+            if ($drhScope) {
+                $drhDirector = $this->resolveDirectorUserForScope($drhScope['type'], $drhScope['id']);
+                if ($drhDirector) {
+                    $steps[] = [
+                        'user_id' => $drhDirector->id,
+                        'profile' => (string) ($drhDirector->profile?->name ?? ''),
+                        'kind' => 'drh_final',
+                    ];
+                }
+            }
+        }
+
+        return $steps;
+    }
+
+    private function parseAnnualSegmentsFromRequest(Request $request): array
+    {
+        $raw = trim((string) $request->input('annual_segments_json', ''));
+        if ($raw === '') {
+            return [];
+        }
+
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
+            throw ValidationException::withMessages([
+                'annual_segments_json' => 'Le format des sections de congé est invalide.',
+            ]);
+        }
+
+        $segments = [];
+        foreach ($decoded as $index => $segment) {
+            if (!is_array($segment)) {
+                continue;
+            }
+
+            $start = trim((string) ($segment['start_date'] ?? ''));
+            $end = trim((string) ($segment['end_date'] ?? ''));
+            if ($start === '' || $end === '') {
+                continue;
+            }
+
+            try {
+                $startDate = Carbon::parse($start)->startOfDay();
+                $endDate = Carbon::parse($end)->startOfDay();
+            } catch (\Throwable $e) {
+                throw ValidationException::withMessages([
+                    'annual_segments_json' => 'Une section contient une date invalide.',
+                ]);
+            }
+
+            if ($endDate->lt($startDate)) {
+                throw ValidationException::withMessages([
+                    'annual_segments_json' => 'La date de fin d\'une section doit être postérieure à sa date de début.',
+                ]);
+            }
+
+            $segments[] = [
+                'index' => (int) $index,
+                'start_date' => $startDate->toDateString(),
+                'end_date' => $endDate->toDateString(),
+                'days' => $startDate->diffInDays($endDate) + 1,
+            ];
+        }
+
+        if (count($segments) > 4) {
+            throw ValidationException::withMessages([
+                'annual_segments_json' => 'Le congé annuel ne peut pas dépasser 4 sections.',
+            ]);
+        }
+
+        usort($segments, fn($a, $b) => strcmp($a['start_date'], $b['start_date']));
+        for ($i = 1; $i < count($segments); $i++) {
+            if ($segments[$i]['start_date'] <= $segments[$i - 1]['end_date']) {
+                throw ValidationException::withMessages([
+                    'annual_segments_json' => 'Les sections de congé se chevauchent.',
+                ]);
+            }
+        }
+
+        return $segments;
+    }
+
     private function filterPersonnelActivities($activities, ?array $adminScope)
     {
         if (!$adminScope) {
@@ -310,6 +566,7 @@ class AdminController extends Controller
         $selectedPersonnelEmployee = null;
         $personnelLeaveTypes = collect();
         $personnelLeaveRequests = collect();
+        $personnelLeaveApprovers = collect();
         $personnelTrainings = collect();
         $personnelTrainingEnrollments = collect();
         $personnelEmployeeSkills = collect();
@@ -506,6 +763,21 @@ class AdminController extends Controller
                 $leaveRequestQuery = PersonnelLeaveRequest::with(['employee', 'leaveType', 'approvedBy'])->latest();
                 $this->applyPersonnelScope($leaveRequestQuery, $adminScope);
                 $personnelLeaveRequests = $leaveRequestQuery->limit(12)->get();
+
+                $currentApproverIds = $personnelLeaveRequests
+                    ->map(fn($r) => data_get($r->metadata, 'approval_workflow.current_approver_user_id'))
+                    ->filter()
+                    ->unique()
+                    ->values();
+
+                if ($currentApproverIds->isNotEmpty()) {
+                    $personnelLeaveApprovers = User::query()
+                        ->with('profile')
+                        ->whereIn('id', $currentApproverIds)
+                        ->get()
+                        ->keyBy('id');
+                }
+
                 $personnelStats['leaveRequests'] = (clone $this->applyPersonnelScope(PersonnelLeaveRequest::query(), $adminScope))->count();
                 $personnelStats['pendingLeaveRequests'] = (clone $this->applyPersonnelScope(PersonnelLeaveRequest::query(), $adminScope))
                     ->where('status', 'pending')
@@ -640,7 +912,7 @@ class AdminController extends Controller
             'allUsers', 'shareMap', 'onlyofficeUrl', 'onlyofficeJwt', 'appPublicUrl', 'dirAssignments',
             'sigProviders', 'courrierArchivalDays', 'adminScope',
             'personnelEmployees', 'personnelEmployeeDirectory', 'selectedPersonnelEmployee', 'personnelStats',
-            'personnelLeaveTypes', 'personnelLeaveRequests', 'personnelTrainings', 'personnelTrainingEnrollments',
+            'personnelLeaveTypes', 'personnelLeaveRequests', 'personnelLeaveApprovers', 'personnelTrainings', 'personnelTrainingEnrollments',
             'personnelEmployeeSkills', 'personnelGoals', 'personnelPerformanceReviews', 'personnelCareerEvents', 'personnelRecentActivity'
         ));
     }
@@ -673,6 +945,20 @@ class AdminController extends Controller
         ]);
 
         $this->ensurePersonnelAdministrationExists($validated['administration_type'], $validated['administration_id']);
+
+        $metadata = array_filter([
+            'children_count' => $request->input('meta_children_count'),
+            'direction_generale' => $request->input('meta_direction_generale'),
+            'direction_centrale' => $request->input('meta_direction_centrale'),
+            'sous_direction' => $request->input('meta_sous_direction'),
+            'service' => $request->input('meta_service'),
+            'categorie' => $request->input('meta_categorie'),
+            'grade' => $request->input('meta_grade'),
+            'lieu_travail' => $request->input('meta_lieu_travail'),
+        ], fn($v) => $v !== null && $v !== '');
+        if (!empty($metadata)) {
+            $validated['metadata'] = $metadata;
+        }
 
         PersonnelEmployee::create($validated);
 
@@ -711,6 +997,18 @@ class AdminController extends Controller
 
         $this->abortIfPersonnelEmployeeOutsideScope($employee);
         $this->ensurePersonnelAdministrationExists($validated['administration_type'], $validated['administration_id']);
+
+        $metadata = array_filter([
+            'children_count' => $request->input('meta_children_count'),
+            'direction_generale' => $request->input('meta_direction_generale'),
+            'direction_centrale' => $request->input('meta_direction_centrale'),
+            'sous_direction' => $request->input('meta_sous_direction'),
+            'service' => $request->input('meta_service'),
+            'categorie' => $request->input('meta_categorie'),
+            'grade' => $request->input('meta_grade'),
+            'lieu_travail' => $request->input('meta_lieu_travail'),
+        ], fn($v) => $v !== null && $v !== '');
+        $validated['metadata'] = array_merge($employee->metadata ?? [], $metadata);
 
         $employee->update($validated);
 
@@ -1016,6 +1314,36 @@ class AdminController extends Controller
         }
 
         $requestedDays = $validated['requested_days'] ?? (Carbon::parse($validated['start_date'])->diffInDays(Carbon::parse($validated['end_date'])) + 1);
+        $metadata = [];
+
+        $isAnnualLeave = strtoupper((string) ($leaveType->code ?? '')) === 'ANNUAL';
+        if ($isAnnualLeave) {
+            $segments = $this->parseAnnualSegmentsFromRequest($request);
+            if (!empty($segments)) {
+                $validated['start_date'] = $segments[0]['start_date'];
+                $validated['end_date'] = $segments[count($segments) - 1]['end_date'];
+                $requestedDays = collect($segments)->sum('days');
+                $metadata['annual_segments'] = $segments;
+                $metadata['annual_segment_count'] = count($segments);
+            }
+
+            $workflowSteps = $this->buildAnnualApprovalWorkflow($employee);
+            if (empty($workflowSteps)) {
+                throw ValidationException::withMessages([
+                    'employee_id' => 'Aucun valideur hiérarchique trouvé pour ce congé annuel. Vérifiez le supérieur hiérarchique.',
+                ]);
+            }
+
+            $metadata['approval_workflow'] = [
+                'type' => 'annual_hierarchical',
+                'steps' => $workflowSteps,
+                'current_step_index' => 0,
+                'current_approver_user_id' => $workflowSteps[0]['user_id'] ?? null,
+                'history' => [],
+                'certificate_status' => 'pending_validation',
+            ];
+        }
+
         $payload = [
             'employee_id' => $employee->id,
             'leave_type_id' => $leaveType->id,
@@ -1029,6 +1357,7 @@ class AdminController extends Controller
             'status' => 'pending',
             'reason' => $validated['reason'] ?? null,
             'unexpected_absence' => $request->boolean('unexpected_absence'),
+            'metadata' => !empty($metadata) ? $metadata : null,
         ];
 
         if ($request->hasFile('attachment')) {
@@ -1044,10 +1373,16 @@ class AdminController extends Controller
 
         PersonnelLeaveRequest::create($payload);
 
-        return redirect()->route('admin.index', [
+        $redirectParams = [
             'tab' => 'personnel',
-            'personnel_tab' => $request->input('personnel_tab', 'leave'),
-        ])->with('success', 'Demande de congé enregistrée.');
+            'personnel_tab' => $request->input('personnel_tab', 'agent-space'),
+            'agent_space_tab' => $request->input('agent_space_tab', 'leave'),
+        ];
+        if ($request->input('selected_employee')) {
+            $redirectParams['selected_employee'] = $request->input('selected_employee');
+        }
+
+        return redirect()->route('admin.index', $redirectParams)->with('success', 'Demande de congé enregistrée.');
     }
 
     public function updatePersonnelLeaveRequestStatus(Request $request, PersonnelLeaveRequest $leaveRequest)
@@ -1064,6 +1399,70 @@ class AdminController extends Controller
             $leaveRequest->administration_id,
             'Cette demande est hors de votre périmètre d\'administration.'
         );
+
+        $leaveRequest->loadMissing(['leaveType', 'employee']);
+        $isAnnualLeave = strtoupper((string) ($leaveRequest->leaveType?->code ?? '')) === 'ANNUAL';
+
+        if ($isAnnualLeave) {
+            $metadata = is_array($leaveRequest->metadata) ? $leaveRequest->metadata : [];
+            $workflow = is_array($metadata['approval_workflow'] ?? null) ? $metadata['approval_workflow'] : null;
+
+            if ($workflow && !empty($workflow['steps']) && in_array($validated['status'], ['approved', 'rejected', 'pending', 'cancelled'], true)) {
+                $steps = collect($workflow['steps'])->filter(fn($s) => !empty($s['user_id']))->values()->all();
+                $currentIndex = (int) ($workflow['current_step_index'] ?? 0);
+                $currentApproverId = (string) ($workflow['current_approver_user_id'] ?? ($steps[$currentIndex]['user_id'] ?? ''));
+                $actor = auth()->user();
+                $canBypass = $actor && $actor->role === 'admin' && !$actor->profile_id;
+
+                if (!$canBypass && $currentApproverId !== '' && (string) $actor?->id !== $currentApproverId) {
+                    throw ValidationException::withMessages([
+                        'status' => 'Seul le valideur courant peut traiter cette demande.',
+                    ]);
+                }
+
+                $history = is_array($workflow['history'] ?? null) ? $workflow['history'] : [];
+                $history[] = [
+                    'acted_by_user_id' => $actor?->id,
+                    'acted_at' => now()->toDateTimeString(),
+                    'status' => $validated['status'],
+                    'comment' => $validated['comment'] ?? null,
+                    'step_index' => $currentIndex,
+                    'step_profile' => $steps[$currentIndex]['profile'] ?? null,
+                ];
+
+                $workflow['history'] = $history;
+
+                if ($validated['status'] === 'approved') {
+                    if ($currentIndex < count($steps) - 1) {
+                        $nextIndex = $currentIndex + 1;
+                        $workflow['current_step_index'] = $nextIndex;
+                        $workflow['current_approver_user_id'] = $steps[$nextIndex]['user_id'];
+                        $metadata['approval_workflow'] = $workflow;
+                        $leaveRequest->metadata = $metadata;
+                        $leaveRequest->status = 'pending';
+                        $leaveRequest->approved_at = null;
+                        $leaveRequest->rejected_at = null;
+                        $leaveRequest->approved_by_user_id = null;
+                        $leaveRequest->approved_days = null;
+                        $leaveRequest->manager_comments = $validated['comment'] ?? $leaveRequest->manager_comments;
+                        $leaveRequest->save();
+
+                        return redirect()->route('admin.index', [
+                            'tab' => 'personnel',
+                            'personnel_tab' => $request->input('personnel_tab', 'leave'),
+                        ])->with('success', 'Validation enregistrée et demande transmise au niveau suivant.');
+                    }
+
+                    $workflow['certificate_status'] = 'pending_generation';
+                    $metadata['approval_workflow'] = $workflow;
+                    $leaveRequest->metadata = $metadata;
+                } else {
+                    $workflow['certificate_status'] = 'not_applicable';
+                    $metadata['approval_workflow'] = $workflow;
+                    $leaveRequest->metadata = $metadata;
+                }
+            }
+        }
 
         $leaveRequest->status = $validated['status'];
         $leaveRequest->hr_comments = $validated['comment'] ?? $leaveRequest->hr_comments;

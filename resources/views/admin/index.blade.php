@@ -339,106 +339,167 @@ $_oc = [
       @endif
     </div>
 
-    <form method="POST" action="{{ $editingPersonnel ? route('admin.personnel.employees.update', $editingPersonnel) : route('admin.personnel.employees.store') }}" class="space-y-4">
+    @php $empMeta = $editingPersonnel?->metadata ?? []; @endphp
+    <form method="POST" action="{{ $editingPersonnel ? route('admin.personnel.employees.update', $editingPersonnel) : route('admin.personnel.employees.store') }}" class="space-y-6">
       @csrf
       @if($editingPersonnel)
         @method('PUT')
       @endif
       <input type="hidden" name="personnel_tab" value="employees">
 
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_first_name') }}</label>
-          <input type="text" name="first_name" required value="{{ old('first_name', $editingPersonnel->first_name ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
+      {{-- ── Section Informations Personnelles ── --}}
+      <div>
+        <h5 class="text-sm font-bold text-gray-600 uppercase tracking-wide mb-3 pb-2 border-b border-gray-100">Informations Personnelles</h5>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Nom <span class="text-red-500">*</span></label>
+            <input type="text" name="last_name" required value="{{ old('last_name', $editingPersonnel->last_name ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Prénom <span class="text-red-500">*</span></label>
+            <input type="text" name="first_name" required value="{{ old('first_name', $editingPersonnel->first_name ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Date de naissance</label>
+            <input type="date" name="birth_date" value="{{ old('birth_date', optional($editingPersonnel?->birth_date)->format('Y-m-d')) }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Lieu de naissance</label>
+            <input type="text" name="birth_place" value="{{ old('birth_place', $editingPersonnel->birth_place ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Téléphone</label>
+            <input type="text" name="phone" value="{{ old('phone', $editingPersonnel->phone ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Email <span class="text-red-500">*</span></label>
+            <input type="email" name="email" value="{{ old('email', $editingPersonnel->email ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Adresse</label>
+            <textarea name="address" rows="3" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-teal-400">{{ old('address', $editingPersonnel->address ?? '') }}</textarea>
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Situation familiale</label>
+            <select name="marital_status" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+              @foreach(['Célibataire', 'Marié(e)', 'Divorcé(e)', 'Veuf/Veuve', 'Union libre'] as $ms)
+              <option value="{{ $ms }}" {{ old('marital_status', $editingPersonnel->marital_status ?? '') === $ms ? 'selected' : '' }}>{{ $ms }}</option>
+              @endforeach
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Nombre d'enfants</label>
+            <input type="number" name="meta_children_count" min="0" value="{{ old('meta_children_count', $empMeta['children_count'] ?? 0) }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Personne à contacter en urgence</label>
+            <input type="text" name="emergency_contact_name" value="{{ old('emergency_contact_name', $editingPersonnel->emergency_contact_name ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Téléphone urgence</label>
+            <input type="text" name="emergency_contact_phone" value="{{ old('emergency_contact_phone', $editingPersonnel->emergency_contact_phone ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+          </div>
         </div>
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_last_name') }}</label>
-          <input type="text" name="last_name" required value="{{ old('last_name', $editingPersonnel->last_name ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
-        </div>
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_employee_number') }}</label>
-          <input type="text" name="employee_number" value="{{ old('employee_number', $editingPersonnel->employee_number ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
-        </div>
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_job_title') }}</label>
-          <input type="text" name="job_title" value="{{ old('job_title', $editingPersonnel->job_title ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
-        </div>
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_email') }}</label>
-          <input type="email" name="email" value="{{ old('email', $editingPersonnel->email ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
-        </div>
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_phone') }}</label>
-          <input type="text" name="phone" value="{{ old('phone', $editingPersonnel->phone ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
-        </div>
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_marital_status') }}</label>
-          <input type="text" name="marital_status" value="{{ old('marital_status', $editingPersonnel->marital_status ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
-        </div>
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">Date d’embauche</label>
-          <input type="date" name="hire_date" value="{{ old('hire_date', optional($editingPersonnel?->hire_date)->format('Y-m-d')) }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
-        </div>
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_employment_status') }}</label>
-          <select name="employment_status" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
-            @foreach(['active', 'probation', 'suspended', 'inactive'] as $empStatus)
-            <option value="{{ $empStatus }}" {{ old('employment_status', $editingPersonnel->employment_status ?? 'active') === $empStatus ? 'selected' : '' }}>{{ __('personnel.ui.employees.status_' . $empStatus) }}</option>
-            @endforeach
-          </select>
-        </div>
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_superior') }}</label>
-          <select name="user_id" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
-            <option value="">{{ __('personnel.ui.employees.form_no_superior') }}</option>
-            @foreach($allUsers as $u)
-            <option value="{{ $u->id }}" {{ old('user_id', $editingPersonnel->user_id ?? '') === $u->id ? 'selected' : '' }}>{{ $u->name }} - {{ $u->email }}</option>
-            @endforeach
-          </select>
-        </div>
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_admin_type') }}</label>
-          <select name="administration_type" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
-            <option value="emitter" {{ old('administration_type', $editingPersonnel->administration_type ?? ($adminScope['type'] ?? 'emitter')) === 'emitter' ? 'selected' : '' }}>{{ __('personnel.ui.employees.admin_emitter') }}</option>
-            <option value="recipient" {{ old('administration_type', $editingPersonnel->administration_type ?? ($adminScope['type'] ?? 'emitter')) === 'recipient' ? 'selected' : '' }}>{{ __('personnel.ui.employees.admin_recipient') }}</option>
-          </select>
-        </div>
-        <div class="md:col-span-2">
-          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_administration') }}</label>
-          <select name="administration_id" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
-            <option value="">{{ __('personnel.ui.employees.form_select_admin') }}</option>
-            @foreach($emitters as $e)
-            <option value="{{ $e->id }}" {{ old('administration_id', $editingPersonnel->administration_id ?? ($adminScope['id'] ?? '')) === $e->id ? 'selected' : '' }}>{{ $e->name }} {{ __('personnel.ui.employees.admin_emitter_bracket') }}</option>
-            @endforeach
-            @foreach($recipients as $r)
-            <option value="{{ $r->id }}" {{ old('administration_id', $editingPersonnel->administration_id ?? ($adminScope['id'] ?? '')) === $r->id ? 'selected' : '' }}>{{ $r->name }} {{ __('personnel.ui.employees.admin_recipient_bracket') }}</option>
-            @endforeach
-          </select>
-        </div>
-        <div class="md:col-span-2">
-          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_sub_entity') }}</label>
-          <select name="sub_entity_id" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
-            <option value="">{{ __('personnel.ui.employees.form_no_entity') }}</option>
-            @foreach($subEntities as $subEntity)
-            <option value="{{ $subEntity->id }}" {{ old('sub_entity_id', $editingPersonnel->sub_entity_id ?? '') === $subEntity->id ? 'selected' : '' }}>{{ $subEntity->name }}</option>
-            @endforeach
-          </select>
-        </div>
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">Contact d’urgence</label>
-          <input type="text" name="emergency_contact_name" value="{{ old('emergency_contact_name', $editingPersonnel->emergency_contact_name ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
-        </div>
-        <div>
-          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_emergency_phone') }}</label>
-          <input type="text" name="emergency_contact_phone" value="{{ old('emergency_contact_phone', $editingPersonnel->emergency_contact_phone ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">
-        </div>
-        <div class="md:col-span-2">
-          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_address') }}</label>
-          <textarea name="address" rows="2" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">{{ old('address', $editingPersonnel->address ?? '') }}</textarea>
-        </div>
-        <div class="md:col-span-2">
-          <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_notes') }}</label>
-          <textarea name="notes" rows="3" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm">{{ old('notes', $editingPersonnel->notes ?? '') }}</textarea>
+      </div>
+
+      {{-- ── Section Informations Professionnelles ── --}}
+      <div>
+        <h5 class="text-sm font-bold text-gray-600 uppercase tracking-wide mb-3 pb-2 border-b border-gray-100">Informations Professionnelles</h5>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Matricule <span class="text-red-500">*</span></label>
+            <input type="text" name="employee_number" value="{{ old('employee_number', $editingPersonnel->employee_number ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Direction Générale</label>
+            <input type="text" name="meta_direction_generale" value="{{ old('meta_direction_generale', $empMeta['direction_generale'] ?? '') }}" placeholder="Sélectionner" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Direction Centrale</label>
+            <input type="text" name="meta_direction_centrale" value="{{ old('meta_direction_centrale', $empMeta['direction_centrale'] ?? '') }}" placeholder="Sélectionner" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Sous-Direction</label>
+            <input type="text" name="meta_sous_direction" value="{{ old('meta_sous_direction', $empMeta['sous_direction'] ?? '') }}" placeholder="Sélectionner" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Service</label>
+            <input type="text" name="meta_service" value="{{ old('meta_service', $empMeta['service'] ?? '') }}" placeholder="Sélectionner" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Catégorie</label>
+            <select name="meta_categorie" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+              <option value="">Sélectionner</option>
+              @foreach(['A1','A2','B1','B2','C1','C2','D1','D2'] as $cat)
+              <option value="{{ $cat }}" {{ old('meta_categorie', $empMeta['categorie'] ?? '') === $cat ? 'selected' : '' }}>{{ $cat }}</option>
+              @endforeach
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Grade</label>
+            <input type="text" name="meta_grade" value="{{ old('meta_grade', $empMeta['grade'] ?? '') }}" placeholder="Sélectionner" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Emploi</label>
+            <input type="text" name="job_title" value="{{ old('job_title', $editingPersonnel->job_title ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Lieu de Travail</label>
+            <input type="text" name="meta_lieu_travail" value="{{ old('meta_lieu_travail', $empMeta['lieu_travail'] ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Date d'embauche <span class="text-red-500">*</span></label>
+            <input type="date" name="hire_date" value="{{ old('hire_date', optional($editingPersonnel?->hire_date)->format('Y-m-d')) }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_employment_status') }}</label>
+            <select name="employment_status" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+              @foreach(['active', 'probation', 'suspended', 'inactive'] as $empStatus)
+              <option value="{{ $empStatus }}" {{ old('employment_status', $editingPersonnel->employment_status ?? 'active') === $empStatus ? 'selected' : '' }}>{{ __('personnel.ui.employees.status_' . $empStatus) }}</option>
+              @endforeach
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_superior') }}</label>
+            <select name="user_id" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+              <option value="">{{ __('personnel.ui.employees.form_no_superior') }}</option>
+              @foreach($allUsers as $u)
+              <option value="{{ $u->id }}" {{ old('user_id', $editingPersonnel->user_id ?? '') === $u->id ? 'selected' : '' }}>{{ $u->name }} - {{ $u->email }}</option>
+              @endforeach
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_admin_type') }}</label>
+            <select name="administration_type" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+              <option value="emitter" {{ old('administration_type', $editingPersonnel->administration_type ?? ($adminScope['type'] ?? 'emitter')) === 'emitter' ? 'selected' : '' }}>{{ __('personnel.ui.employees.admin_emitter') }}</option>
+              <option value="recipient" {{ old('administration_type', $editingPersonnel->administration_type ?? ($adminScope['type'] ?? 'emitter')) === 'recipient' ? 'selected' : '' }}>{{ __('personnel.ui.employees.admin_recipient') }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_administration') }}</label>
+            <select name="administration_id" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+              <option value="">{{ __('personnel.ui.employees.form_select_admin') }}</option>
+              @foreach($emitters as $e)
+              <option value="{{ $e->id }}" {{ old('administration_id', $editingPersonnel->administration_id ?? ($adminScope['id'] ?? '')) === $e->id ? 'selected' : '' }}>{{ $e->name }} {{ __('personnel.ui.employees.admin_emitter_bracket') }}</option>
+              @endforeach
+              @foreach($recipients as $r)
+              <option value="{{ $r->id }}" {{ old('administration_id', $editingPersonnel->administration_id ?? ($adminScope['id'] ?? '')) === $r->id ? 'selected' : '' }}>{{ $r->name }} {{ __('personnel.ui.employees.admin_recipient_bracket') }}</option>
+              @endforeach
+            </select>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_sub_entity') }}</label>
+            <select name="sub_entity_id" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+              <option value="">{{ __('personnel.ui.employees.form_no_entity') }}</option>
+              @foreach($subEntities as $subEntity)
+              <option value="{{ $subEntity->id }}" {{ old('sub_entity_id', $editingPersonnel->sub_entity_id ?? '') === $subEntity->id ? 'selected' : '' }}>{{ $subEntity->name }}</option>
+              @endforeach
+            </select>
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_notes') }}</label>
+            <textarea name="notes" rows="3" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-teal-400">{{ old('notes', $editingPersonnel->notes ?? '') }}</textarea>
+          </div>
         </div>
       </div>
 
@@ -625,101 +686,673 @@ $_oc = [
   $agentAdminLabel = $agentSpaceEmployee->administration_type === 'recipient'
     ? ($recipients->firstWhere('id', $agentSpaceEmployee->administration_id)?->name ?? '-')
     : ($emitters->firstWhere('id', $agentSpaceEmployee->administration_id)?->name ?? '-');
+  $agentMeta = $agentSpaceEmployee->metadata ?? [];
+  $agentMaritalLabels = [
+    'Célibataire' => 'Célibataire', 'Marié(e)' => 'Marié(e)',
+    'Divorcé(e)' => 'Divorcé(e)', 'Veuf/Veuve' => 'Veuf/Veuve', 'Union libre' => 'Union libre',
+  ];
 @endphp
-<div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
-  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-    <h4 class="text-base font-bold text-gray-800 mb-4">{{ __('personnel.ui.agent_space.profile_identity_title') }}</h4>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-      <div class="rounded-xl border border-gray-200 px-4 py-3">
-        <div class="text-xs text-gray-500 mb-1">{{ __('personnel.ui.agent_space.field_employee_number') }}</div>
-        <div class="font-semibold text-gray-800">{{ $agentSpaceEmployee->employee_number ?: 'N/A' }}</div>
-      </div>
-      <div class="rounded-xl border border-gray-200 px-4 py-3">
-        <div class="text-xs text-gray-500 mb-1">{{ __('personnel.ui.agent_space.field_job_title') }}</div>
-        <div class="font-semibold text-gray-800">{{ $agentSpaceEmployee->job_title ?: '-' }}</div>
-      </div>
-      <div class="rounded-xl border border-gray-200 px-4 py-3">
-        <div class="text-xs text-gray-500 mb-1">{{ __('personnel.ui.agent_space.field_hire_date') }}</div>
-        <div class="font-semibold text-gray-800">{{ optional($agentSpaceEmployee->hire_date)->format('d/m/Y') ?: '-' }}</div>
-      </div>
-      <div class="rounded-xl border border-gray-200 px-4 py-3">
-        <div class="text-xs text-gray-500 mb-1">{{ __('personnel.ui.agent_space.field_status') }}</div>
-        <div class="font-semibold text-gray-800">{{ __('personnel.ui.statuses.' . ($agentSpaceEmployee->employment_status ?: 'active')) }}</div>
-      </div>
-      <div class="rounded-xl border border-gray-200 px-4 py-3 md:col-span-2">
-        <div class="text-xs text-gray-500 mb-1">{{ __('personnel.ui.agent_space.field_administration') }}</div>
-        <div class="font-semibold text-gray-800">{{ $agentAdminLabel }}</div>
-      </div>
-      <div class="rounded-xl border border-gray-200 px-4 py-3">
-        <div class="text-xs text-gray-500 mb-1">{{ __('personnel.ui.agent_space.field_email') }}</div>
-        <div class="font-semibold text-gray-800">{{ $agentSpaceEmployee->email ?: '-' }}</div>
-      </div>
-      <div class="rounded-xl border border-gray-200 px-4 py-3">
-        <div class="text-xs text-gray-500 mb-1">{{ __('personnel.ui.agent_space.field_phone') }}</div>
-        <div class="font-semibold text-gray-800">{{ $agentSpaceEmployee->phone ?: '-' }}</div>
-      </div>
-    </div>
-  </section>
 
-  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-    <h4 class="text-base font-bold text-gray-800 mb-3">{{ __('personnel.ui.agent_space.mobility_history_title') }}</h4>
-    <div class="space-y-2">
-      @forelse($agentSpaceCareerHistory as $event)
-      <div class="rounded-xl border border-gray-200 px-3 py-2">
-        <div class="text-sm font-semibold text-gray-800">{{ $event->title }}</div>
-        <div class="text-xs text-gray-500">{{ optional($event->effective_date)->format('d/m/Y') ?: '-' }} · {{ $event->event_type === 'mobility' ? __('personnel.ui.agent_space.event_mutation') : __('personnel.ui.agent_space.event_assignment') }} · {{ __('personnel.ui.statuses.' . $event->status) }}</div>
-      </div>
-      @empty
-      <div class="rounded-xl bg-gray-50 border border-gray-200 px-3 py-3 text-sm text-gray-500">{{ __('personnel.ui.agent_space.no_mobility') }}</div>
-      @endforelse
+{{-- ── Informations Personnelles ── --}}
+<div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-5">
+  <h4 class="text-base font-bold text-gray-800 mb-5">Informations Personnelles</h4>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+    @php
+      $profileFields = [
+        ['Nom', $agentSpaceEmployee->last_name ?: '-'],
+        ['Prénom', $agentSpaceEmployee->first_name ?: '-'],
+        ['Date de naissance', optional($agentSpaceEmployee->birth_date)->format('d/m/Y') ?: '-'],
+        ['Lieu de naissance', $agentSpaceEmployee->birth_place ?: '-'],
+        ['Téléphone', $agentSpaceEmployee->phone ?: '-'],
+        ['Email', $agentSpaceEmployee->email ?: '-'],
+      ];
+    @endphp
+    @foreach($profileFields as [$label, $val])
+    <div>
+      <label class="block text-sm text-gray-500 mb-1">{{ $label }}</label>
+      <div class="w-full border border-gray-200 bg-gray-50 rounded-xl px-4 py-2.5 text-sm font-medium text-gray-800">{{ $val }}</div>
     </div>
-  </section>
+    @endforeach
+
+    <div class="md:col-span-2">
+      <label class="block text-sm text-gray-500 mb-1">Adresse</label>
+      <div class="w-full border border-gray-200 bg-gray-50 rounded-xl px-4 py-3 text-sm font-medium text-gray-800 min-h-[4rem]">{{ $agentSpaceEmployee->address ?: '-' }}</div>
+    </div>
+
+    <div>
+      <label class="block text-sm text-gray-500 mb-1">Situation familiale</label>
+      <div class="w-full border border-gray-200 bg-gray-50 rounded-xl px-4 py-2.5 text-sm font-medium text-gray-800">{{ $agentSpaceEmployee->marital_status ?: 'Célibataire' }}</div>
+    </div>
+    <div>
+      <label class="block text-sm text-gray-500 mb-1">Nombre d'enfants</label>
+      <div class="w-full border border-gray-200 bg-gray-50 rounded-xl px-4 py-2.5 text-sm font-medium text-gray-800">{{ $agentMeta['children_count'] ?? '0' }}</div>
+    </div>
+    <div>
+      <label class="block text-sm text-gray-500 mb-1">Personne à contacter en urgence</label>
+      <div class="w-full border border-gray-200 bg-gray-50 rounded-xl px-4 py-2.5 text-sm font-medium text-gray-800">{{ $agentSpaceEmployee->emergency_contact_name ?: '-' }}</div>
+    </div>
+    <div>
+      <label class="block text-sm text-gray-500 mb-1">Téléphone urgence</label>
+      <div class="w-full border border-gray-200 bg-gray-50 rounded-xl px-4 py-2.5 text-sm font-medium text-gray-800">{{ $agentSpaceEmployee->emergency_contact_phone ?: '-' }}</div>
+    </div>
+  </div>
+</div>
+
+{{-- ── Informations Professionnelles (read-only) ── --}}
+<div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-6 mb-5">
+  <div class="flex items-center justify-between mb-5">
+    <h4 class="text-base font-bold text-gray-800">Informations Professionnelles</h4>
+    <span class="text-xs text-amber-600 font-semibold flex items-center gap-1">
+      <i class="fas fa-lock text-amber-500"></i> Lecture seule - Contactez les RH pour modifications
+    </span>
+  </div>
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div>
+      <label class="block text-sm text-gray-500 mb-1">Matricule <span class="text-red-400">*</span></label>
+      <div class="w-full border border-gray-200 bg-gray-50 rounded-xl px-4 py-2.5 text-sm font-medium text-gray-800">{{ $agentSpaceEmployee->employee_number ?: 'N/A' }}</div>
+    </div>
+    <div>
+      <label class="block text-sm text-gray-500 mb-1">Direction Générale</label>
+      <div class="w-full border border-gray-200 bg-gray-50 rounded-xl px-4 py-2.5 text-sm font-medium text-gray-800">{{ $agentMeta['direction_generale'] ?? '-' }}</div>
+    </div>
+    <div>
+      <label class="block text-sm text-gray-500 mb-1">Direction Centrale</label>
+      <div class="w-full border border-gray-200 bg-gray-50 rounded-xl px-4 py-2.5 text-sm font-medium text-gray-800">{{ $agentMeta['direction_centrale'] ?? '-' }}</div>
+    </div>
+    <div>
+      <label class="block text-sm text-gray-500 mb-1">Sous-Direction</label>
+      <div class="w-full border border-gray-200 bg-gray-50 rounded-xl px-4 py-2.5 text-sm font-medium text-gray-800">{{ $agentMeta['sous_direction'] ?? '-' }}</div>
+    </div>
+    <div>
+      <label class="block text-sm text-gray-500 mb-1">Service</label>
+      <div class="w-full border border-gray-200 bg-gray-50 rounded-xl px-4 py-2.5 text-sm font-medium text-gray-800">{{ $agentMeta['service'] ?? '-' }}</div>
+    </div>
+    <div>
+      <label class="block text-sm text-gray-500 mb-1">Catégorie</label>
+      <div class="w-full border border-gray-200 bg-gray-50 rounded-xl px-4 py-2.5 text-sm font-medium text-gray-800">{{ $agentMeta['categorie'] ?? '-' }}</div>
+    </div>
+    <div>
+      <label class="block text-sm text-gray-500 mb-1">Grade</label>
+      <div class="w-full border border-gray-200 bg-gray-50 rounded-xl px-4 py-2.5 text-sm font-medium text-gray-800">{{ $agentMeta['grade'] ?? '-' }}</div>
+    </div>
+    <div>
+      <label class="block text-sm text-gray-500 mb-1">Emploi</label>
+      <div class="w-full border border-gray-200 bg-gray-50 rounded-xl px-4 py-2.5 text-sm font-medium text-gray-800">{{ $agentSpaceEmployee->job_title ?: '-' }}</div>
+    </div>
+    <div>
+      <label class="block text-sm text-gray-500 mb-1">Lieu de Travail</label>
+      <div class="w-full border border-gray-200 bg-gray-50 rounded-xl px-4 py-2.5 text-sm font-medium text-gray-800">{{ $agentMeta['lieu_travail'] ?? '-' }}</div>
+    </div>
+    <div>
+      <label class="block text-sm text-gray-500 mb-1">Date d'embauche <span class="text-red-400">*</span></label>
+      <div class="w-full border border-gray-200 bg-gray-50 rounded-xl px-4 py-2.5 text-sm font-medium text-gray-800">{{ optional($agentSpaceEmployee->hire_date)->format('d/m/Y') ?: '-' }}</div>
+    </div>
+  </div>
+</div>
+
+{{-- ── Historique mobilité ── --}}
+<div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+  <h4 class="text-base font-bold text-gray-800 mb-3">{{ __('personnel.ui.agent_space.mobility_history_title') }}</h4>
+  <div class="space-y-2">
+    @forelse($agentSpaceCareerHistory as $event)
+    <div class="rounded-xl border border-gray-200 px-3 py-2">
+      <div class="text-sm font-semibold text-gray-800">{{ $event->title }}</div>
+      <div class="text-xs text-gray-500">{{ optional($event->effective_date)->format('d/m/Y') ?: '-' }} · {{ $event->event_type === 'mobility' ? __('personnel.ui.agent_space.event_mutation') : __('personnel.ui.agent_space.event_assignment') }} · {{ __('personnel.ui.statuses.' . $event->status) }}</div>
+    </div>
+    @empty
+    <div class="rounded-xl bg-gray-50 border border-gray-200 px-3 py-3 text-sm text-gray-500">{{ __('personnel.ui.agent_space.no_mobility') }}</div>
+    @endforelse
+  </div>
 </div>
 @elseif($agentSpaceTab === 'leave')
-<div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
-  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-    <h4 class="text-base font-bold text-gray-800 mb-3">{{ __('personnel.ui.agent_space.leave_request_title') }}</h4>
-    @if($personnelLeaveTypes->isEmpty())
-    <div class="rounded-xl bg-amber-50 border border-amber-100 px-4 py-4 text-sm text-amber-800">{{ __('personnel.ui.agent_space.no_leave_types') }}</div>
-    @else
-    <form method="POST" action="{{ route('admin.personnel.leave-requests.store') }}" class="space-y-3">
-      @csrf
-      <input type="hidden" name="personnel_tab" value="agent-space">
-      <input type="hidden" name="agent_space_tab" value="leave">
-      <input type="hidden" name="employee_id" value="{{ $agentSpaceEmployee->id }}">
-      <div>
-        <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.agent_space.leave_type_label') }}</label>
-        <select name="leave_type_id" class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm">
-          <option value="">{{ __('personnel.ui.agent_space.select') }}</option>
-          @foreach($personnelLeaveTypes as $leaveType)
-          <option value="{{ $leaveType->id }}">{{ $leaveType->name }}</option>
-          @endforeach
-        </select>
-      </div>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-        <input type="date" name="start_date" value="{{ old('start_date') }}" class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm">
-        <input type="date" name="end_date" value="{{ old('end_date') }}" class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm">
-      </div>
-      <textarea name="reason" rows="2" placeholder="{{ __('personnel.ui.agent_space.reason_placeholder') }}" class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm">{{ old('reason') }}</textarea>
-      <button type="submit" class="px-4 py-2 bg-[#2453d6] text-white rounded-xl text-sm font-semibold">{{ __('personnel.ui.agent_space.btn_send_request') }}</button>
-    </form>
-    @endif
-  </section>
+@php
+  // Employee-scoped leave types
+  $empLeaveTypes = $personnelLeaveTypes
+    ->where('administration_type', $agentSpaceEmployee->administration_type)
+    ->where('administration_id', $agentSpaceEmployee->administration_id)
+    ->where('is_active', true)
+    ->values();
 
-  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-    <h4 class="text-base font-bold text-gray-800 mb-3">{{ __('personnel.ui.agent_space.recent_requests_title') }}</h4>
-    <div class="space-y-2">
-      @forelse($agentSpaceLeaveRequests as $leaveRequest)
-      <div class="rounded-xl border border-gray-200 px-3 py-2">
-        <div class="text-sm font-semibold text-gray-800">{{ $leaveRequest->leaveType?->name ?? __('personnel.ui.agent_space.deleted_leave_type') }}</div>
-        <div class="text-xs text-gray-500">{{ optional($leaveRequest->start_date)->format('d/m/Y') }} au {{ optional($leaveRequest->end_date)->format('d/m/Y') }} · {{ __('personnel.ui.statuses.' . $leaveRequest->status) }}</div>
-      </div>
-      @empty
-      <div class="rounded-xl bg-gray-50 border border-gray-200 px-3 py-3 text-sm text-gray-500">{{ __('personnel.ui.agent_space.no_leave_requests') }}</div>
-      @endforelse
-    </div>
-  </section>
+  // Annual leave type (code = ANNUAL)
+  $annualLeaveType = $empLeaveTypes->firstWhere('code', 'ANNUAL');
+
+  // Employee leave requests
+  $myLeaveRequests = $agentSpaceLeaveRequests;
+
+  // Annual leave stats (current year)
+  $annualQuota      = $annualLeaveType ? (int) $annualLeaveType->default_days : 0;
+  $annualApproved   = $annualLeaveType
+    ? $myLeaveRequests
+        ->where('leave_type_id', $annualLeaveType->id)
+        ->whereIn('status', ['approved'])
+        ->whereNotNull('start_date')
+        ->filter(fn($r) => optional($r->start_date)->year === now()->year)
+        ->sum(fn($r) => (float) ($r->approved_days ?? $r->requested_days))
+    : 0;
+  $annualPending    = $myLeaveRequests
+    ->where('status', 'pending')
+    ->count();
+  $annualRemaining  = max(0, $annualQuota - $annualApproved);
+
+  // Status badge colours
+  $leaveBadge = [
+    'pending'   => 'bg-amber-100 text-amber-800',
+    'approved'  => 'bg-green-100 text-green-700',
+    'rejected'  => 'bg-red-100 text-red-700',
+    'cancelled' => 'bg-gray-100 text-gray-500',
+  ];
+  $leaveStatusLabels = [
+    'pending'   => 'En attente',
+    'approved'  => 'approuvée',
+    'rejected'  => 'refusée',
+    'cancelled' => 'annulée',
+  ];
+
+  // Other leave types (not ANNUAL)
+  $otherLeaveTypes = $empLeaveTypes->reject(fn($t) => $t->code === 'ANNUAL')->values();
+@endphp
+
+{{-- ── Header + Action Buttons ── --}}
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-5">
+  <h3 class="text-xl font-bold text-gray-800">Mes Congés</h3>
+  <div class="flex flex-wrap gap-2">
+    @if($annualLeaveType)
+    <button type="button"
+      onclick="document.getElementById('modal-annual-leave').classList.remove('hidden')"
+      class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#2453d6] hover:bg-blue-700 text-white text-sm font-semibold shadow transition">
+      <i class="fas fa-calendar-check text-xs"></i> Congé Annuel
+    </button>
+    @endif
+    <button type="button"
+      onclick="document.getElementById('modal-other-leave').classList.remove('hidden')"
+      class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold shadow transition">
+      <i class="fas fa-plus text-xs"></i> Autre congé
+    </button>
+  </div>
 </div>
+
+{{-- ── Stats Cards ── --}}
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+  <div class="rounded-2xl bg-[#2453d6] text-white p-5 flex items-center justify-between shadow">
+    <div>
+      <div class="text-4xl font-black">{{ $annualRemaining }}</div>
+      <div class="text-sm font-semibold mt-1 opacity-90">Jours Restants</div>
+      <div class="text-xs mt-0.5 opacity-70">Sur {{ $annualQuota }} jours acquis</div>
+    </div>
+    <div class="opacity-40"><i class="fas fa-calendar-check text-4xl"></i></div>
+  </div>
+  <div class="rounded-2xl bg-emerald-500 text-white p-5 flex items-center justify-between shadow">
+    <div>
+      <div class="text-4xl font-black">{{ (int) $annualApproved }}</div>
+      <div class="text-sm font-semibold mt-1 opacity-90">Jours Pris (Validés)</div>
+      <div class="text-xs mt-0.5 opacity-70">Congés annuels confirmés</div>
+    </div>
+    <div class="opacity-40"><i class="fas fa-calendar-minus text-4xl"></i></div>
+  </div>
+  <div class="rounded-2xl bg-amber-500 text-white p-5 flex items-center justify-between shadow">
+    <div>
+      <div class="text-4xl font-black">{{ $annualPending }}</div>
+      <div class="text-sm font-semibold mt-1 opacity-90">En Attente</div>
+      <div class="text-xs mt-0.5 opacity-70">Demandes à valider</div>
+    </div>
+    <div class="opacity-40"><i class="fas fa-hourglass-half text-4xl"></i></div>
+  </div>
+</div>
+
+{{-- ── History of requests ── --}}
+<div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-5">
+  <h4 class="text-base font-bold text-gray-800 mb-4">Historique des Demandes</h4>
+  <div class="space-y-3">
+    @forelse($myLeaveRequests as $lr)
+    @php
+      $lrDays = $lr->approved_days ?? $lr->requested_days;
+      $badge  = $leaveBadge[$lr->status] ?? 'bg-gray-100 text-gray-500';
+      $label  = $leaveStatusLabels[$lr->status] ?? $lr->status;
+    @endphp
+    <div class="rounded-xl border border-gray-200 px-4 py-3 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+      <div>
+        <div class="text-sm font-bold text-gray-800">{{ $lr->leaveType?->name ?? 'Type supprimé' }}</div>
+        @if($lr->start_date && $lr->end_date)
+        <div class="text-xs text-gray-500 mt-0.5">
+          Du {{ $lr->start_date->format('d/m/Y') }} au {{ $lr->end_date->format('d/m/Y') }}
+        </div>
+        @endif
+        <div class="text-xs text-gray-400 mt-0.5">
+          Durée : {{ $lrDays ? number_format((float) $lrDays, 0) . ' jour(s)' : '-' }}
+          &nbsp;·&nbsp; Demandé le : {{ $lr->created_at->format('d/m/Y') }}
+        </div>
+        @if($lr->reason)
+        <div class="text-xs text-gray-400 mt-0.5 italic">"{{ Str::limit($lr->reason, 80) }}"</div>
+        @endif
+      </div>
+      <span class="inline-block flex-shrink-0 text-xs font-semibold px-3 py-1 rounded-full {{ $badge }}">{{ $label }}</span>
+    </div>
+    @empty
+    <div class="rounded-xl bg-gray-50 border border-dashed border-gray-300 px-4 py-6 text-center text-sm text-gray-500">
+      <i class="fas fa-calendar-times text-gray-300 text-2xl mb-2 block"></i>
+      Aucune demande de congé pour le moment.
+    </div>
+    @endforelse
+  </div>
+</div>
+
+{{-- ── Special absences / permissions section ── --}}
+@php
+  $specialRequests = $myLeaveRequests->whereNotIn('leave_type_id', $annualLeaveType ? [$annualLeaveType->id] : []);
+@endphp
+@if($specialRequests->isNotEmpty())
+<div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+  <h4 class="text-base font-bold text-gray-800 mb-4">Permissions spéciales d'absence</h4>
+  <div class="space-y-3">
+    @foreach($specialRequests as $lr)
+    @php
+      $badge = $leaveBadge[$lr->status] ?? 'bg-gray-100 text-gray-500';
+      $label = $leaveStatusLabels[$lr->status] ?? $lr->status;
+    @endphp
+    <div class="rounded-xl border border-gray-200 px-4 py-3 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+      <div>
+        <div class="text-sm font-bold text-gray-800">{{ $lr->leaveType?->name ?? 'Type supprimé' }}</div>
+        @if($lr->start_date && $lr->end_date)
+        <div class="text-xs text-gray-500 mt-0.5">Du {{ $lr->start_date->format('d/m/Y') }} au {{ $lr->end_date->format('d/m/Y') }}</div>
+        @endif
+        <div class="text-xs text-gray-400 mt-0.5">Demandé le : {{ $lr->created_at->format('d/m/Y') }}</div>
+      </div>
+      <span class="inline-block flex-shrink-0 text-xs font-semibold px-3 py-1 rounded-full {{ $badge }}">{{ $label }}</span>
+    </div>
+    @endforeach
+  </div>
+</div>
+@endif
+
+{{-- ══════════ MODAL — Congé Annuel ══════════ --}}
+@if($annualLeaveType)
+<div id="modal-annual-leave"
+     class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+     onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+    <div class="p-6">
+      {{-- Modal header --}}
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <h2 class="text-xl font-bold text-gray-800">🚀 Demande de Congé Annuel</h2>
+          <p class="text-sm text-gray-500 mt-0.5">Choisissez librement vos dates de congés annuels</p>
+        </div>
+        <button type="button" onclick="document.getElementById('modal-annual-leave').classList.add('hidden')"
+          class="text-gray-400 hover:text-gray-600 transition">
+          <i class="fas fa-times text-lg"></i>
+        </button>
+      </div>
+
+      {{-- Balance card --}}
+      <div class="rounded-2xl border border-blue-100 bg-blue-50 p-4 mb-5">
+        <div class="text-sm font-bold text-blue-800 mb-3 flex items-center gap-2">
+          <i class="fas fa-calendar-check text-blue-500"></i> Votre Solde Congés Annuels
+        </div>
+        <div class="grid grid-cols-3 gap-3 text-center">
+          <div class="bg-white rounded-xl border border-blue-100 py-3">
+            <div class="text-2xl font-black text-blue-600">{{ $annualQuota }}</div>
+            <div class="text-xs text-gray-500 mt-0.5">Quota annuel</div>
+          </div>
+          <div class="bg-white rounded-xl border border-amber-100 py-3">
+            <div class="text-2xl font-black text-amber-500">{{ (int) $annualApproved }}</div>
+            <div class="text-xs text-gray-500 mt-0.5">Jours utilisés</div>
+          </div>
+          <div class="bg-white rounded-xl border border-green-100 py-3">
+            <div class="text-2xl font-black text-green-600">{{ $annualRemaining }}</div>
+            <div class="text-xs text-gray-500 mt-0.5">Jours restants</div>
+          </div>
+        </div>
+      </div>
+
+      {{-- Form --}}
+      <form method="POST" action="{{ route('admin.personnel.leave-requests.store') }}" enctype="multipart/form-data" class="space-y-4">
+        @csrf
+        <input type="hidden" name="personnel_tab" value="agent-space">
+        <input type="hidden" name="agent_space_tab" value="leave">
+        <input type="hidden" name="employee_id" value="{{ $agentSpaceEmployee->id }}">
+        <input type="hidden" name="selected_employee" value="{{ $agentSpaceEmployee->id }}">
+        <input type="hidden" name="leave_type_id" value="{{ $annualLeaveType->id }}">
+        <input type="hidden" name="annual_segments_json" id="annual-segments-json" value="">
+
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1.5">
+            <i class="fas fa-layer-group mr-1 text-blue-400"></i> Nombre de sections
+          </label>
+          <select id="annual-sections-count"
+            class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+            <option value="1" selected>1 section</option>
+            <option value="2">2 sections</option>
+            <option value="3">3 sections</option>
+            <option value="4">4 sections</option>
+          </select>
+          <p class="text-xs text-gray-400 mt-1">Vous pouvez fractionner le congé annuel en 1, 2, 3 ou 4 sections.</p>
+        </div>
+
+        <div class="space-y-3">
+          @for($i = 1; $i <= 4; $i++)
+          <div class="annual-segment-row rounded-xl border border-gray-200 p-3 {{ $i > 1 ? 'hidden' : '' }}" data-segment="{{ $i }}">
+            <div class="text-xs font-semibold text-gray-500 mb-2">Section {{ $i }}</div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1.5">
+                  <i class="fas fa-calendar mr-1 text-blue-400"></i> Date de début <span class="text-red-500">*</span>
+                </label>
+                <input type="date"
+                  name="annual_segment_start_{{ $i }}"
+                  id="annual-start-{{ $i }}"
+                  {{ $i === 1 ? 'required' : '' }}
+                  class="annual-start w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+              </div>
+              <div>
+                <label class="block text-sm font-semibold text-gray-700 mb-1.5">
+                  <i class="fas fa-calendar mr-1 text-blue-400"></i> Date de fin <span class="text-red-500">*</span>
+                </label>
+                <input type="date"
+                  name="annual_segment_end_{{ $i }}"
+                  id="annual-end-{{ $i }}"
+                  {{ $i === 1 ? 'required' : '' }}
+                  class="annual-end w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
+              </div>
+            </div>
+          </div>
+          @endfor
+
+          <input type="hidden" name="start_date" id="annual-start" value="{{ old('start_date') }}">
+          <input type="hidden" name="end_date" id="annual-end" value="{{ old('end_date') }}">
+        </div>
+
+        <div id="annual-days-preview" class="hidden rounded-xl bg-blue-50 border border-blue-100 px-4 py-2.5 text-sm text-blue-700 font-semibold"></div>
+
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1.5">
+            🔥 Motif <span class="text-gray-400 font-normal">(optionnel)</span>
+          </label>
+          <textarea name="reason" rows="3"
+            placeholder="Vacances en famille, repos, etc."
+            class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-400">{{ old('reason') }}</textarea>
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1.5">
+            📎 Pièce justificative <span class="text-gray-400 font-normal">(optionnel)</span>
+          </label>
+          <input type="file" name="attachment" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+            class="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border file:border-gray-300 file:text-sm file:font-semibold file:bg-white file:text-gray-700 hover:file:bg-gray-50">
+        </div>
+
+        <div class="flex items-center gap-3 pt-2">
+          <button type="submit"
+            class="flex-1 py-3 rounded-xl bg-[#2453d6] hover:bg-blue-700 text-white text-sm font-bold shadow transition">
+            <i class="fas fa-paper-plane mr-2"></i> Envoyer la demande
+          </button>
+          <button type="button"
+            onclick="document.getElementById('modal-annual-leave').classList.add('hidden')"
+            class="px-5 py-3 rounded-xl border border-gray-300 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">
+            Annuler
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+@endif
+
+{{-- ══════════ MODAL — Autre Congé ══════════ --}}
+<div id="modal-other-leave"
+     class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+     onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto" onclick="event.stopPropagation()">
+    <div class="p-6">
+      {{-- Modal header --}}
+      <div class="flex items-center justify-between mb-5">
+        <h2 class="text-lg font-bold text-gray-800">Nouvelle demande de congé</h2>
+        <button type="button" onclick="document.getElementById('modal-other-leave').classList.add('hidden')"
+          class="text-gray-400 hover:text-gray-600 transition">
+          <i class="fas fa-times text-lg"></i>
+        </button>
+      </div>
+
+      @if($empLeaveTypes->isEmpty())
+      <div class="rounded-xl bg-amber-50 border border-amber-200 px-4 py-4 text-sm text-amber-800">
+        <i class="fas fa-exclamation-triangle mr-2"></i>
+        Aucun type de congé configuré pour cette administration.
+      </div>
+      @else
+      <form method="POST" action="{{ route('admin.personnel.leave-requests.store') }}" enctype="multipart/form-data" class="space-y-4">
+        @csrf
+        <input type="hidden" name="personnel_tab" value="agent-space">
+        <input type="hidden" name="agent_space_tab" value="leave">
+        <input type="hidden" name="employee_id" value="{{ $agentSpaceEmployee->id }}">
+        <input type="hidden" name="selected_employee" value="{{ $agentSpaceEmployee->id }}">
+
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1.5">
+            Type de congé <span class="text-red-500">*</span>
+          </label>
+          <select name="leave_type_id" id="other-leave-type" required
+            class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400">
+            <option value="">Sélectionner un type</option>
+            @foreach($empLeaveTypes as $lt)
+            <option value="{{ $lt->id }}"
+              data-requires-attachment="{{ $lt->requires_attachment ? '1' : '0' }}"
+              data-default-days="{{ (int) $lt->default_days }}">
+              {{ $lt->name }}
+            </option>
+            @endforeach
+          </select>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1.5">
+              Date de début <span class="text-red-500">*</span>
+            </label>
+            <input type="date" name="start_date" id="other-start" required
+              value="{{ old('start_date') }}"
+              class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1.5">
+              Date de fin <span class="text-red-500">*</span>
+            </label>
+            <input type="date" name="end_date" id="other-end" required
+              value="{{ old('end_date') }}"
+              class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1.5">
+            Nombre de jours <span class="text-red-500">*</span>
+          </label>
+          <input type="number" name="requested_days" id="other-days" readonly
+            class="w-full border border-gray-200 bg-gray-50 rounded-xl px-4 py-2.5 text-sm font-semibold text-gray-700 cursor-not-allowed">
+          <p class="text-xs text-gray-400 mt-1">Calculé automatiquement selon le type</p>
+        </div>
+
+        <div>
+          <label class="block text-sm font-semibold text-gray-700 mb-1.5">Motif</label>
+          <textarea name="reason" rows="3"
+            placeholder="Précisez le motif de votre demande..."
+            class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-emerald-400">{{ old('reason') }}</textarea>
+        </div>
+
+        <div id="other-attachment-wrap">
+          <label class="block text-sm font-semibold text-gray-700 mb-1.5">
+            Pièces justificatives <span id="other-attachment-required" class="text-gray-400 font-normal">(optionnel)</span>
+          </label>
+          <input type="file" name="attachment" id="other-attachment" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+            class="w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border file:border-gray-300 file:text-sm file:font-semibold file:bg-white file:text-gray-700 hover:file:bg-gray-50">
+          <p class="text-xs text-gray-400 mt-1">Formats acceptés : PDF, JPG, PNG, DOC, DOCX (max 5 Mo par fichier)</p>
+        </div>
+
+        <div class="flex items-center gap-3 pt-2">
+          <button type="submit"
+            class="flex-1 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold shadow transition">
+            <i class="fas fa-paper-plane mr-2"></i> Envoyer la demande
+          </button>
+          <button type="button"
+            onclick="document.getElementById('modal-other-leave').classList.add('hidden')"
+            class="px-5 py-3 rounded-xl border border-gray-300 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition">
+            Annuler
+          </button>
+        </div>
+      </form>
+      @endif
+    </div>
+  </div>
+</div>
+
+@push('scripts')
+<script>
+(function () {
+  // Annual leave — segmentation (1..4) + total days preview
+  var annualStart = document.getElementById('annual-start');
+  var annualEnd   = document.getElementById('annual-end');
+  var annualPreview = document.getElementById('annual-days-preview');
+  var annualSegmentsJson = document.getElementById('annual-segments-json');
+  var annualSectionsCount = document.getElementById('annual-sections-count');
+  var annualRows = Array.prototype.slice.call(document.querySelectorAll('.annual-segment-row'));
+  var annualStarts = Array.prototype.slice.call(document.querySelectorAll('.annual-start'));
+  var annualEnds = Array.prototype.slice.call(document.querySelectorAll('.annual-end'));
+
+  function setAnnualVisibleRows() {
+    if (!annualSectionsCount) return;
+    var count = parseInt(annualSectionsCount.value || '1', 10);
+    if (isNaN(count) || count < 1) count = 1;
+    if (count > 4) count = 4;
+
+    annualRows.forEach(function (row, idx) {
+      var visible = idx < count;
+      var s = row.querySelector('.annual-start');
+      var e = row.querySelector('.annual-end');
+      row.classList.toggle('hidden', !visible);
+      if (s) {
+        if (visible) s.setAttribute('required', 'required');
+        else {
+          s.removeAttribute('required');
+          s.value = '';
+        }
+      }
+      if (e) {
+        if (visible) e.setAttribute('required', 'required');
+        else {
+          e.removeAttribute('required');
+          e.value = '';
+        }
+      }
+    });
+  }
+
+  function buildAnnualSegments() {
+    var segments = [];
+    annualRows.forEach(function (row) {
+      if (row.classList.contains('hidden')) return;
+      var s = row.querySelector('.annual-start');
+      var e = row.querySelector('.annual-end');
+      if (!s || !e || !s.value || !e.value || e.value < s.value) return;
+      var days = Math.round((new Date(e.value) - new Date(s.value)) / 86400000) + 1;
+      segments.push({ start_date: s.value, end_date: e.value, days: days });
+    });
+    return segments;
+  }
+
+  function updateAnnualPreview() {
+    if (!annualPreview) return;
+    var segments = buildAnnualSegments();
+    if (!segments.length) {
+      annualPreview.classList.add('hidden');
+      if (annualSegmentsJson) annualSegmentsJson.value = '';
+      if (annualStart) annualStart.value = '';
+      if (annualEnd) annualEnd.value = '';
+      return;
+    }
+
+    segments.sort(function (a, b) {
+      return a.start_date.localeCompare(b.start_date);
+    });
+
+    var total = segments.reduce(function (acc, x) { return acc + (x.days || 0); }, 0);
+    annualPreview.textContent = total + ' jour(s) demandé(s) sur ' + segments.length + ' section(s)';
+    annualPreview.classList.remove('hidden');
+
+    if (annualSegmentsJson) annualSegmentsJson.value = JSON.stringify(segments);
+    if (annualStart) annualStart.value = segments[0].start_date;
+    if (annualEnd) annualEnd.value = segments[segments.length - 1].end_date;
+  }
+
+  if (annualSectionsCount) {
+    annualSectionsCount.addEventListener('change', function () {
+      setAnnualVisibleRows();
+      updateAnnualPreview();
+    });
+  }
+  annualStarts.forEach(function (el) { el.addEventListener('change', updateAnnualPreview); });
+  annualEnds.forEach(function (el) { el.addEventListener('change', updateAnnualPreview); });
+  setAnnualVisibleRows();
+  updateAnnualPreview();
+
+  // Ensure hidden fields are synchronized before submit
+  var annualForm = annualSectionsCount ? annualSectionsCount.closest('form') : null;
+  if (annualForm) {
+    annualForm.addEventListener('submit', function () {
+      updateAnnualPreview();
+    });
+  }
+
+  // Backward compatibility (if old inputs exist)
+  if (annualStart && annualEnd && !annualStarts.length) {
+    var s = annualStart.value, e = annualEnd.value;
+    if (s && e && e >= s) {
+      var days = Math.round((new Date(e) - new Date(s)) / 86400000) + 1;
+      annualPreview.textContent = days + ' jour(s) demandé(s)';
+      annualPreview.classList.remove('hidden');
+    } else {
+      annualPreview.classList.add('hidden');
+    }
+  }
+
+  // Other leave — auto-compute days
+  var otherStart = document.getElementById('other-start');
+  var otherEnd   = document.getElementById('other-end');
+  var otherDays  = document.getElementById('other-days');
+  var otherType  = document.getElementById('other-leave-type');
+  var otherAttachReq = document.getElementById('other-attachment-required');
+  var otherAttachment = document.getElementById('other-attachment');
+
+  function updateOtherDays() {
+    if (!otherStart || !otherEnd || !otherDays) return;
+    var s = otherStart.value, e = otherEnd.value;
+    if (s && e && e >= s) {
+      var d = Math.round((new Date(e) - new Date(s)) / 86400000) + 1;
+      otherDays.value = d;
+    } else {
+      otherDays.value = '';
+    }
+  }
+  if (otherStart) otherStart.addEventListener('change', updateOtherDays);
+  if (otherEnd)   otherEnd.addEventListener('change',   updateOtherDays);
+
+  // Show required indicator when attachment needed
+  if (otherType) {
+    otherType.addEventListener('change', function () {
+      var opt = this.options[this.selectedIndex];
+      if (!opt) return;
+      var req = opt.getAttribute('data-requires-attachment') === '1';
+      if (otherAttachReq) otherAttachReq.textContent = req ? '(obligatoire)' : '(optionnel)';
+      if (req) {
+        otherAttachReq.className = 'text-red-500 font-semibold';
+        if (otherAttachment) otherAttachment.setAttribute('required', 'required');
+      } else {
+        otherAttachReq.className = 'text-gray-400 font-normal';
+        if (otherAttachment) otherAttachment.removeAttribute('required');
+      }
+    });
+  }
+})();
+</script>
+@endpush
 @elseif($agentSpaceTab === 'training')
 @php
   $agentSpaceTrainings = $personnelTrainings
@@ -972,11 +1605,27 @@ $_oc = [
               <th class="py-3 pr-4">{{ __('personnel.ui.leave.table_col_period') }}</th>
               <th class="py-3 pr-4">{{ __('personnel.ui.leave.table_col_duration') }}</th>
               <th class="py-3 pr-4">{{ __('personnel.ui.leave.table_col_status') }}</th>
+              <th class="py-3 pr-4">Circuit de validation</th>
               <th class="py-3">{{ __('personnel.ui.leave.table_col_action') }}</th>
             </tr>
           </thead>
           <tbody>
             @forelse($personnelLeaveRequests as $leaveRequest)
+            @php
+              $wf = data_get($leaveRequest->metadata, 'approval_workflow');
+              $wfSteps = collect(data_get($wf, 'steps', []))->filter(fn($s) => !empty($s['user_id']))->values();
+              $wfCurrentIndex = (int) data_get($wf, 'current_step_index', 0);
+              $wfCurrentApproverId = data_get($wf, 'current_approver_user_id');
+              $wfCurrentApprover = $wfCurrentApproverId ? ($personnelLeaveApprovers[$wfCurrentApproverId] ?? null) : null;
+              $wfTotal = $wfSteps->count();
+              $wfCurrentStepHuman = $wfTotal > 0 ? min($wfCurrentIndex + 1, $wfTotal) : null;
+              $currentUser = auth()->user();
+              $isSuperAdminBypass = $currentUser && $currentUser->role === 'admin' && !$currentUser->profile_id;
+              $isWorkflowPending = $wfTotal > 0 && $leaveRequest->status === 'pending';
+              $canApproveReject = !$isWorkflowPending
+                || $isSuperAdminBypass
+                || ((string) ($currentUser?->id ?? '') !== '' && (string) ($currentUser?->id ?? '') === (string) ($wfCurrentApproverId ?? ''));
+            @endphp
             <tr class="border-b border-gray-100 align-top">
               <td class="py-3 pr-4">
                 <div class="font-semibold text-gray-800">{{ $leaveRequest->employee?->full_name ?? 'Employé supprimé' }}</div>
@@ -988,9 +1637,37 @@ $_oc = [
               <td class="py-3 pr-4">
                 <span class="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold {{ $leaveRequest->status === 'approved' ? 'bg-emerald-50 text-emerald-700' : ($leaveRequest->status === 'rejected' ? 'bg-rose-50 text-rose-700' : ($leaveRequest->status === 'cancelled' ? 'bg-gray-100 text-gray-700' : 'bg-amber-50 text-amber-700')) }}">{{ __('personnel.ui.statuses.' . $leaveRequest->status) }}</span>
               </td>
+              <td class="py-3 pr-4">
+                @if($wfTotal > 0)
+                <div class="space-y-1">
+                  <div class="inline-flex items-center gap-2 rounded-full bg-blue-50 border border-blue-100 text-blue-700 text-xs font-semibold px-2.5 py-1">
+                    <i class="fas fa-diagram-project text-[10px]"></i>
+                    Étape {{ $wfCurrentStepHuman }}/{{ $wfTotal }}
+                  </div>
+                  @if($leaveRequest->status === 'pending')
+                  <div class="text-xs text-gray-700">
+                    <span class="font-semibold">Valideur courant :</span>
+                    {{ $wfCurrentApprover?->name ?? 'Non défini' }}
+                  </div>
+                  <div class="text-[11px] text-gray-500">
+                    {{ $wfCurrentApprover?->profile?->name ?? 'Profil non défini' }}
+                  </div>
+                  @elseif($leaveRequest->status === 'approved')
+                  <div class="text-xs text-emerald-700 font-semibold">Circuit terminé</div>
+                  @elseif($leaveRequest->status === 'rejected')
+                  <div class="text-xs text-rose-700 font-semibold">Arrêté à l'étape {{ $wfCurrentStepHuman }}/{{ $wfTotal }}</div>
+                  @endif
+                </div>
+                @else
+                <span class="text-xs text-gray-400">Validation simple</span>
+                @endif
+              </td>
               <td class="py-3">
                 <div class="flex flex-wrap gap-2">
                   @foreach(['approved' => __('personnel.ui.leave.btn_approve'), 'rejected' => __('personnel.ui.leave.btn_reject'), 'pending' => __('personnel.ui.leave.btn_set_pending')] as $status => $label)
+                  @if(in_array($status, ['approved', 'rejected'], true) && !$canApproveReject)
+                    @continue
+                  @endif
                   <form method="POST" action="{{ route('admin.personnel.leave-requests.status', $leaveRequest) }}">
                     @csrf
                     @method('PATCH')
@@ -1000,11 +1677,16 @@ $_oc = [
                   </form>
                   @endforeach
                 </div>
+                @if($isWorkflowPending && !$canApproveReject)
+                <div class="mt-2 text-[11px] text-gray-500">
+                  Action réservée au valideur courant.
+                </div>
+                @endif
               </td>
             </tr>
             @empty
             <tr>
-              <td colspan="6" class="py-8 text-center text-sm text-gray-400">{{ __('personnel.ui.leave.table_empty') }}</td>
+              <td colspan="7" class="py-8 text-center text-sm text-gray-400">{{ __('personnel.ui.leave.table_empty') }}</td>
             </tr>
             @endforelse
           </tbody>
@@ -1502,6 +2184,8 @@ $_oc = [
     </div>
   </section>
 </div>
+@endif
+{{-- END personnel tab --}}
 @endif
 
 {{-- ══════════════════════ TEMPLATES ══════════════════════ --}}
