@@ -64,6 +64,28 @@
         }
         .qr-alert-success {
             background: #dcfce7;
+            color: #14532d;
+            border: 2px solid #16a34a;
+            border-radius: 16px;
+            padding: 20px 18px;
+            text-align: center;
+        }
+        .qr-alert-success .qr-success-icon {
+            font-size: 3rem;
+            line-height: 1;
+            display: block;
+            margin-bottom: 10px;
+        }
+        .qr-alert-success .qr-success-title {
+            font-size: 1.35rem;
+            font-weight: 800;
+            display: block;
+            margin-bottom: 6px;
+            color: #14532d;
+        }
+        .qr-alert-success .qr-success-body {
+            font-size: 1rem;
+            font-weight: 500;
             color: #166534;
         }
         .qr-alert-error {
@@ -229,7 +251,11 @@
     <p class="text-sm text-gray-500 text-center mt-1 qr-subtitle">{{ $meeting->starts_at?->format('d/m/Y H:i') }}</p>
 
     @if(session('success'))
-    <div class="mt-4 p-3 rounded-lg bg-green-50 text-green-700 text-sm qr-alert qr-alert-success">{{ session('success') }}</div>
+    <div class="mt-4 qr-alert qr-alert-success">
+        <span class="qr-success-icon">✅</span>
+        <span class="qr-success-title">Inscription enregistrée !</span>
+        <span class="qr-success-body">{{ session('success') }}</span>
+    </div>
     @endif
     @if(session('error'))
     <div class="mt-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm qr-alert qr-alert-error">{{ session('error') }}</div>
