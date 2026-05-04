@@ -550,6 +550,8 @@ class DocumentController extends Controller
 
         $mode = $request->input('mode') === 'recipient_administration' ? 'admin' : $request->input('mode');
 
+        try {
+
         $hasDelay = $request->boolean('hasDelay') || $request->boolean('has_delay');
         $delayValue = (int) ($request->input('delayValue', $request->input('delay_value', 0)) ?: 0);
         $delayUnit = (string) ($request->input('delayUnit', $request->input('delay_unit', 'hours')) ?: 'hours');
@@ -774,6 +776,22 @@ class DocumentController extends Controller
             'document_status' => $document->status,
             'tracking_status_updated' => $updatedTrackingStatus,
         ]);
+        } catch (\Throwable $e) {
+            Log::error('DocumentController@share failed', [
+                'document_id' => (string) $document->id,
+                'user_id' => (string) Auth::id(),
+                'mode' => $request->input('mode'),
+                'internal_target_type' => $request->input('internalTargetType'),
+                'recipient_administration_id' => $request->input('recipientAdministrationId'),
+                'tracking_number' => $request->input('trackingNumber'),
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'ok' => false,
+                'message' => 'Erreur interne lors du partage du document.',
+            ], 500);
+        }
     }
 
     private function sendInternalShareEmail(string $recipientEmail, string $documentTitle): void
