@@ -93,6 +93,20 @@ class AdminController extends Controller
         return $this->isSuperAdminProfile($profile) || $this->isAgentRhProfile($profile);
     }
 
+    private function canSearchAgentSpaceForUser(?User $user): bool
+    {
+        if (!$user) {
+            return false;
+        }
+
+        if ($user->role === 'admin' && !$user->profile_id) {
+            return true;
+        }
+
+        $profile = $user->profile_id ? AdministrationProfile::find($user->profile_id) : null;
+        return $this->isSuperAdminProfile($profile) || $this->isAgentRhProfile($profile);
+    }
+
     private function extractOrigin(?string $url): ?string
     {
         $url = trim((string) $url);
@@ -603,6 +617,7 @@ class AdminController extends Controller
         $personnelPerformanceReviews = collect();
         $personnelCareerEvents = collect();
         $personnelRecentActivity = collect();
+        $agentSpaceCanSearchAll = false;
         $personnelStats = [
             'employees' => 0,
             'documents' => 0,
@@ -620,6 +635,8 @@ class AdminController extends Controller
 
         // Périmètre d'administration de l'utilisateur connecté (null = super-admin)
         $adminScope = $this->resolveAdminScope();
+        $connectedUser = auth()->user();
+        $agentSpaceCanSearchAll = $this->canSearchAgentSpaceForUser($connectedUser);
 
         try {
             $settings = AppSetting::all()->keyBy('key');
@@ -761,12 +778,28 @@ class AdminController extends Controller
                     $adminScope
                 )->get();
 
-                $selectedPersonnelEmployee = request('selected_employee')
-                    ? $this->applyPersonnelScope(
-                        PersonnelEmployee::with(['documents', 'user', 'subEntity'])->whereKey(request('selected_employee')),
-                        $adminScope
-                    )->first()
-                    : null;
+                $connectedPersonnelEmployee = $this->applyPersonnelScope(
+                    PersonnelEmployee::with(['documents', 'user', 'subEntity'])
+                        ->where('user_id', $connectedUser?->id),
+                    $adminScope
+                )->first();
+
+                if ($agentSpaceCanSearchAll) {
+                    $selectedPersonnelEmployee = request('selected_employee')
+                        ? $this->applyPersonnelScope(
+                            PersonnelEmployee::with(['documents', 'user', 'subEntity'])->whereKey(request('selected_employee')),
+                            $adminScope
+                        )->first()
+                        : null;
+                } else {
+                    // Hors SUPER ADMIN / AGENT RH: l'espace agent est strictement personnel.
+                    $selectedPersonnelEmployee = $connectedPersonnelEmployee;
+                    if ($connectedPersonnelEmployee) {
+                        $personnelEmployeeDirectory = collect([$connectedPersonnelEmployee]);
+                    } else {
+                        $personnelEmployeeDirectory = collect();
+                    }
+                }
 
                 $personnelStats['employees'] = (clone $this->applyPersonnelScope(PersonnelEmployee::query(), $adminScope))->count();
                 $personnelStats['documents'] = PersonnelEmployeeDocument::whereIn(
@@ -955,7 +988,8 @@ class AdminController extends Controller
             'sigProviders', 'courrierArchivalDays', 'adminScope',
             'personnelEmployees', 'personnelEmployeeDirectory', 'selectedPersonnelEmployee', 'personnelStats',
             'personnelLeaveTypes', 'personnelLeaveRequests', 'personnelLeaveApprovers', 'personnelJobReferences', 'leaveGlobalVisibility', 'personnelTrainings', 'personnelTrainingEnrollments',
-            'personnelEmployeeSkills', 'personnelGoals', 'personnelPerformanceReviews', 'personnelCareerEvents', 'personnelRecentActivity'
+            'personnelEmployeeSkills', 'personnelGoals', 'personnelPerformanceReviews', 'personnelCareerEvents', 'personnelRecentActivity',
+            'agentSpaceCanSearchAll'
         ));
     }
 
@@ -1330,6 +1364,112 @@ class AdminController extends Controller
         ])->with('success', 'Type de congé enregistré.');
     }
 
+    public function updatePersonnelLeaveType(Request $request, PersonnelLeaveType $leaveType)
+    {
+        $this->abortIfPersonnelScopeMismatch(
+            $leaveType->administration_type,
+            $leaveType->administration_id,
+            'Ce type de congé est hors de votre périmètre d\'administration.'
+        );
+
+        $validated = $request->validate([
+            'personnel_tab' => ['nullable', 'string'],
+            'leave_subtab' => ['nullable', 'string'],
+            'code' => ['nullable', 'string', 'max:100'],
+            'name' => ['required', 'string', 'max:191'],
+            'description' => ['nullable', 'string'],
+            'unit' => ['required', 'in:day,hour'],
+            'default_days' => ['nullable', 'numeric', 'min:0'],
+            'carry_over_days' => ['nullable', 'numeric', 'min:0'],
+            'requires_attachment' => ['nullable', 'boolean'],
+            'is_paid' => ['nullable', 'boolean'],
+            'is_active' => ['nullable', 'boolean'],
+            'justification_zip' => ['nullable', 'file', 'mimes:zip', 'max:20480'],
+        ]);
+
+        if (!empty($validated['code'])) {
+            $duplicate = PersonnelLeaveType::query()
+                ->where('administration_type', $leaveType->administration_type)
+                ->where('administration_id', $leaveType->administration_id)
+                ->where('code', $validated['code'])
+                ->where('id', '!=', $leaveType->id)
+                ->exists();
+
+            if ($duplicate) {
+                throw ValidationException::withMessages([
+                    'code' => 'Un type de congé existe déjà avec ce code pour cette administration.',
+                ]);
+            }
+        }
+
+        $payload = [
+            'code' => $validated['code'] ?: null,
+            'name' => $validated['name'],
+            'description' => $validated['description'] ?? null,
+            'unit' => $validated['unit'],
+            'default_days' => $validated['default_days'] ?? null,
+            'carry_over_days' => $validated['carry_over_days'] ?? 0,
+            'requires_attachment' => $request->boolean('requires_attachment'),
+            'is_paid' => $request->boolean('is_paid'),
+            'is_active' => $request->boolean('is_active'),
+        ];
+
+        if ($request->hasFile('justification_zip')) {
+            if ($leaveType->justification_zip_disk && $leaveType->justification_zip_path && Storage::disk($leaveType->justification_zip_disk)->exists($leaveType->justification_zip_path)) {
+                Storage::disk($leaveType->justification_zip_disk)->delete($leaveType->justification_zip_path);
+            }
+
+            $file = $request->file('justification_zip');
+            $storedName = Str::uuid() . '_' . preg_replace('/[^A-Za-z0-9._-]/', '_', $file->getClientOriginalName());
+            $path = $file->storeAs('personnel-leave-type-zips/' . $leaveType->administration_type . '/' . $leaveType->administration_id, $storedName, 'local');
+            $payload['justification_zip_disk'] = 'local';
+            $payload['justification_zip_path'] = $path;
+            $payload['justification_zip_name'] = $file->getClientOriginalName();
+            $payload['justification_zip_size'] = $file->getSize();
+        }
+
+        $leaveType->update($payload);
+
+        return redirect()->route('admin.index', [
+            'tab' => 'personnel',
+            'personnel_tab' => $request->input('personnel_tab', 'leave'),
+            'leave_subtab' => $request->input('leave_subtab', 'parameters'),
+        ])->with('success', 'Type de congé modifié.');
+    }
+
+    public function destroyPersonnelLeaveType(Request $request, PersonnelLeaveType $leaveType)
+    {
+        $this->abortIfPersonnelScopeMismatch(
+            $leaveType->administration_type,
+            $leaveType->administration_id,
+            'Ce type de congé est hors de votre périmètre d\'administration.'
+        );
+
+        $hasRequests = PersonnelLeaveRequest::query()
+            ->where('leave_type_id', $leaveType->id)
+            ->exists();
+
+        if ($hasRequests) {
+            return redirect()->route('admin.index', [
+                'tab' => 'personnel',
+                'personnel_tab' => $request->input('personnel_tab', 'leave'),
+                'leave_subtab' => $request->input('leave_subtab', 'parameters'),
+            ])->with('error', 'Suppression impossible: ce type de congé est déjà utilisé dans des demandes.');
+        }
+
+        if ($leaveType->justification_zip_disk && $leaveType->justification_zip_path && Storage::disk($leaveType->justification_zip_disk)->exists($leaveType->justification_zip_path)) {
+            Storage::disk($leaveType->justification_zip_disk)->delete($leaveType->justification_zip_path);
+        }
+
+        $leaveType->delete();
+
+        return redirect()->route('admin.index', [
+            'tab' => 'personnel',
+            'personnel_tab' => $request->input('personnel_tab', 'leave'),
+            'leave_subtab' => $request->input('leave_subtab', 'parameters'),
+        ])->with('success', 'Type de congé supprimé.');
+    }
+
     public function storePersonnelJobReference(Request $request)
     {
         $validated = $request->validate([
@@ -1424,6 +1564,12 @@ class AdminController extends Controller
 
         $employee = PersonnelEmployee::findOrFail($validated['employee_id']);
         $leaveType = PersonnelLeaveType::findOrFail($validated['leave_type_id']);
+
+        if (!$this->canSearchAgentSpaceForUser(auth()->user()) && (string) $employee->user_id !== (string) auth()->id()) {
+            throw ValidationException::withMessages([
+                'employee_id' => 'Vous ne pouvez soumettre que vos propres demandes depuis l\'espace agent.',
+            ]);
+        }
 
         $this->abortIfPersonnelEmployeeOutsideScope($employee);
         $this->abortIfPersonnelScopeMismatch(

@@ -634,10 +634,10 @@ $_oc = [
 @elseif($personnelTab === 'agent-space')
 @php
   $agentSpaceEmployee = $selectedPersonnelEmployee;
-  if (!$agentSpaceEmployee && request('selected_employee')) {
+  if ($agentSpaceCanSearchAll && !$agentSpaceEmployee && request('selected_employee')) {
     $agentSpaceEmployee = $personnelEmployeeDirectory->firstWhere('id', request('selected_employee'));
   }
-  if (!$agentSpaceEmployee && request('selected_employee_number')) {
+  if ($agentSpaceCanSearchAll && !$agentSpaceEmployee && request('selected_employee_number')) {
     $_selectedEmployeeNumber = trim((string) request('selected_employee_number'));
     if ($_selectedEmployeeNumber !== '') {
       $agentSpaceEmployee = $personnelEmployeeDirectory->first(function ($employee) use ($_selectedEmployeeNumber) {
@@ -645,7 +645,9 @@ $_oc = [
       });
     }
   }
-  $agentSpaceEmployeeNumberInput = trim((string) request('selected_employee_number', $agentSpaceEmployee?->employee_number ?? ''));
+  $agentSpaceEmployeeNumberInput = $agentSpaceCanSearchAll
+    ? trim((string) request('selected_employee_number', $agentSpaceEmployee?->employee_number ?? ''))
+    : trim((string) ($agentSpaceEmployee?->employee_number ?? ''));
   $agentSpaceLeaveRequests = collect();
   $agentSpaceTrainingEnrollments = collect();
   $agentSpaceCareerHistory = collect();
@@ -685,6 +687,7 @@ $_oc = [
       <h3 class="text-lg font-bold text-gray-800">{{ __('personnel.ui.agent_space.title') }}</h3>
       <p class="text-sm text-gray-500 mt-1">{{ __('personnel.ui.agent_space.description') }}</p>
     </div>
+    @if($agentSpaceCanSearchAll)
     <form method="GET" action="{{ route('admin.index') }}" class="flex items-center gap-2">
       <input type="hidden" name="tab" value="personnel">
       <input type="hidden" name="personnel_tab" value="agent-space">
@@ -699,13 +702,18 @@ $_oc = [
       >
       <button type="submit" class="px-3 py-2 rounded-xl bg-[#2453d6] text-white text-sm font-semibold">{{ __('personnel.ui.agent_space.search_btn') }}</button>
     </form>
+    @else
+    <span class="inline-flex items-center rounded-full bg-gray-100 border border-gray-200 text-gray-700 text-xs font-semibold px-3 py-1">
+      Espace personnel: vos propres informations et demandes
+    </span>
+    @endif
   </div>
 </div>
 
 <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-3 mb-5">
   <div class="flex flex-wrap gap-2">
     @foreach($agentSpaceTabs as $key => [$icon, $label])
-    <a href="{{ route('admin.index', array_merge(['tab' => 'personnel', 'personnel_tab' => 'agent-space', 'agent_space_tab' => $key], $agentSpaceEmployee ? ['selected_employee' => $agentSpaceEmployee->id, 'selected_employee_number' => $agentSpaceEmployee->employee_number] : ($agentSpaceEmployeeNumberInput !== '' ? ['selected_employee_number' => $agentSpaceEmployeeNumberInput] : []))) }}"
+    <a href="{{ route('admin.index', array_merge(['tab' => 'personnel', 'personnel_tab' => 'agent-space', 'agent_space_tab' => $key], $agentSpaceCanSearchAll ? ($agentSpaceEmployee ? ['selected_employee' => $agentSpaceEmployee->id, 'selected_employee_number' => $agentSpaceEmployee->employee_number] : ($agentSpaceEmployeeNumberInput !== '' ? ['selected_employee_number' => $agentSpaceEmployeeNumberInput] : [])) : [])) }}"
        class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition {{ $agentSpaceTab === $key ? 'bg-[#2453d6] text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200' }}">
       <i class="{{ $icon }} text-xs"></i>
       <span>{{ $label }}</span>
@@ -1573,8 +1581,8 @@ $_oc = [
 
       <div class="flex items-center gap-4">
         <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="requires_attachment" value="1" {{ old('requires_attachment') ? 'checked' : '' }}> {{ __('personnel.ui.leave.form_requires_attachment') }}</label>
-        <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="is_paid" value="1" {{ old('is_paid', '1') ? 'checked' : '' }}> {{ __('personnel.ui.leave.form_is_paid') }}</label>
-        <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="is_active" value="1" {{ old('is_active', '1') ? 'checked' : '' }}> {{ __('personnel.ui.leave.form_is_active') }}</label>
+        <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="is_paid" value="1" {{ old('is_paid') ? 'checked' : '' }}> {{ __('personnel.ui.leave.form_is_paid') }}</label>
+        <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="is_active" value="1" {{ old('is_active') ? 'checked' : '' }}> {{ __('personnel.ui.leave.form_is_active') }}</label>
       </div>
 
       <button type="submit" class="px-6 py-2.5 bg-[#2453d6] text-white rounded-xl text-sm font-semibold">{{ __('personnel.ui.leave.btn_save_type') }}</button>
@@ -1587,24 +1595,89 @@ $_oc = [
             <th class="py-2 pr-4">Type</th>
             <th class="py-2 pr-4">Code</th>
             <th class="py-2">ZIP</th>
+            <th class="py-2 text-right">Actions</th>
           </tr>
         </thead>
         <tbody>
           @forelse($personnelLeaveTypes as $leaveType)
           <tr class="border-b border-gray-100">
             <td class="py-2 pr-4 text-gray-700 font-semibold">{{ $leaveType->name }}</td>
-            <td class="py-2 pr-4 text-gray-500">{{ $leaveType->code ?: '-' }}</td>
+            <td class="py-2 pr-4 text-gray-500">{{ $leaveType->code }}</td>
             <td class="py-2">
               @if($leaveType->justification_zip_path)
               <a href="{{ route('admin.personnel.leave-types.justification-zip.download', $leaveType) }}" class="text-[#2453d6] text-xs font-semibold">Télécharger ZIP</a>
               @else
-              <span class="text-xs text-gray-400">Non défini</span>
+              <span class="text-xs text-gray-400"></span>
               @endif
+            </td>
+            <td class="py-2 text-right whitespace-nowrap">
+              <button type="button"
+                      onclick="document.getElementById('leave-type-edit-{{ $leaveType->id }}').classList.toggle('hidden')"
+                      class="inline-flex items-center px-3 py-1.5 rounded-lg border border-blue-200 text-blue-700 text-xs font-semibold hover:bg-blue-50 transition">
+                Modifier
+              </button>
+              <form method="POST" action="{{ route('admin.personnel.leave-types.destroy', $leaveType) }}" class="inline-block ml-2" onsubmit="return confirm('Supprimer ce type de congé ?');">
+                @csrf
+                @method('DELETE')
+                <input type="hidden" name="personnel_tab" value="leave">
+                <input type="hidden" name="leave_subtab" value="parameters">
+                <button type="submit" class="inline-flex items-center px-3 py-1.5 rounded-lg border border-red-200 text-red-700 text-xs font-semibold hover:bg-red-50 transition">
+                  Supprimer
+                </button>
+              </form>
+            </td>
+          </tr>
+          <tr id="leave-type-edit-{{ $leaveType->id }}" class="hidden border-b border-gray-100 bg-gray-50">
+            <td colspan="4" class="py-3 pr-2">
+              <form method="POST" enctype="multipart/form-data" action="{{ route('admin.personnel.leave-types.update', $leaveType) }}" class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                @csrf
+                @method('PUT')
+                <input type="hidden" name="personnel_tab" value="leave">
+                <input type="hidden" name="leave_subtab" value="parameters">
+
+                <div>
+                  <label class="block text-xs font-semibold text-gray-600 mb-1">Nom</label>
+                  <input type="text" name="name" value="{{ $leaveType->name }}" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-gray-600 mb-1">Code</label>
+                  <input type="text" name="code" value="{{ $leaveType->code }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-gray-600 mb-1">Unité</label>
+                  <select name="unit" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                    <option value="day" {{ $leaveType->unit === 'day' ? 'selected' : '' }}>Jour</option>
+                    <option value="hour" {{ $leaveType->unit === 'hour' ? 'selected' : '' }}>Heure</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-gray-600 mb-1">Jours par défaut</label>
+                  <input type="number" step="0.5" min="0" name="default_days" value="{{ $leaveType->default_days }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-gray-600 mb-1">Report max</label>
+                  <input type="number" step="0.5" min="0" name="carry_over_days" value="{{ $leaveType->carry_over_days }}" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                </div>
+                <div>
+                  <label class="block text-xs font-semibold text-gray-600 mb-1">ZIP justificatifs</label>
+                  <input type="file" name="justification_zip" accept=".zip" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+                </div>
+                <div class="md:col-span-3">
+                  <label class="block text-xs font-semibold text-gray-600 mb-1">Description</label>
+                  <textarea name="description" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">{{ $leaveType->description }}</textarea>
+                </div>
+                <div class="md:col-span-3 flex flex-wrap items-center gap-4">
+                  <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="requires_attachment" value="1" {{ $leaveType->requires_attachment ? 'checked' : '' }}> Pièce obligatoire</label>
+                  <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="is_paid" value="1" {{ $leaveType->is_paid ? 'checked' : '' }}> Congé payé</label>
+                  <label class="inline-flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="is_active" value="1" {{ $leaveType->is_active ? 'checked' : '' }}> Actif</label>
+                  <button type="submit" class="ml-auto inline-flex items-center px-4 py-2 rounded-lg bg-[#2453d6] text-white text-sm font-semibold hover:bg-blue-700 transition">Enregistrer</button>
+                </div>
+              </form>
             </td>
           </tr>
           @empty
           <tr>
-            <td colspan="3" class="py-3 text-center text-gray-400">Aucun type configuré.</td>
+            <td colspan="4" class="py-3 text-center text-gray-400">Aucun type configuré.</td>
           </tr>
           @endforelse
         </tbody>
