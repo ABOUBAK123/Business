@@ -969,14 +969,72 @@ class SignatureController extends Controller
             $uploadQuery['signatureProfileId'] = $sigProfileId;
         }
 
-        $uploadResp = $client
-            ->attach('document', file_get_contents($absolutePath), basename($absolutePath), ['Content-Type' => 'application/pdf'])
-            ->post("{$endpoint}/api/workflows/{$workflowId}/parts?" . http_build_query($uploadQuery));
+        $pdfBytes = file_get_contents($absolutePath);
+        if ($pdfBytes === false) {
+            $this->lastPlatformError = 'upload_document: impossible de lire le fichier (' . $absolutePath . ')';
+            Log::error('SunnyStamp: lecture fichier upload impossible', [
+                'absolute_path' => $absolutePath,
+            ]);
+            return null;
+        }
 
-        if (!$uploadResp->successful()) {
+        $uploadAttempts = [
+            ['field' => 'document', 'url' => "{$endpoint}/api/workflows/{$workflowId}/parts?" . http_build_query($uploadQuery)],
+            ['field' => 'file',     'url' => "{$endpoint}/api/workflows/{$workflowId}/parts?" . http_build_query($uploadQuery)],
+            ['field' => 'part',     'url' => "{$endpoint}/api/workflows/{$workflowId}/parts?" . http_build_query($uploadQuery)],
+            ['field' => 'document', 'url' => "{$endpoint}/api/workflows/{$workflowId}/parts"],
+            ['field' => 'file',     'url' => "{$endpoint}/api/workflows/{$workflowId}/parts"],
+            ['field' => 'document', 'url' => "{$endpoint}/api/workflows/{$workflowId}/documents"],
+            ['field' => 'file',     'url' => "{$endpoint}/api/workflows/{$workflowId}/documents"],
+        ];
+
+        $uploadResp = null;
+        foreach ($uploadAttempts as $attempt) {
+            try {
+                $candidate = $client
+                    ->attach($attempt['field'], $pdfBytes, basename($absolutePath), ['Content-Type' => 'application/pdf'])
+                    ->post($attempt['url']);
+
+                Log::info('SunnyStamp: tentative upload document', [
+                    'workflow_id' => $workflowId,
+                    'field' => $attempt['field'],
+                    'url' => $attempt['url'],
+                    'status' => $candidate->status(),
+                ]);
+
+                if ($candidate->successful()) {
+                    $uploadResp = $candidate;
+                    break;
+                }
+
+                $uploadResp = $candidate;
+
+                // Auth/droits -> inutile de continuer les variantes.
+                if (in_array($candidate->status(), [401, 403], true)) {
+                    break;
+                }
+            } catch (\Throwable $e) {
+                Log::warning('SunnyStamp: exception tentative upload', [
+                    'workflow_id' => $workflowId,
+                    'field' => $attempt['field'],
+                    'url' => $attempt['url'],
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        if (!$uploadResp || !$uploadResp->successful()) {
+            if (!$uploadResp) {
+                $this->lastPlatformError = 'upload_document: aucune réponse exploitable reçue';
+                Log::error('SunnyStamp: échec upload document (aucune réponse)', [
+                    'workflow_id' => $workflowId,
+                ]);
+                return null;
+            }
             $this->lastPlatformError = 'upload_document: HTTP ' . $uploadResp->status() . ' - ' . Str::limit((string) $uploadResp->body(), 500, '...');
             Log::error('SunnyStamp: échec upload document', [
-                'status' => $uploadResp->status(), 'body' => $uploadResp->body(),
+                'status' => $uploadResp->status(),
+                'body' => $uploadResp->body(),
             ]);
             return null;
         }
@@ -1035,7 +1093,11 @@ class SignatureController extends Controller
                 ]);
                 return null;
             }
-            $this->lastPlatformError = 'start_workflow: HTTP ' . $startResp->status() . ' - ' . Str::limit((string) $startResp->body(), 500, '...');
+            if ($startResp->status() === 403 && str_contains((string) $startResp->body(), 'NoDocumentToSignInWorkflow')) {
+                $this->lastPlatformError = 'start_workflow: aucun document signé détecté dans le workflow après upload';
+            } else {
+                $this->lastPlatformError = 'start_workflow: HTTP ' . $startResp->status() . ' - ' . Str::limit((string) $startResp->body(), 500, '...');
+            }
             Log::error('SunnyStamp: échec démarrage workflow', [
                 'status' => $startResp->status(), 'body' => $startResp->body(),
             ]);

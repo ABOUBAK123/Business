@@ -152,6 +152,96 @@ if (!$workflowId) {
     exit;
 }
 
+// ─── STEP 3b : Upload d'un PDF existant dans le workflow ───────────────────
+echo "<h3>Étape 3b — Upload d'un PDF dans le workflow</h3>";
+
+$pdfAbsolutePath = null;
+$pdfDebug = [];
+
+$docs = DB::table('documents')
+    ->select(['id', 'title', 'file_path', 'mime_type'])
+    ->whereNotNull('file_path')
+    ->orderByDesc('created_at')
+    ->limit(30)
+    ->get();
+
+foreach ($docs as $doc) {
+    $fp = trim((string) ($doc->file_path ?? ''));
+    if ($fp === '') {
+        continue;
+    }
+
+    $normalized = ltrim($fp, '/');
+    if (str_starts_with($normalized, 'public/')) {
+        $normalized = substr($normalized, 7);
+    }
+    if (str_starts_with($normalized, 'storage/')) {
+        $normalized = substr($normalized, 8);
+    }
+
+    $candidates = array_values(array_unique(array_filter([
+        __DIR__ . '/public/' . ltrim($fp, '/'),
+        __DIR__ . '/storage/app/public/' . $normalized,
+        __DIR__ . '/' . ltrim($fp, '/'),
+    ])));
+
+    foreach ($candidates as $cand) {
+        if (is_string($cand) && $cand !== '' && is_file($cand) && is_readable($cand)) {
+            $pdfAbsolutePath = $cand;
+            $pdfDebug[] = "document source: {$doc->id} | {$doc->title} | {$fp}";
+            $pdfDebug[] = "path retenu: {$cand}";
+            break 2;
+        }
+    }
+}
+
+if (!$pdfAbsolutePath) {
+    box('⚠️ PDF introuvable', "Aucun PDF existant lisible trouvé dans la base/fichiers. Le start échouera avec NoDocumentToSignInWorkflow.", '#fff3e0');
+} else {
+    box('PDF sélectionné', implode("\n", $pdfDebug), '#e3f2fd');
+
+    $uploadQuery = ['createDocuments' => 'true'];
+    if (!empty($cfg->signature_profile_id)) {
+        $uploadQuery['signatureProfileId'] = $cfg->signature_profile_id;
+    }
+
+    $pdfBytes = file_get_contents($pdfAbsolutePath);
+    if ($pdfBytes === false) {
+        box('❌ Upload', 'Impossible de lire le PDF sélectionné.', '#ffebee');
+    } else {
+        $uploadVariants = [
+            ['field' => 'document', 'url' => "{$endpoint}/api/workflows/{$workflowId}/parts?" . http_build_query($uploadQuery)],
+            ['field' => 'file',     'url' => "{$endpoint}/api/workflows/{$workflowId}/parts?" . http_build_query($uploadQuery)],
+            ['field' => 'part',     'url' => "{$endpoint}/api/workflows/{$workflowId}/parts?" . http_build_query($uploadQuery)],
+            ['field' => 'document', 'url' => "{$endpoint}/api/workflows/{$workflowId}/parts"],
+            ['field' => 'file',     'url' => "{$endpoint}/api/workflows/{$workflowId}/parts"],
+            ['field' => 'document', 'url' => "{$endpoint}/api/workflows/{$workflowId}/documents"],
+            ['field' => 'file',     'url' => "{$endpoint}/api/workflows/{$workflowId}/documents"],
+        ];
+
+        $uploadOk = false;
+        foreach ($uploadVariants as $uv) {
+            try {
+                $r = $client
+                    ->attach($uv['field'], $pdfBytes, basename($pdfAbsolutePath), ['Content-Type' => 'application/pdf'])
+                    ->post($uv['url']);
+                $color = $r->successful() ? '#e8f5e9' : '#f5f5f5';
+                box("UPLOAD {$uv['field']} {$uv['url']} → HTTP {$r->status()}", prettyJson($r->body()), $color);
+                if ($r->successful()) {
+                    $uploadOk = true;
+                    break;
+                }
+            } catch (\Throwable $e) {
+                box("❌ Exception upload {$uv['field']} {$uv['url']}", $e->getMessage(), '#ffebee');
+            }
+        }
+
+        if (!$uploadOk) {
+            box('⚠️ Aucun upload réussi', 'Le start échouera probablement faute de document.', '#fff3e0');
+        }
+    }
+}
+
 // ─── STEP 4 : GET état du workflow (avant start) ────────────────────────────
 echo "<h3>Étape 4 — État workflow avant start</h3>";
 try {
