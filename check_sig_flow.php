@@ -33,7 +33,7 @@ function prettyJson(mixed $v): string
 
 echo "<!DOCTYPE html><html><head><meta charset='utf-8'><title>Diagnostic Signature API</title></head><body style='font-family:monospace;padding:20px;max-width:900px;margin:auto;'>";
 echo "<h2>🔬 Diagnostic flux API Signature (sigfae)</h2>";
-echo "<div style='background:#e3f2fd;border:1px solid #90caf9;border-radius:6px;padding:8px 12px;margin-bottom:12px;'>Version diagnostic: <strong>v2026-05-05-step3b-upload</strong></div>";
+echo "<div style='background:#e3f2fd;border:1px solid #90caf9;border-radius:6px;padding:8px 12px;margin-bottom:12px;'>Version diagnostic: <strong>v2026-05-05-step3c-full-start-matrix</strong></div>";
 
 // ─── Récupérer la config ────────────────────────────────────────────────────
 $cfg = DB::table('signature_provider_configs')->where('is_active', 1)->first();

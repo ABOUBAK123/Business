@@ -25,6 +25,30 @@ class SignatureController extends Controller
     private ?string $lastPlatformError = null;
 
     /**
+     * Formate une erreur API avec status + body + requestId/logId quand disponibles.
+     */
+    private static function formatApiErrorDetail(\Illuminate\Http\Client\Response $resp): string
+    {
+        $body = (string) $resp->body();
+        $detail = 'HTTP ' . $resp->status() . ' - ' . Str::limit($body, 500, '...');
+
+        $json = $resp->json();
+        if (is_array($json)) {
+            $requestId = $json['requestId'] ?? $json['request_id'] ?? null;
+            $logId = $json['logId'] ?? $json['log_id'] ?? null;
+
+            if (is_string($requestId) && $requestId !== '') {
+                $detail .= ' | requestId=' . $requestId;
+            }
+            if (is_string($logId) && $logId !== '') {
+                $detail .= ' | logId=' . $logId;
+            }
+        }
+
+        return $detail;
+    }
+
+    /**
      * Extrait la première URL utile trouvée dans une réponse API (parcours récursif).
      */
     private static function extractFirstUrlFromPayload(mixed $payload): ?string
@@ -921,7 +945,7 @@ class SignatureController extends Controller
         }
 
         if (!$wflResp->successful()) {
-            $this->lastPlatformError = 'create_workflow: HTTP ' . $wflResp->status() . ' - ' . Str::limit((string) $wflResp->body(), 500, '...');
+            $this->lastPlatformError = 'create_workflow: ' . self::formatApiErrorDetail($wflResp);
             Log::error('SunnyStamp: échec création workflow', [
                 'status' => $wflResp->status(), 'body' => $wflResp->body(),
             ]);
@@ -1031,7 +1055,7 @@ class SignatureController extends Controller
                 ]);
                 return null;
             }
-            $this->lastPlatformError = 'upload_document: HTTP ' . $uploadResp->status() . ' - ' . Str::limit((string) $uploadResp->body(), 500, '...');
+            $this->lastPlatformError = 'upload_document: ' . self::formatApiErrorDetail($uploadResp);
             Log::error('SunnyStamp: échec upload document', [
                 'status' => $uploadResp->status(),
                 'body' => $uploadResp->body(),
@@ -1123,7 +1147,7 @@ class SignatureController extends Controller
             if ($startResp->status() === 403 && str_contains((string) $startResp->body(), 'NoDocumentToSignInWorkflow')) {
                 $this->lastPlatformError = 'start_workflow: aucun document signé détecté dans le workflow après upload';
             } else {
-                $this->lastPlatformError = 'start_workflow: HTTP ' . $startResp->status() . ' - ' . Str::limit((string) $startResp->body(), 500, '...');
+                $this->lastPlatformError = 'start_workflow: ' . self::formatApiErrorDetail($startResp);
             }
             Log::error('SunnyStamp: échec démarrage workflow', [
                 'status' => $startResp->status(), 'body' => $startResp->body(),
@@ -1199,7 +1223,7 @@ class SignatureController extends Controller
                 return $inviteUrl;
             }
 
-            $this->lastPlatformError = 'invite: réponse sans URL exploitable - ' . Str::limit((string) $inviteResp->body(), 500, '...');
+            $this->lastPlatformError = 'invite: réponse sans URL exploitable - ' . self::formatApiErrorDetail($inviteResp);
             Log::warning('SunnyStamp: invite créé mais URL absente', [
                 'status' => $inviteResp->status(),
                 'body' => $inviteResp->body(),
@@ -1262,7 +1286,7 @@ class SignatureController extends Controller
         Log::warning('SunnyStamp: invite non créé', [
             'status' => $inviteResp->status(), 'body' => $inviteResp->body(),
         ]);
-        $this->lastPlatformError = 'invite: HTTP ' . $inviteResp->status() . ' - ' . Str::limit((string) $inviteResp->body(), 500, '...');
+        $this->lastPlatformError = 'invite: ' . self::formatApiErrorDetail($inviteResp);
         return null;
     }
 
