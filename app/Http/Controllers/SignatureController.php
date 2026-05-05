@@ -1304,6 +1304,20 @@ class SignatureController extends Controller
             // Variante endpoint /invite-link
             fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite-link", ['recipientEmail' => $signer->email]),
             fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite-link", ['recipientId' => $recipientPlatformUserId]),
+
+            // Variantes sous /api/users/{ownerUserId}/workflows/{workflowId}/invite-link
+            fn() => $client->post("{$endpoint}/api/users/{$ownerUserId}/workflows/{$workflowId}/invite-link", ['recipientEmail' => $signer->email]),
+            fn() => $client->post("{$endpoint}/api/users/{$ownerUserId}/workflows/{$workflowId}/invite-link", ['recipientId' => $recipientPlatformUserId]),
+
+            // Variante legacy observée sur certaines instances
+            fn() => $client->post("{$endpoint}/api/users/{$ownerUserId}/invite", [
+                'workflowId' => $workflowId,
+                'recipientEmail' => $signer->email,
+            ]),
+            fn() => $client->post("{$endpoint}/api/users/{$ownerUserId}/invite", [
+                'workflowId' => $workflowId,
+                'email' => $signer->email,
+            ]),
         ];
 
         $inviteResp = null;
