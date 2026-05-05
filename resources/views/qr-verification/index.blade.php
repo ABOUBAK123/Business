@@ -123,13 +123,16 @@ async function verifyToken() {
                         Document authentique — ${data.type === 'signature' ? 'Signé électroniquement' : 'Généré par le système'}
                     </p>
                     <table class="w-full text-sm text-gray-700">${rows}</table>
-                    ${data.download_url ? `
-                    <div class="pt-2">
-                        <a href="${data.download_url}"
+                    <div class="pt-2 flex flex-wrap items-center gap-2">
+                        ${data.download_url ? `<a href="${data.download_url}"
                            class="inline-flex items-center gap-2 px-5 py-2.5 bg-[#2453d6] hover:bg-[#1f47bb] text-white font-semibold rounded-xl text-sm transition">
                             <i class="fas fa-download"></i> Télécharger une copie certifiée
-                        </a>
-                    </div>` : ''}
+                        </a>` : ''}
+                        ${data.is_owner && data.editor_url ? `<button type="button" onclick="openOnlyOfficeEditor('${(data.editor_url || '').replace(/'/g, "\\'")}')"
+                            class="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-700 hover:bg-slate-800 text-white font-semibold rounded-xl text-sm transition">
+                            <i class="fas fa-pen-to-square"></i> Ouvrir dans l'éditeur
+                        </button>` : ''}
+                    </div>
                     <p class="text-xs text-green-600 border-t border-green-200 pt-2">${esc(data.message ?? '')}</p>
                 </div>`;
         } else {
@@ -193,17 +196,16 @@ async function verifyDocumentNumber() {
                         ${doc.title ? `<p><span class="font-semibold text-gray-600">Titre:</span> ${esc(doc.title)}</p>` : ''}
                         ${doc.administration ? `<p><span class="font-semibold text-gray-600">Administration:</span> ${esc(doc.administration)}</p>` : ''}
                     </div>
-                    ${(data.editor_url || data.preview_url) ? `
-                    <div class="pt-1 flex items-center gap-2">
-                        <button type="button" onclick="openOnlyOfficeEditor('${(data.editor_url || '').replace(/'/g, "\\'")}')"
-                            class="inline-flex items-center gap-2 px-5 py-2.5 bg-[#2453d6] hover:bg-[#1f47bb] text-white font-semibold rounded-xl text-sm transition">
-                            <i class="fas fa-pen-to-square"></i> Ouvrir dans l'éditeur OnlyOffice
-                        </button>
-                        <a href="${data.preview_url}" target="_blank"
-                           class="inline-flex items-center gap-2 px-4 py-2.5 border border-gray-300 text-gray-700 font-semibold rounded-xl text-sm hover:bg-gray-50 transition">
-                            <i class="fas fa-up-right-from-square"></i> Ouvrir
-                        </a>
-                    </div>` : ''}
+                    <div class="pt-1 flex flex-wrap items-center gap-2">
+                        ${data.download_url ? `<a href="${data.download_url}"
+                           class="inline-flex items-center gap-2 px-5 py-2.5 bg-[#2453d6] hover:bg-[#1f47bb] text-white font-semibold rounded-xl text-sm transition">
+                            <i class="fas fa-download"></i> Télécharger
+                        </a>` : ''}
+                        ${data.is_owner && data.editor_url ? `<button type="button" onclick="openOnlyOfficeEditor('${(data.editor_url || '').replace(/'/g, "\\'")}')"
+                            class="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-700 hover:bg-slate-800 text-white font-semibold rounded-xl text-sm transition">
+                            <i class="fas fa-pen-to-square"></i> Ouvrir dans l'éditeur
+                        </button>` : ''}
+                    </div>
                 </div>`;
         } else {
             result.innerHTML = `
