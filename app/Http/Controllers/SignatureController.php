@@ -984,17 +984,20 @@ class SignatureController extends Controller
         // 3. Démarrer le workflow
         // Certaines versions API rejettent PATCH application/json (HTTP 415).
         // On tente plusieurs variantes compatibles avant d'échouer.
-        $startPayload = ['workflowStatus' => 'started'];
+        // Certaines APIs utilisent 'status' plutôt que 'workflowStatus'.
         $startAttempts = [
             fn() => $client
                 ->withHeaders(['Content-Type' => 'application/merge-patch+json'])
-                ->send('PATCH', "{$endpoint}/api/workflows/{$workflowId}", ['json' => $startPayload]),
+                ->send('PATCH', "{$endpoint}/api/workflows/{$workflowId}", ['json' => ['workflowStatus' => 'started']]),
             fn() => $client
                 ->withHeaders(['Content-Type' => 'application/json'])
-                ->send('PATCH', "{$endpoint}/api/workflows/{$workflowId}", ['json' => $startPayload]),
+                ->send('PATCH', "{$endpoint}/api/workflows/{$workflowId}", ['json' => ['workflowStatus' => 'started']]),
             fn() => $client
                 ->withHeaders(['Content-Type' => 'application/json'])
-                ->send('PUT', "{$endpoint}/api/workflows/{$workflowId}", ['json' => $startPayload]),
+                ->send('PATCH', "{$endpoint}/api/workflows/{$workflowId}", ['json' => ['status' => 'started']]),
+            fn() => $client
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->send('PUT', "{$endpoint}/api/workflows/{$workflowId}", ['json' => ['workflowStatus' => 'started']]),
             fn() => $client
                 ->withHeaders(['Content-Type' => 'application/json'])
                 ->send('POST', "{$endpoint}/api/workflows/{$workflowId}/start", ['json' => []]),
@@ -1264,3 +1267,28 @@ class SignatureController extends Controller
         return response()->json(['ok' => true, 'url' => $inviteUrl]);
     }
 }
+
+        // Après un start réussi, vérifier si le workflow expose directement une URL de signature.
+        // Certaines plateformes (sigfae) mettent le lien dans l'objet workflow lui-même.
+        try {
+            $wfStateResp = $client->get("{$endpoint}/api/workflows/{$workflowId}");
+            if ($wfStateResp->successful()) {
+                Log::info('SunnyStamp: état workflow après start', [
+                    'workflow_id' => $workflowId,
+                    'body' => $wfStateResp->body(),
+                ]);
+
+                $wfState = $wfStateResp->json();
+                // Chercher une URL de signature directe dans le workflow ou ses recipients/steps
+                $directUrl = $this->extractInviteUrl($wfState, $endpoint);
+                if ($directUrl && str_starts_with($directUrl, 'http')) {
+                    Log::info('SunnyStamp: URL directe trouvée dans état workflow', [
+                        'workflow_id' => $workflowId,
+                        'url' => $directUrl,
+                    ]);
+                    return $directUrl;
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('SunnyStamp: exception GET état workflow après start', ['error' => $e->getMessage()]);
+        }
