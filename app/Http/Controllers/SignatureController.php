@@ -57,6 +57,57 @@ class SignatureController extends Controller
         return null;
     }
 
+    /**
+     * Extrait l'URL d'invitation depuis la réponse API.
+     * Gère : URL complète (inviteUrl/url/link), token JWT (→ construit /invite?token=...),
+     * champs imbriqués, tableaux de recipients/steps.
+     */
+    private function extractInviteUrl(mixed $payload, string $baseEndpoint): ?string
+    {
+        if (!is_array($payload)) {
+            return null;
+        }
+
+        $base = rtrim($baseEndpoint, '/');
+
+        // Chercher les champs directs d'abord
+        $urlFields  = ['inviteUrl', 'invite_url', 'url', 'link', 'redirectUrl', 'signingUrl', 'accessUrl'];
+        $tokenFields = ['token', 'inviteToken', 'invite_token', 'accessToken', 'signingToken'];
+
+        // Parcours récursif (BFS)
+        $queue = [$payload];
+        while (!empty($queue)) {
+            $node = array_shift($queue);
+            if (!is_array($node)) {
+                continue;
+            }
+
+            // URL complète
+            foreach ($urlFields as $f) {
+                if (isset($node[$f]) && is_string($node[$f]) && str_starts_with($node[$f], 'http')) {
+                    return $node[$f];
+                }
+            }
+
+            // Token → construire URL
+            foreach ($tokenFields as $f) {
+                if (isset($node[$f]) && is_string($node[$f]) && $node[$f] !== '') {
+                    return $base . '/invite?token=' . $node[$f];
+                }
+            }
+
+            // Descendre dans les clés
+            foreach ($node as $key => $child) {
+                if (is_array($child)) {
+                    $queue[] = $child;
+                }
+            }
+        }
+
+        // Dernier recours : première URL avec invite/url/link dans le nom de clé
+        return self::extractFirstUrlFromPayload($payload);
+    }
+
     public function index()
     {
         $userId = Auth::id();
@@ -1044,12 +1095,13 @@ class SignatureController extends Controller
         }
 
         if ($inviteResp && $inviteResp->successful()) {
-            $inviteUrl = $inviteResp->json('inviteUrl')
-                ?? $inviteResp->json('url')
-                ?? $inviteResp->json('link')
-                ?? $inviteResp->json('data.inviteUrl')
-                ?? $inviteResp->json('data.url')
-                ?? self::extractFirstUrlFromPayload($inviteResp->json());
+            Log::info('SunnyStamp: réponse invite reçue', [
+                'workflow_id' => $workflowId,
+                'status' => $inviteResp->status(),
+                'body' => $inviteResp->body(),
+            ]);
+
+            $inviteUrl = $this->extractInviteUrl($inviteResp->json(), $endpoint);
 
             if (is_string($inviteUrl) && $inviteUrl !== '') {
                 return $inviteUrl;
@@ -1074,14 +1126,21 @@ class SignatureController extends Controller
         // Fallback quand les endpoints invite n'existent pas sur l'instance (404).
         if ($inviteResp->status() === 404) {
             try {
+                // Logguer la réponse 404 pour diagnostic
+                Log::warning('SunnyStamp: invite 404 - tentative fallback workflow details', [
+                    'workflow_id' => $workflowId,
+                    'last_invite_status' => $inviteResp->status(),
+                    'last_invite_body' => Str::limit((string) $inviteResp->body(), 300),
+                ]);
+
                 $workflowResp = $client->get("{$endpoint}/api/workflows/{$workflowId}");
                 if ($workflowResp->successful()) {
-                    $workflowUrl = $workflowResp->json('inviteUrl')
-                        ?? $workflowResp->json('url')
-                        ?? $workflowResp->json('link')
-                        ?? $workflowResp->json('data.inviteUrl')
-                        ?? $workflowResp->json('data.url')
-                        ?? self::extractFirstUrlFromPayload($workflowResp->json());
+                    Log::info('SunnyStamp: détail workflow reçu pour extraction invite URL', [
+                        'workflow_id' => $workflowId,
+                        'body' => $workflowResp->body(),
+                    ]);
+
+                    $workflowUrl = $this->extractInviteUrl($workflowResp->json(), $endpoint);
 
                     if (is_string($workflowUrl) && $workflowUrl !== '') {
                         Log::info('SunnyStamp: URL récupérée via détail workflow', [
@@ -1098,12 +1157,14 @@ class SignatureController extends Controller
                 ]);
             }
 
-            // Dernier fallback: ouvrir la racine de la plateforme (évite /portal en 404).
-            Log::warning('SunnyStamp: fallback vers racine plateforme (invite indisponible)', [
+            // Construire l'URL invite à partir du workflowId (format connu sigfae)
+            // https://sigfae.artci-sign.ci/invite?workflowId={id}
+            $guessedUrl = rtrim($endpoint, '/') . '/invite?workflowId=' . urlencode($workflowId);
+            Log::warning('SunnyStamp: fallback URL invite construite manuellement', [
                 'workflow_id' => $workflowId,
-                'endpoint' => $endpoint,
+                'guessed_url' => $guessedUrl,
             ]);
-            return rtrim($endpoint, '/');
+            return $guessedUrl;
         }
 
         Log::warning('SunnyStamp: invite non créé', [
