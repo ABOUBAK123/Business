@@ -1044,21 +1044,49 @@ class SignatureController extends Controller
         // On tente plusieurs variantes compatibles avant d'échouer.
         // Certaines APIs utilisent 'status' plutôt que 'workflowStatus'.
         $startAttempts = [
+            // Variantes PATCH merge-patch
             fn() => $client
                 ->withHeaders(['Content-Type' => 'application/merge-patch+json'])
                 ->send('PATCH', "{$endpoint}/api/workflows/{$workflowId}", ['json' => ['workflowStatus' => 'started']]),
             fn() => $client
+                ->withHeaders(['Content-Type' => 'application/merge-patch+json'])
+                ->send('PATCH', "{$endpoint}/api/workflows/{$workflowId}", ['json' => ['workflowStatus' => 'in_progress']]),
+            fn() => $client
+                ->withHeaders(['Content-Type' => 'application/merge-patch+json'])
+                ->send('PATCH', "{$endpoint}/api/workflows/{$workflowId}", ['json' => ['workflowStatus' => 'STARTED']]),
+
+            // Variantes PATCH JSON
+            fn() => $client
                 ->withHeaders(['Content-Type' => 'application/json'])
                 ->send('PATCH', "{$endpoint}/api/workflows/{$workflowId}", ['json' => ['workflowStatus' => 'started']]),
+            fn() => $client
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->send('PATCH', "{$endpoint}/api/workflows/{$workflowId}", ['json' => ['workflowStatus' => 'in_progress']]),
             fn() => $client
                 ->withHeaders(['Content-Type' => 'application/json'])
                 ->send('PATCH', "{$endpoint}/api/workflows/{$workflowId}", ['json' => ['status' => 'started']]),
             fn() => $client
                 ->withHeaders(['Content-Type' => 'application/json'])
+                ->send('PATCH', "{$endpoint}/api/workflows/{$workflowId}", ['json' => ['status' => 'in_progress']]),
+
+            // Variantes PUT
+            fn() => $client
+                ->withHeaders(['Content-Type' => 'application/json'])
                 ->send('PUT', "{$endpoint}/api/workflows/{$workflowId}", ['json' => ['workflowStatus' => 'started']]),
             fn() => $client
                 ->withHeaders(['Content-Type' => 'application/json'])
+                ->send('PUT', "{$endpoint}/api/workflows/{$workflowId}", ['json' => ['workflowStatus' => 'in_progress']]),
+
+            // Variantes POST /start
+            fn() => $client
+                ->withHeaders(['Content-Type' => 'application/json'])
                 ->send('POST', "{$endpoint}/api/workflows/{$workflowId}/start", ['json' => []]),
+            fn() => $client
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->send('POST', "{$endpoint}/api/workflows/{$workflowId}/start", ['json' => ['workflowStatus' => 'started']]),
+            fn() => $client
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->send('POST', "{$endpoint}/api/workflows/{$workflowId}/start", ['json' => ['status' => 'started']]),
         ];
 
         $startResp = null;
@@ -1070,13 +1098,12 @@ class SignatureController extends Controller
                     break;
                 }
 
-                // Continuer sur erreurs de media type / route méthode non supportée.
-                if (!in_array($candidate->status(), [404, 405, 415], true)) {
-                    $startResp = $candidate;
+                $startResp = $candidate;
+
+                // On continue à tester toutes les variantes sauf erreurs d'auth/permission.
+                if (in_array($candidate->status(), [401, 403], true)) {
                     break;
                 }
-
-                $startResp = $candidate;
             } catch (\Throwable $e) {
                 Log::warning('SunnyStamp: tentative start workflow en exception', [
                     'workflow_id' => $workflowId,

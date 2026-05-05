@@ -100,30 +100,30 @@ try {
 // ─── STEP 3 : Créer un workflow test ────────────────────────────────────────
 echo "<h3>Étape 3 — Création du workflow</h3>";
 
+$recipient = [
+    'id'        => $ownerUserId,
+    'userId'    => $ownerUserId,
+    'email'     => $testEmail,
+    'firstName' => $me['firstName'] ?? 'Test',
+    'lastName'  => $me['lastName'] ?? 'User',
+    'name'      => $me['name'] ?? ($me['firstName'] ?? 'Test') . ' ' . ($me['lastName'] ?? 'User'),
+];
+
 $payload = [
     'name'         => 'Test Diag ' . date('H:i:s'),
     'description'  => 'Workflow diagnostic automatique',
-    'workflowMode' => 'obo',
+    'workflowMode' => 'FULL',
     'steps'        => [[
-        'stepType'  => 'signature',
-        'name'      => 'Signature',
-        'recipients'=> [[
-            'id'        => $ownerUserId,
-            'userId'    => $ownerUserId,
-            'email'     => $testEmail,
-            'firstName' => $me['firstName'] ?? 'Test',
-            'lastName'  => $me['lastName'] ?? 'User',
-            'name'      => $me['name'] ?? ($me['firstName'] ?? 'Test') . ' ' . ($me['lastName'] ?? 'User'),
-        ]],
+        'stepType'           => 'signature',
+        'name'               => 'Signature',
+        'recipients'         => [$recipient],
+        'requiredRecipients' => 1,
+        'validityPeriod'     => 86400000,
+        'invitePeriod'       => 86400000,
+        'maxInvites'         => 1,
+        'sendDownloadLink'   => false,
     ]],
-    'recipients'   => [[
-        'id'        => $ownerUserId,
-        'userId'    => $ownerUserId,
-        'email'     => $testEmail,
-        'firstName' => $me['firstName'] ?? 'Test',
-        'lastName'  => $me['lastName'] ?? 'User',
-        'name'      => $me['name'] ?? ($me['firstName'] ?? 'Test') . ' ' . ($me['lastName'] ?? 'User'),
-    ]],
+    'recipients'   => [$recipient],
 ];
 
 if (!empty($cfg->consent_page_id)) {
@@ -257,10 +257,17 @@ echo "<h3>Étape 5 — Start workflow</h3>";
 
 $startPayloads = [
     ['method' => 'PATCH', 'ct' => 'application/merge-patch+json', 'body' => ['workflowStatus' => 'started']],
+    ['method' => 'PATCH', 'ct' => 'application/merge-patch+json', 'body' => ['workflowStatus' => 'in_progress']],
+    ['method' => 'PATCH', 'ct' => 'application/merge-patch+json', 'body' => ['workflowStatus' => 'STARTED']],
     ['method' => 'PATCH', 'ct' => 'application/json',             'body' => ['workflowStatus' => 'started']],
+    ['method' => 'PATCH', 'ct' => 'application/json',             'body' => ['workflowStatus' => 'in_progress']],
     ['method' => 'PATCH', 'ct' => 'application/json',             'body' => ['status' => 'started']],
+    ['method' => 'PATCH', 'ct' => 'application/json',             'body' => ['status' => 'in_progress']],
     ['method' => 'PUT',   'ct' => 'application/json',             'body' => ['workflowStatus' => 'started']],
+    ['method' => 'PUT',   'ct' => 'application/json',             'body' => ['workflowStatus' => 'in_progress']],
     ['method' => 'POST',  'ct' => 'application/json',             'body' => [], 'url_suffix' => '/start'],
+    ['method' => 'POST',  'ct' => 'application/json',             'body' => ['workflowStatus' => 'started'], 'url_suffix' => '/start'],
+    ['method' => 'POST',  'ct' => 'application/json',             'body' => ['status' => 'started'], 'url_suffix' => '/start'],
 ];
 
 $startedOk = false;
