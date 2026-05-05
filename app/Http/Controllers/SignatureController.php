@@ -82,6 +82,18 @@ class SignatureController extends Controller
     }
 
     /**
+     * Extrait une URL absolue depuis un texte brut (fallback API non JSON).
+     */
+    private static function extractFirstUrlFromText(string $text): ?string
+    {
+        if (preg_match('/https?:\/\/[^\s"\'<>]+/i', $text, $matches) === 1) {
+            return $matches[0] ?? null;
+        }
+
+        return null;
+    }
+
+    /**
      * Extrait l'URL d'invitation depuis la réponse API.
      * Gère : URL complète (inviteUrl/url/link), token JWT (→ construit /invite?token=...),
      * champs imbriqués, tableaux de recipients/steps.
@@ -1153,6 +1165,28 @@ class SignatureController extends Controller
                 'status' => $startResp->status(), 'body' => $startResp->body(),
             ]);
             return null;
+        }
+
+        // Certaines instances renvoient deja un lien/token de signature dans la reponse start.
+        $startJson = $startResp->json();
+        if (is_array($startJson)) {
+            $startUrl = $this->extractInviteUrl($startJson, $endpoint);
+            if (is_string($startUrl) && $startUrl !== '') {
+                Log::info('SunnyStamp: URL récupérée via réponse start', [
+                    'workflow_id' => $workflowId,
+                    'url' => $startUrl,
+                ]);
+                return $startUrl;
+            }
+        }
+
+        $startBodyUrl = self::extractFirstUrlFromText((string) $startResp->body());
+        if (is_string($startBodyUrl) && $startBodyUrl !== '') {
+            Log::info('SunnyStamp: URL récupérée via body start (texte brut)', [
+                'workflow_id' => $workflowId,
+                'url' => $startBodyUrl,
+            ]);
+            return $startBodyUrl;
         }
 
         // 4. Créer le lien d'invitation
