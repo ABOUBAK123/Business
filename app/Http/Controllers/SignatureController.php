@@ -744,13 +744,28 @@ class SignatureController extends Controller
             : ($cfg->consent_page_id_approval ?: $cfg->consent_page_id ?? '');
         $sigProfileId = $cfg->signature_profile_id ?? '';
 
+        $recipientPlatformUserId = self::resolvePlatformUserIdByEmail($cfg, (string) $signer->email);
+        $nameParts = preg_split('/\s+/', trim((string) $signer->name)) ?: [];
+        $recipientFirstName = (string) ($nameParts[0] ?? $signer->name ?? 'Utilisateur');
+        $recipientLastName = trim((string) implode(' ', array_slice($nameParts, 1)));
+
         $client = Http::withToken($token)
             ->timeout($timeout)
             ->when(!$verifySSL, fn($h) => $h->withoutVerifying());
 
         // 1. Créer le workflow
         $stepType  = $actionType === 'signature' ? 'signature' : 'approval';
-        $recipient = ['email' => $signer->email, 'firstName' => $signer->name, 'maxInvites' => 1];
+        $recipient = [
+            'email' => $signer->email,
+            'firstName' => $recipientFirstName,
+            'lastName' => $recipientLastName,
+            'name' => (string) $signer->name,
+            'maxInvites' => 1,
+        ];
+        if (!empty($recipientPlatformUserId)) {
+            $recipient['id'] = $recipientPlatformUserId;
+            $recipient['userId'] = $recipientPlatformUserId;
+        }
         if (!empty($consentPageId)) {
             $recipient['consentPageId'] = $consentPageId;
         }
@@ -778,10 +793,13 @@ class SignatureController extends Controller
                 'name' => 'e-Parapheur — ' . $document->title,
                 'steps' => [[
                     'stepType' => $stepType,
-                    'recipients' => [[
+                    'recipients' => [array_filter([
+                        'id' => $recipientPlatformUserId,
+                        'userId' => $recipientPlatformUserId,
                         'email' => $signer->email,
-                        'firstName' => $signer->name,
-                    ]],
+                        'firstName' => $recipientFirstName,
+                        'lastName' => $recipientLastName,
+                    ], fn($v) => !is_null($v) && $v !== '')],
                     'requiredRecipients' => 1,
                 ]],
             ];
