@@ -501,6 +501,122 @@ window.addEventListener('message', function (event) {
 const __wfInviteUrl = "{{ route('signatures.get-invite-url') }}";
 const __wfCsrfToken = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
 
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function parseApiSupportIds(message) {
+    const text = String(message ?? '');
+    const requestMatch = text.match(/requestId\s*=\s*([A-Za-z0-9_-]+)/i);
+    const logMatch = text.match(/logId\s*=\s*([A-Za-z0-9_-]+)/i);
+    return {
+        requestId: requestMatch ? requestMatch[1] : '',
+        logId: logMatch ? logMatch[1] : '',
+    };
+}
+
+function buildSupportDiagnostic(message, executionId, actionType, requestId, logId) {
+    const lines = [
+        'Diagnostic Signature API',
+        'Date: ' + new Date().toISOString(),
+        'Execution ID: ' + (executionId || 'N/A'),
+        'Action: ' + (actionType || 'N/A'),
+        'Message: ' + String(message || 'N/A'),
+    ];
+
+    if (requestId) lines.push('requestId: ' + requestId);
+    if (logId) lines.push('logId: ' + logId);
+
+    return lines.join('\n');
+}
+
+async function copyTextSafe(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        return true;
+    } catch (_) {
+        const area = document.createElement('textarea');
+        area.value = text;
+        area.setAttribute('readonly', 'readonly');
+        area.style.position = 'fixed';
+        area.style.top = '-9999px';
+        document.body.appendChild(area);
+        area.focus();
+        area.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(area);
+        return ok;
+    }
+}
+
+function showSignatureFallback(message, executionId, actionType) {
+    const ids = parseApiSupportIds(message);
+    const diagnostic = buildSupportDiagnostic(message, executionId, actionType, ids.requestId, ids.logId);
+
+    const existing = document.getElementById('signature-fallback-modal');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = 'signature-fallback-modal';
+    modal.className = 'fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4';
+    modal.innerHTML = `
+        <div class="w-full max-w-2xl bg-white rounded-xl shadow-xl border border-red-100">
+            <div class="px-5 py-4 border-b border-gray-200 flex items-start justify-between gap-4">
+                <div>
+                    <h3 class="text-lg font-semibold text-red-700">Signature indisponible temporairement</h3>
+                    <p class="text-sm text-gray-600 mt-1">Aucune action locale n'a ete lancee pour eviter de masquer le probleme.</p>
+                </div>
+                <button type="button" id="signature-fallback-close-top" class="text-gray-500 hover:text-gray-700" aria-label="Fermer">✕</button>
+            </div>
+            <div class="px-5 py-4 space-y-3">
+                <div class="text-sm text-gray-800 leading-relaxed">
+                    ${escapeHtml(message || 'Erreur inconnue.')}
+                </div>
+                <div class="bg-gray-50 border border-gray-200 rounded-md p-3 text-sm">
+                    <div><span class="font-medium text-gray-700">executionId:</span> ${escapeHtml(executionId || 'N/A')}</div>
+                    <div><span class="font-medium text-gray-700">action:</span> ${escapeHtml(actionType || 'N/A')}</div>
+                    <div><span class="font-medium text-gray-700">requestId:</span> ${escapeHtml(ids.requestId || 'N/A')}</div>
+                    <div><span class="font-medium text-gray-700">logId:</span> ${escapeHtml(ids.logId || 'N/A')}</div>
+                </div>
+                <div class="flex items-center gap-2 pt-1">
+                    <button type="button" id="signature-copy-diagnostic" class="inline-flex items-center rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white hover:bg-red-700">
+                        Copier le diagnostic
+                    </button>
+                    <button type="button" id="signature-fallback-close" class="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">
+                        Fermer
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    function closeModal() {
+        modal.remove();
+    }
+
+    modal.querySelector('#signature-fallback-close-top')?.addEventListener('click', closeModal);
+    modal.querySelector('#signature-fallback-close')?.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) closeModal();
+    });
+
+    modal.querySelector('#signature-copy-diagnostic')?.addEventListener('click', async () => {
+        const ok = await copyTextSafe(diagnostic);
+        if (ok) {
+            alert('Diagnostic copie. Vous pouvez le coller dans votre ticket support.');
+        } else {
+            alert('Impossible de copier automatiquement. Merci de copier manuellement ce message:\n\n' + diagnostic);
+        }
+    });
+
+    document.body.appendChild(modal);
+}
+
 async function wfInboxAction(btn, executionId, actionType) {
     const icon = btn.querySelector('.wf-btn-icon');
     const originalClass = icon?.className ?? '';
@@ -534,11 +650,11 @@ async function wfInboxAction(btn, executionId, actionType) {
             window.open(data.url, '_blank', 'noopener,noreferrer');
         } else {
             const msg = data.message || 'Erreur inconnue.';
-            alert('API Signature indisponible: ' + msg + '\n\nAucune action locale automatique n\'a été lancée pour éviter de masquer le problème.');
+            showSignatureFallback(msg, executionId, actionType);
         }
     } catch (err) {
         console.error('wfInboxAction error:', err);
-        alert('Erreur réseau/API Signature: ' + (err?.message || 'inconnue') + '\n\nAucune action locale automatique n\'a été lancée.');
+        showSignatureFallback('Erreur reseau/API Signature: ' + (err?.message || 'inconnue'), executionId, actionType);
     } finally {
         if (icon) icon.className = originalClass;
         btn.disabled = false;
