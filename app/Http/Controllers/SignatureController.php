@@ -1160,14 +1160,14 @@ class SignatureController extends Controller
                 ]);
             }
 
-            // Construire l'URL invite à partir du workflowId (format connu sigfae)
-            // https://sigfae.artci-sign.ci/invite?workflowId={id}
-            $guessedUrl = rtrim($endpoint, '/') . '/invite?workflowId=' . urlencode($workflowId);
-            Log::warning('SunnyStamp: fallback URL invite construite manuellement', [
+            // Eviter de retourner un lien approximatif qui mène à "invitation invalide".
+            // On échoue explicitement pour forcer un diagnostic côté API.
+            $this->lastPlatformError = 'invite: aucun lien exploitable trouvé (endpoints invite en 404 et workflow sans URL/token)';
+            Log::warning('SunnyStamp: aucun lien invite exploitable trouvé après fallback', [
                 'workflow_id' => $workflowId,
-                'guessed_url' => $guessedUrl,
+                'endpoint' => $endpoint,
             ]);
-            return $guessedUrl;
+            return null;
         }
 
         Log::warning('SunnyStamp: invite non créé', [
