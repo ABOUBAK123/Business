@@ -1329,28 +1329,3 @@ class SignatureController extends Controller
         return response()->json(['ok' => true, 'url' => $inviteUrl]);
     }
 }
-
-        // Après un start réussi, vérifier si le workflow expose directement une URL de signature.
-        // Certaines plateformes (sigfae) mettent le lien dans l'objet workflow lui-même.
-        try {
-            $wfStateResp = $client->get("{$endpoint}/api/workflows/{$workflowId}");
-            if ($wfStateResp->successful()) {
-                Log::info('SunnyStamp: état workflow après start', [
-                    'workflow_id' => $workflowId,
-                    'body' => $wfStateResp->body(),
-                ]);
-
-                $wfState = $wfStateResp->json();
-                // Chercher une URL de signature directe dans le workflow ou ses recipients/steps
-                $directUrl = $this->extractInviteUrl($wfState, $endpoint);
-                if ($directUrl && str_starts_with($directUrl, 'http')) {
-                    Log::info('SunnyStamp: URL directe trouvée dans état workflow', [
-                        'workflow_id' => $workflowId,
-                        'url' => $directUrl,
-                    ]);
-                    return $directUrl;
-                }
-            }
-        } catch (\Throwable $e) {
-            Log::warning('SunnyStamp: exception GET état workflow après start', ['error' => $e->getMessage()]);
-        }
