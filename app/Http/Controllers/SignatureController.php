@@ -930,11 +930,34 @@ class SignatureController extends Controller
         }
 
         // 4. Créer le lien d'invitation
-        $invitePayload = ['recipientEmail' => $signer->email];
+        $recipientIdentity = array_filter([
+            'id' => $recipientPlatformUserId,
+            'userId' => $recipientPlatformUserId,
+            'email' => $signer->email,
+            'firstName' => $recipientFirstName,
+            'lastName' => $recipientLastName,
+            'name' => (string) $signer->name,
+        ], fn($v) => !is_null($v) && $v !== '');
+
         $inviteAttempts = [
-            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite", $invitePayload),
-            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invites", $invitePayload),
-            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite-link", $invitePayload),
+            // Variantes endpoint /invite
+            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite", ['recipientEmail' => $signer->email]),
+            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite", ['email' => $signer->email]),
+            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite", ['recipientId' => $recipientPlatformUserId]),
+            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite", ['userId' => $recipientPlatformUserId]),
+            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite", ['recipient' => $recipientIdentity]),
+            fn() => $client->send('GET', "{$endpoint}/api/workflows/{$workflowId}/invite", ['query' => ['recipientEmail' => $signer->email]]),
+
+            // Variantes endpoint /invites
+            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invites", ['recipientEmail' => $signer->email]),
+            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invites", ['email' => $signer->email]),
+            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invites", ['recipientId' => $recipientPlatformUserId]),
+            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invites", ['userId' => $recipientPlatformUserId]),
+            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invites", ['recipient' => $recipientIdentity]),
+
+            // Variante endpoint /invite-link
+            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite-link", ['recipientEmail' => $signer->email]),
+            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite-link", ['recipientId' => $recipientPlatformUserId]),
         ];
 
         $inviteResp = null;
@@ -946,8 +969,8 @@ class SignatureController extends Controller
                     break;
                 }
 
-                // Continuer sur endpoints non trouvés / méthode non supportée.
-                if (!in_array($candidate->status(), [404, 405], true)) {
+                // Continuer sur endpoints non trouvés / méthode non supportée / payload refusé.
+                if (!in_array($candidate->status(), [400, 404, 405, 415], true)) {
                     $inviteResp = $candidate;
                     break;
                 }
