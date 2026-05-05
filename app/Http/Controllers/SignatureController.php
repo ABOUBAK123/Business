@@ -930,18 +930,69 @@ class SignatureController extends Controller
         }
 
         // 4. Créer le lien d'invitation
-        $inviteResp = $client->post("{$endpoint}/api/workflows/{$workflowId}/invite", [
-            'recipientEmail' => $signer->email,
-        ]);
-        if ($inviteResp->successful()) {
-            return $inviteResp->json('inviteUrl');
+        $invitePayload = ['recipientEmail' => $signer->email];
+        $inviteAttempts = [
+            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite", $invitePayload),
+            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invites", $invitePayload),
+            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite-link", $invitePayload),
+        ];
+
+        $inviteResp = null;
+        foreach ($inviteAttempts as $attempt) {
+            try {
+                $candidate = $attempt();
+                if ($candidate->successful()) {
+                    $inviteResp = $candidate;
+                    break;
+                }
+
+                // Continuer sur endpoints non trouvés / méthode non supportée.
+                if (!in_array($candidate->status(), [404, 405], true)) {
+                    $inviteResp = $candidate;
+                    break;
+                }
+
+                $inviteResp = $candidate;
+            } catch (\Throwable $e) {
+                Log::warning('SunnyStamp: tentative invite en exception', [
+                    'workflow_id' => $workflowId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         }
 
-        Log::warning('SunnyStamp: invite non créé, fallback portail', [
+        if ($inviteResp && $inviteResp->successful()) {
+            $inviteUrl = $inviteResp->json('inviteUrl')
+                ?? $inviteResp->json('url')
+                ?? $inviteResp->json('link')
+                ?? $inviteResp->json('data.inviteUrl')
+                ?? $inviteResp->json('data.url');
+
+            if (is_string($inviteUrl) && $inviteUrl !== '') {
+                return $inviteUrl;
+            }
+
+            $this->lastPlatformError = 'invite: réponse sans URL exploitable - ' . Str::limit((string) $inviteResp->body(), 500, '...');
+            Log::warning('SunnyStamp: invite créé mais URL absente', [
+                'status' => $inviteResp->status(),
+                'body' => $inviteResp->body(),
+            ]);
+            return null;
+        }
+
+        if (!$inviteResp) {
+            $this->lastPlatformError = 'invite: aucune réponse exploitable reçue';
+            Log::error('SunnyStamp: échec invite (aucune réponse)', [
+                'workflow_id' => $workflowId,
+            ]);
+            return null;
+        }
+
+        Log::warning('SunnyStamp: invite non créé', [
             'status' => $inviteResp->status(), 'body' => $inviteResp->body(),
         ]);
         $this->lastPlatformError = 'invite: HTTP ' . $inviteResp->status() . ' - ' . Str::limit((string) $inviteResp->body(), 500, '...');
-        return $endpoint . '/portal';
+        return null;
     }
 
     /**
