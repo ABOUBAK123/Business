@@ -1243,11 +1243,19 @@ class SignatureController extends Controller
         $inviteAttempts = [
             // Variantes endpoint /invite
             fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite", ['recipientEmail' => $signer->email]),
+            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite/", ['recipientEmail' => $signer->email]),
             fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite", ['email' => $signer->email]),
+            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite/", ['email' => $signer->email]),
             fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite", ['recipientId' => $recipientPlatformUserId]),
             fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite", ['userId' => $recipientPlatformUserId]),
             fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite", ['recipient' => $recipientIdentity]),
             fn() => $client->send('GET', "{$endpoint}/api/workflows/{$workflowId}/invite", ['query' => ['recipientEmail' => $signer->email]]),
+
+            // Variantes sous /api/users/{ownerUserId}/workflows/{workflowId}/invite
+            fn() => $client->post("{$endpoint}/api/users/{$ownerUserId}/workflows/{$workflowId}/invite", ['recipientEmail' => $signer->email]),
+            fn() => $client->post("{$endpoint}/api/users/{$ownerUserId}/workflows/{$workflowId}/invite/", ['recipientEmail' => $signer->email]),
+            fn() => $client->post("{$endpoint}/api/users/{$ownerUserId}/workflows/{$workflowId}/invite", ['email' => $signer->email]),
+            fn() => $client->send('GET', "{$endpoint}/api/users/{$ownerUserId}/workflows/{$workflowId}/invite", ['query' => ['recipientEmail' => $signer->email]]),
 
             // Variantes endpoint /invites
             fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invites", ['recipientEmail' => $signer->email]),
@@ -1294,6 +1302,15 @@ class SignatureController extends Controller
 
             $inviteUrl = $this->extractInviteUrl($inviteResp->json(), $endpoint);
 
+            if ((!is_string($inviteUrl) || $inviteUrl === '') && is_string($inviteResp->body())) {
+                // Certaines instances renvoient une URL brute, un token brut, ou un JSON non typé.
+                $inviteUrl = self::extractFirstUrlFromText((string) $inviteResp->body());
+
+                if ((!is_string($inviteUrl) || $inviteUrl === '') && preg_match('/[A-Za-z0-9_\-]{16,}\.[A-Za-z0-9_\-]{16,}\.[A-Za-z0-9_\-]{16,}/', (string) $inviteResp->body(), $m) === 1) {
+                    $inviteUrl = rtrim($endpoint, '/') . '/invite?token=' . ($m[0] ?? '');
+                }
+            }
+
             if (is_string($inviteUrl) && $inviteUrl !== '') {
                 return $inviteUrl;
             }
@@ -1339,6 +1356,19 @@ class SignatureController extends Controller
                             'url' => $workflowUrl,
                         ]);
                         return $workflowUrl;
+                    }
+                }
+
+                // Variante read sous espace users/{ownerId} pour instances multi-routes.
+                $workflowByUserResp = $client->get("{$endpoint}/api/users/{$ownerUserId}/workflows/{$workflowId}");
+                if ($workflowByUserResp->successful()) {
+                    $workflowByUserUrl = $this->extractInviteUrl($workflowByUserResp->json(), $endpoint);
+                    if (is_string($workflowByUserUrl) && $workflowByUserUrl !== '') {
+                        Log::info('SunnyStamp: URL récupérée via détail workflow users/{id}', [
+                            'workflow_id' => $workflowId,
+                            'url' => $workflowByUserUrl,
+                        ]);
+                        return $workflowByUserUrl;
                     }
                 }
             } catch (\Throwable $e) {
