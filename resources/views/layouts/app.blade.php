@@ -151,33 +151,19 @@
                 $sidebarAdmin     = $sidebarProfile->resolved_administration;
                 $sidebarAdminName = $sidebarAdmin->name;
                 $sidebarAdminCode = $sidebarAdmin->code ?? null;
-                $sidebarAdminType = $sidebarProfile->effective_administration_type ?? 'emitter';
-                $sidebarThemPfx   = 'theme_' . $sidebarAdminType . '_' . $sidebarAdmin->id . '_';
-
-                // Charger les clés theming utiles en une seule requête
-                $sidebarSettings = \App\Models\AppSetting::whereIn('key', [
-                    $sidebarThemPfx . 'logo',
-                    $sidebarThemPfx . 'app_name',
-                ])->pluck('value', 'key');
 
                 // 1) Libellé affiché : code administration en priorité
                 $sidebarDisplayName = ($sidebarAdminCode && trim($sidebarAdminCode) !== '')
                     ? trim($sidebarAdminCode)
                     : ($sidebarAdminName ?: 'E-Parapheur');
 
-                // 2) Logo theming depuis AppSetting (stocké dans public disk)
-                $themingPath = $sidebarSettings[$sidebarThemPfx . 'logo'] ?? null;
-                if ($themingPath) {
-                    $sidebarLogo = \Illuminate\Support\Facades\Storage::disk('public')->exists($themingPath)
-                        ? asset('storage/' . $themingPath)
-                        : null;
-                }
-                // 3) Fallback sur le champ logo direct de l'administration (colonne logo ou metadata.logoPath)
+                // 2) Contrôle strict: le logo du menu doit provenir uniquement
+                // de l'administration résolue du profil connecté.
                 $rawLogoField = $sidebarAdmin->logo ?? null;
                 if (!$rawLogoField && isset($sidebarAdmin->metadata['logoPath'])) {
                     $rawLogoField = $sidebarAdmin->metadata['logoPath'];
                 }
-                if (!$sidebarLogo && $rawLogoField) {
+                if ($rawLogoField) {
                     $rawLogo = ltrim($rawLogoField, '/');
                     if (str_starts_with($rawLogo, 'storage/')) {
                         $storageRel = ltrim(substr($rawLogo, strlen('storage/')), '/');
