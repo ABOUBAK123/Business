@@ -872,10 +872,56 @@ class SignatureController extends Controller
         }
 
         // 3. Démarrer le workflow
-        $startResp = $client->patch("{$endpoint}/api/workflows/{$workflowId}", [
-            'workflowStatus' => 'started',
-        ]);
-        if (!$startResp->successful()) {
+        // Certaines versions API rejettent PATCH application/json (HTTP 415).
+        // On tente plusieurs variantes compatibles avant d'échouer.
+        $startPayload = ['workflowStatus' => 'started'];
+        $startAttempts = [
+            fn() => $client
+                ->withHeaders(['Content-Type' => 'application/merge-patch+json'])
+                ->send('PATCH', "{$endpoint}/api/workflows/{$workflowId}", ['json' => $startPayload]),
+            fn() => $client
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->send('PATCH', "{$endpoint}/api/workflows/{$workflowId}", ['json' => $startPayload]),
+            fn() => $client
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->send('PUT', "{$endpoint}/api/workflows/{$workflowId}", ['json' => $startPayload]),
+            fn() => $client
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->send('POST', "{$endpoint}/api/workflows/{$workflowId}/start", ['json' => []]),
+        ];
+
+        $startResp = null;
+        foreach ($startAttempts as $attempt) {
+            try {
+                $candidate = $attempt();
+                if ($candidate->successful()) {
+                    $startResp = $candidate;
+                    break;
+                }
+
+                // Continuer sur erreurs de media type / route méthode non supportée.
+                if (!in_array($candidate->status(), [404, 405, 415], true)) {
+                    $startResp = $candidate;
+                    break;
+                }
+
+                $startResp = $candidate;
+            } catch (\Throwable $e) {
+                Log::warning('SunnyStamp: tentative start workflow en exception', [
+                    'workflow_id' => $workflowId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        if (!$startResp || !$startResp->successful()) {
+            if (!$startResp) {
+                $this->lastPlatformError = 'start_workflow: aucune réponse exploitable reçue';
+                Log::error('SunnyStamp: échec démarrage workflow (aucune réponse)', [
+                    'workflow_id' => $workflowId,
+                ]);
+                return null;
+            }
             $this->lastPlatformError = 'start_workflow: HTTP ' . $startResp->status() . ' - ' . Str::limit((string) $startResp->body(), 500, '...');
             Log::error('SunnyStamp: échec démarrage workflow', [
                 'status' => $startResp->status(), 'body' => $startResp->body(),
