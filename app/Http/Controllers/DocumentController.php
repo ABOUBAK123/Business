@@ -79,9 +79,47 @@ class DocumentController extends Controller
 
         $documents = Document::query()
             ->where('owner_id', $userId)
+            ->orWhere('created_by', $userId)
             ->orWhereIn('id', $sharedDocumentIds)
             ->latest()
             ->get();
+
+        $documentAccessPermissions = [];
+        foreach ($documents as $document) {
+            if ($this->userCanManageDocument($document, $userId)) {
+                $documentAccessPermissions[(string) $document->id] = 'modification';
+            }
+        }
+
+        if ($sharedDocumentIds->isNotEmpty()) {
+            $shareRows = DocumentShare::query()
+                ->whereIn('document_id', $sharedDocumentIds)
+                ->where(function ($q) {
+                    $q->whereNull('expires_at')
+                        ->orWhere('expires_at', '>', now());
+                })
+                ->where(function ($q) use ($userId, $userEmail, $subEntityCodes, $recipientAdminIds) {
+                    $q->where('recipient_name', 'user:' . $userId);
+
+                    if ($userEmail !== '') {
+                        $q->orWhere('recipient_email', $userEmail);
+                    }
+
+                    foreach ($subEntityCodes as $code) {
+                        $q->orWhere('recipient_name', 'sub_entity:' . $code);
+                    }
+
+                    if ($recipientAdminIds->isNotEmpty()) {
+                        $q->orWhereIn('recipient_administration_id', $recipientAdminIds);
+                    }
+                })
+                ->get(['document_id', 'permission']);
+
+            foreach ($shareRows->groupBy('document_id') as $documentId => $rows) {
+                $hasModification = $rows->contains(fn ($row) => (string) $row->permission === 'modification');
+                $documentAccessPermissions[(string) $documentId] = $hasModification ? 'modification' : 'lecture';
+            }
+        }
 
         // Préférences (favoris + étiquettes) de l'utilisateur connecté
         $preferences = DocumentUserPreference::where('user_id', Auth::id())
@@ -144,7 +182,8 @@ class DocumentController extends Controller
             'recipientAdministrations',
             'internalUsers',
             'internalSubEntities',
-            'onlyofficeUrl'
+            'onlyofficeUrl',
+            'documentAccessPermissions'
         ));
     }
 
@@ -438,10 +477,20 @@ class DocumentController extends Controller
     public function onlyofficeCallback(Request $request, Document $document)
     {
         $access = (string) $request->query('access', '');
-        $expected = hash_hmac('sha256', 'cb|' . $document->id, (string) config('app.key'));
+        $canEdit = (int) $request->query('can_edit', 0);
+        $expires = (int) $request->query('expires', 0);
+        $expected = hash_hmac(
+            'sha256',
+            'cb|' . $document->id . '|' . $canEdit . '|' . $expires,
+            (string) config('app.key')
+        );
 
-        if (!hash_equals($expected, $access)) {
+        if (!hash_equals($expected, $access) || $expires <= 0 || $expires < time()) {
             return response()->json(['error' => 1], 403);
+        }
+
+        if ($canEdit !== 1) {
+            return response()->json(['error' => 0]);
         }
 
         $status  = (int) $request->input('status', 0);
@@ -541,7 +590,7 @@ class DocumentController extends Controller
 
     public function share(Request $request, Document $document)
     {
-        abort_if(Auth::id() !== $document->owner_id, 403);
+        abort_if(!$this->userCanManageDocument($document, Auth::id()), 403);
 
         $request->validate([
             'mode'       => 'required|in:internal,external,admin,recipient_administration',
@@ -917,10 +966,15 @@ class DocumentController extends Controller
             return false;
         }
 
-        if ((string) $user->id === (string) $document->owner_id) {
+        if ($this->userCanManageDocument($document, $user->id)) {
             return true;
         }
 
+        return $this->resolveCurrentUserSharePermission($document, $user) !== null;
+    }
+
+    private function resolveCurrentUserSharePermission(Document $document, User $user): ?string
+    {
         $subEntityCodes = UserDirectionAssignment::query()
             ->where('user_id', $user->id)
             ->whereNotNull('sub_entity_code')
@@ -942,7 +996,7 @@ class DocumentController extends Controller
             }
         }
 
-        return DocumentShare::query()
+        $shares = DocumentShare::query()
             ->where('document_id', $document->id)
             ->where(function ($q) {
                 $q->whereNull('expires_at')
@@ -963,7 +1017,26 @@ class DocumentController extends Controller
                     $q->orWhereIn('recipient_administration_id', $recipientAdminIds);
                 }
             })
-            ->exists();
+            ->get(['permission']);
+
+        if ($shares->isEmpty()) {
+            return null;
+        }
+
+        return $shares->contains(fn ($share) => (string) $share->permission === 'modification')
+            ? 'modification'
+            : 'lecture';
+    }
+
+    private function userCanManageDocument(Document $document, $userId): bool
+    {
+        $userId = (string) ($userId ?? '');
+        if ($userId === '') {
+            return false;
+        }
+
+        return (string) $document->owner_id === $userId
+            || (string) ($document->created_by ?? '') === $userId;
     }
 
     public function versions(Document $document)
@@ -1073,10 +1146,18 @@ class DocumentController extends Controller
     {
         $docId = $request->input('document_id');
         $doc   = Document::find($docId);
+        $user  = Auth::user();
 
-        if (!$doc || $doc->owner_id !== Auth::id()) {
+        if (!$doc || !$user || !$this->userCanAccessDocument($doc)) {
             return response()->json(['error' => 'Non autorisé'], 403);
         }
+
+        $canManageDocument = $this->userCanManageDocument($doc, $user->id);
+        $sharePermission = $canManageDocument ? 'modification' : $this->resolveCurrentUserSharePermission($doc, $user);
+        if (!$sharePermission) {
+            return response()->json(['error' => 'Non autorisé'], 403);
+        }
+        $canEdit = $canManageDocument || $sharePermission === 'modification';
 
         $onlyofficeUrl    = AppSetting::where('key', 'onlyoffice_server_url')->value('value') ?: '';
         $onlyofficeSecret = AppSetting::where('key', 'onlyoffice_secret')->value('value') ?: '';
@@ -1115,10 +1196,18 @@ class DocumentController extends Controller
             default                       => 'word',
         };
 
-        $callbackAccess = hash_hmac('sha256', 'cb|' . $doc->id, (string) config('app.key'));
+        $callbackExpires = now()->addHours(8)->timestamp;
+        $callbackCanEdit = $canEdit ? 1 : 0;
+        $callbackAccess = hash_hmac(
+            'sha256',
+            'cb|' . $doc->id . '|' . $callbackCanEdit . '|' . $callbackExpires,
+            (string) config('app.key')
+        );
         $callbackUrl = ($appPublicUrl ? rtrim($appPublicUrl, '/') : rtrim(config('app.url'), '/'))
             . '/api/oo-callback/document/' . $doc->id
-            . '?access=' . $callbackAccess;
+            . '?access=' . $callbackAccess
+            . '&can_edit=' . $callbackCanEdit
+            . '&expires=' . $callbackExpires;
 
         $payload = [
             'document' => [
@@ -1126,16 +1215,16 @@ class DocumentController extends Controller
                 'key'      => 'doc-' . $doc->id . '-' . ($doc->updated_at ? $doc->updated_at->timestamp : time()),
                 'title'    => $doc->title,
                 'url'      => $docUrl,
-                'permissions' => ['edit' => true, 'download' => true, 'print' => true],
+                'permissions' => ['edit' => $canEdit, 'download' => true, 'print' => true],
             ],
             'documentType' => $docType,
             'editorConfig' => [
-                'mode'        => 'edit',
+                'mode'        => $canEdit ? 'edit' : 'view',
                 'lang'        => 'fr',
                 'callbackUrl' => $callbackUrl,
                 'user'        => ['id' => 'u-' . Auth::id(), 'name' => Auth::user()->name ?? 'Utilisateur'],
                 'customization' => [
-                    'autosave' => true,
+                    'autosave' => $canEdit,
                     'compactHeader' => true,
                     'features' => [
                         'tabStyle' => 'fill',

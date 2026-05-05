@@ -9,6 +9,9 @@
         'id'           => $d->id,
         'owner_id'     => $d->owner_id,
         'is_owner'     => (string) $d->owner_id === (string) auth()->id(),
+        'can_share'    => ((string) $d->owner_id === (string) auth()->id()) || ((string) ($d->created_by ?? '') === (string) auth()->id()),
+        'share_permission' => $documentAccessPermissions[(string) $d->id] ?? ((string) $d->owner_id === (string) auth()->id() ? 'modification' : 'lecture'),
+        'can_edit_content' => ((string) $d->owner_id === (string) auth()->id()) || (($documentAccessPermissions[(string) $d->id] ?? 'lecture') === 'modification'),
         'title'        => $d->title,
         'description'  => $d->description,
         'file_path'    => $d->file_path,
@@ -773,6 +776,7 @@ function renderTable() {
     tbody.innerHTML = docs.map(doc => {
         const labels = getLabels(doc.id);
         const canManage = !!doc.is_owner;
+        const canShare = !!doc.can_share;
         const labelsHtml = labels.slice(0, 3).map(c =>
             `<span class="inline-flex items-center rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 text-[10px] font-semibold">${c}</span>`
         ).join('') + (labels.length > 3 ? `<span class="inline-flex items-center rounded-md bg-gray-50 text-gray-600 border border-gray-200 px-1.5 py-0.5 text-[10px] font-semibold">+${labels.length - 3}</span>` : '');
@@ -783,7 +787,7 @@ function renderTable() {
                     <i class="${iconClass(doc)} text-lg"></i>
                     <div class="min-w-0">
                         <span class="font-medium text-gray-800 block truncate">${doc.title}</span>
-                        ${canManage ? '' : '<span class="inline-flex items-center rounded-md bg-slate-100 text-slate-700 border border-slate-200 px-1.5 py-0.5 text-[10px] font-semibold">Partage avec moi</span>'}
+                        ${canShare ? '' : `<span class="inline-flex items-center rounded-md bg-slate-100 text-slate-700 border border-slate-200 px-1.5 py-0.5 text-[10px] font-semibold">Partagé avec moi • ${doc.can_edit_content ? 'Modification' : 'Lecture seule'}</span>`}
                         ${labels.length > 0 ? `<div class="mt-1 flex flex-wrap gap-1">${labelsHtml}</div>` : ''}
                     </div>
                 </div>
@@ -798,7 +802,7 @@ function renderTable() {
             </td>
             <td class="py-3 px-4">
                 <div data-row-actions="true" class="relative flex items-center justify-end gap-1">
-                    ${canManage ? `<button onclick="event.stopPropagation(); openShareModal('${doc.id}')"
+                    ${canShare ? `<button onclick="event.stopPropagation(); openShareModal('${doc.id}')"
                             title="Partager ${doc.shares_count > 0 ? '('+doc.shares_count+')' : ''}"
                             class="h-8 px-2 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 flex items-center gap-1 transition text-xs">
                         <i class="fas fa-user-plus text-sm"></i>
