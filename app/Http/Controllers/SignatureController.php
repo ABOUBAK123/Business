@@ -820,14 +820,37 @@ class SignatureController extends Controller
         $workflowId = $wflResp->json('id');
 
         // 2. Uploader le document PDF
-        $filePath = $document->file_path ?? '';
-        $absolutePath = str_starts_with($filePath, 'storage/')
-            ? public_path($filePath)
-            : Storage::disk('public')->path($filePath);
+        $filePath = trim((string) ($document->file_path ?? ''));
+        $normalizedPublicDiskPath = ltrim($filePath, '/');
+        if (str_starts_with($normalizedPublicDiskPath, 'public/')) {
+            $normalizedPublicDiskPath = substr($normalizedPublicDiskPath, 7);
+        }
+        if (str_starts_with($normalizedPublicDiskPath, 'storage/')) {
+            $normalizedPublicDiskPath = substr($normalizedPublicDiskPath, 8);
+        }
 
-        if (!file_exists($absolutePath)) {
-            $this->lastPlatformError = 'upload_document: fichier introuvable (' . $absolutePath . ')';
-            Log::error('SunnyStamp: fichier introuvable', ['path' => $absolutePath]);
+        // Gérer les différents formats historiques de file_path.
+        $candidatePaths = array_values(array_unique(array_filter([
+            $filePath !== '' ? public_path(ltrim($filePath, '/')) : null,
+            $normalizedPublicDiskPath !== '' ? Storage::disk('public')->path($normalizedPublicDiskPath) : null,
+            $normalizedPublicDiskPath !== '' ? storage_path('app/public/' . $normalizedPublicDiskPath) : null,
+        ])));
+
+        $absolutePath = null;
+        foreach ($candidatePaths as $candidatePath) {
+            if (is_string($candidatePath) && $candidatePath !== '' && file_exists($candidatePath)) {
+                $absolutePath = $candidatePath;
+                break;
+            }
+        }
+
+        if (!$absolutePath) {
+            $this->lastPlatformError = 'upload_document: fichier introuvable (' . $filePath . ')';
+            Log::error('SunnyStamp: fichier introuvable', [
+                'file_path' => $filePath,
+                'normalized' => $normalizedPublicDiskPath,
+                'candidates' => $candidatePaths,
+            ]);
             return null;
         }
 
