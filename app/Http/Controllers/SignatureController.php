@@ -572,6 +572,7 @@ class SignatureController extends Controller
      */
     public static function resolvePlatformUserIdByEmail(SignatureProviderConfig $cfg, string $email): ?string
     {
+        $email = strtolower(trim($email));
         $cacheKey = 'sunnystamp_uid_' . md5($cfg->endpoint . '|' . $email);
         $cached = \Illuminate\Support\Facades\Cache::get($cacheKey);
         if (is_string($cached) && $cached !== '') {
@@ -587,17 +588,67 @@ class SignatureController extends Controller
 
                 if ($resp->successful()) {
                     $body = $resp->json();
-                    // Réponse tableau : [{id, email, ...}, ...]
-                    if (is_array($body) && isset($body[0]['id'])) {
-                        return $body[0]['id'];
+
+                    $extractUserId = function (array $user) use ($email): ?string {
+                        $userEmail = strtolower(trim((string) ($user['email'] ?? $user['emailAddress'] ?? $user['mail'] ?? '')));
+                        $userId = (string) ($user['id'] ?? $user['userId'] ?? $user['uuid'] ?? '');
+                        if ($userId === '') {
+                            return null;
+                        }
+                        if ($userEmail !== '' && $userEmail === $email) {
+                            return $userId;
+                        }
+                        return null;
+                    };
+
+                    $scanUsers = function ($collection) use ($extractUserId): ?string {
+                        if (!is_array($collection)) {
+                            return null;
+                        }
+
+                        foreach ($collection as $row) {
+                            if (is_array($row)) {
+                                $id = $extractUserId($row);
+                                if ($id) {
+                                    return $id;
+                                }
+                            }
+                        }
+
+                        // Fallback: premier élément avec id quand l'API ne renvoie pas l'email.
+                        foreach ($collection as $row) {
+                            if (is_array($row) && !empty($row['id'])) {
+                                return (string) $row['id'];
+                            }
+                        }
+
+                        return null;
+                    };
+
+                    // Réponse tableau brut
+                    $id = $scanUsers($body);
+                    if ($id) {
+                        return $id;
                     }
-                    // Réponse objet paginé : {data: [{id, email}, ...]}
-                    if (isset($body['data'][0]['id'])) {
-                        return $body['data'][0]['id'];
-                    }
-                    // Réponse objet direct : {id, email, ...}
-                    if (isset($body['id'])) {
-                        return $body['id'];
+
+                    // Réponse objet (direct/paginé)
+                    if (is_array($body)) {
+                        if (!empty($body['id'])) {
+                            return (string) $body['id'];
+                        }
+
+                        foreach (['data', 'items', 'results', 'users', 'content'] as $bucket) {
+                            $id = $scanUsers($body[$bucket] ?? null);
+                            if ($id) {
+                                return $id;
+                            }
+                        }
+
+                        // Certaines API encapsulent sous _embedded.users
+                        $id = $scanUsers($body['_embedded']['users'] ?? null);
+                        if ($id) {
+                            return $id;
+                        }
                     }
                 }
 
@@ -621,6 +672,51 @@ class SignatureController extends Controller
         }
 
         return $resolved;
+    }
+
+    /**
+     * Résoudre l'utilisateur owner du token API via /api/users/me.
+     * Utilisé en fallback quand la recherche par email n'est pas disponible.
+     */
+    public static function resolvePlatformOwnerUserId(SignatureProviderConfig $cfg): ?string
+    {
+        try {
+            $resp = Http::withToken($cfg->api_key)
+                ->timeout(10)
+                ->when(!(bool) $cfg->verify_ssl, fn($h) => $h->withoutVerifying())
+                ->get($cfg->endpoint . '/api/users/me');
+
+            if (!$resp->successful()) {
+                Log::warning('SunnyStamp: échec /api/users/me', [
+                    'status' => $resp->status(),
+                    'body' => $resp->body(),
+                ]);
+                return null;
+            }
+
+            $body = $resp->json();
+            if (is_array($body)) {
+                if (!empty($body['id'])) {
+                    return (string) $body['id'];
+                }
+                if (!empty($body['data']['id'])) {
+                    return (string) $body['data']['id'];
+                }
+                if (!empty($body['user']['id'])) {
+                    return (string) $body['user']['id'];
+                }
+            }
+
+            Log::warning('SunnyStamp: /api/users/me sans id exploitable', [
+                'body' => $resp->body(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('SunnyStamp: exception /api/users/me', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return null;
     }
 
     /**
@@ -756,6 +852,11 @@ class SignatureController extends Controller
 
         $currentUser   = Auth::user();
         $platformUserId = self::resolvePlatformUserIdByEmail($cfg, $currentUser->email);
+        if (!$platformUserId) {
+            // Fallback: certaines plateformes n'autorisent pas la recherche utilisateur par email.
+            // On utilise alors l'utilisateur owner du token API pour créer le workflow.
+            $platformUserId = self::resolvePlatformOwnerUserId($cfg);
+        }
         if (!$platformUserId) {
             Log::warning('SunnyStamp: compte plateforme introuvable pour utilisateur', [
                 'user_id' => $currentUser->id,
