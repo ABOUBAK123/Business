@@ -26,6 +26,43 @@ class SignatureController extends Controller
     private ?string $lastPlatformError = null;
 
     /**
+     * Convertit le détail technique plateforme en message métier plus clair.
+     */
+    private static function toBusinessPlatformMessage(?string $detail): string
+    {
+        $d = (string) ($detail ?? '');
+        if ($d === '') {
+            return 'Erreur de communication avec la plateforme de signature.';
+        }
+
+        if (str_contains($d, 'RecipientPhoneNumberRequired')) {
+            return 'Le profil du signataire doit contenir un numéro de téléphone pour cette page de consentement.';
+        }
+
+        if (str_starts_with($d, 'create_workflow:')) {
+            return 'Impossible de créer le workflow de signature sur la plateforme.';
+        }
+
+        if (str_starts_with($d, 'upload_document:')) {
+            return 'Le workflow a été créé, mais le document n\'a pas pu être chargé sur la plateforme.';
+        }
+
+        if (str_starts_with($d, 'start_workflow:')) {
+            return 'Le document a été chargé, mais le démarrage du workflow a échoué sur la plateforme.';
+        }
+
+        if (str_contains($d, 'invite: aucun lien exploitable trouvé')) {
+            return 'Le workflow est lancé, mais la plateforme ne fournit aucun lien d\'accès signataire (endpoints invite indisponibles ou sans token).';
+        }
+
+        if (str_starts_with($d, 'invite:')) {
+            return 'Le workflow est lancé, mais la génération du lien d\'invitation a échoué sur la plateforme.';
+        }
+
+        return 'Erreur lors de l\'orchestration de la signature sur la plateforme.';
+    }
+
+    /**
      * Résout un numéro de téléphone exploitable pour le recipient plateforme.
      */
     private static function resolveRecipientPhone(User $user): ?string
@@ -1472,7 +1509,7 @@ class SignatureController extends Controller
         );
 
         if (!$inviteUrl) {
-            $msg = 'Erreur lors de la création du workflow sur la plateforme. Consultez les logs.';
+            $msg = self::toBusinessPlatformMessage($this->lastPlatformError);
             if (!empty($this->lastPlatformError)) {
                 $msg .= ' Détail: ' . $this->lastPlatformError;
             }
