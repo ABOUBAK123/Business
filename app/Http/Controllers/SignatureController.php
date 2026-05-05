@@ -608,18 +608,19 @@ class SignatureController extends Controller
     public static function resolvePlatformUserIdByEmail(SignatureProviderConfig $cfg, string $email): ?string
     {
         $email = strtolower(trim($email));
-        $cacheKey = 'sunnystamp_uid_' . md5($cfg->endpoint . '|' . $email);
+        $endpoint = self::normalizeEndpoint($cfg->endpoint);
+        $cacheKey = 'sunnystamp_uid_' . md5($endpoint . '|' . $email);
         $cached = \Illuminate\Support\Facades\Cache::get($cacheKey);
         if (is_string($cached) && $cached !== '') {
             return $cached;
         }
 
-        $resolved = (function () use ($cfg, $email) {
+        $resolved = (function () use ($cfg, $email, $endpoint) {
             try {
                 $resp = Http::withToken($cfg->api_key)
                     ->timeout(10)
                     ->when(!(bool) $cfg->verify_ssl, fn($h) => $h->withoutVerifying())
-                    ->get($cfg->endpoint . '/api/users', ['email' => $email]);
+                    ->get($endpoint . '/api/users', ['email' => $email]);
 
                 if ($resp->successful()) {
                     $body = $resp->json();
@@ -716,10 +717,11 @@ class SignatureController extends Controller
     public static function resolvePlatformOwnerUserId(SignatureProviderConfig $cfg): ?string
     {
         try {
+            $endpoint = self::normalizeEndpoint($cfg->endpoint);
             $resp = Http::withToken($cfg->api_key)
                 ->timeout(10)
                 ->when(!(bool) $cfg->verify_ssl, fn($h) => $h->withoutVerifying())
-                ->get($cfg->endpoint . '/api/users/me');
+                ->get($endpoint . '/api/users/me');
 
             if (!$resp->successful()) {
                 Log::warning('SunnyStamp: échec /api/users/me', [
@@ -758,6 +760,21 @@ class SignatureController extends Controller
      * Crée le workflow sur la plateforme, upload le document, le démarre
      * et génère le lien d'invitation pour le signataire/approbateur.
      */
+    /**
+     * Normalise l'endpoint en retirant /api à la fin s'il existe.
+     * Permet de gérer à la fois:
+     * - https://uvci.artci-sign.ci (ajoute /api/)
+     * - https://sigfae.artci-sign.ci/api (retire /api, puis ajoute /api/)
+     */
+    private static function normalizeEndpoint(string $endpoint): string
+    {
+        $endpoint = rtrim($endpoint, '/');
+        if (str_ends_with($endpoint, '/api')) {
+            $endpoint = substr($endpoint, 0, -4); // Retire les 4 derniers chars "/api"
+        }
+        return $endpoint;
+    }
+
     private function buildPlatformInviteUrl(
         SignatureProviderConfig $cfg,
         string $ownerUserId,
@@ -767,7 +784,7 @@ class SignatureController extends Controller
     ): ?string {
         $this->lastPlatformError = null;
 
-        $endpoint  = $cfg->endpoint;
+        $endpoint  = self::normalizeEndpoint($cfg->endpoint);
         $token     = $cfg->api_key;
         $timeout   = max(10, (int) round($cfg->timeout_ms / 1000));
         $verifySSL = (bool) $cfg->verify_ssl;
