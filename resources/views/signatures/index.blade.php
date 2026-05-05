@@ -517,34 +517,28 @@ async function wfInboxAction(btn, executionId, actionType) {
             headers: {
                 'Content-Type': 'application/json',
                 'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
                 'X-CSRF-TOKEN': __wfCsrfToken,
             },
             body: JSON.stringify({ execution_id: executionId, action_type: actionType }),
         });
 
-        const data = await resp.json();
+        let data = null;
+        try {
+            data = await resp.json();
+        } catch (_) {
+            data = { ok: false, message: 'Réponse non JSON reçue du serveur (session expirée ou erreur 500).' };
+        }
 
         if (data.ok && data.url) {
             window.open(data.url, '_blank', 'noopener,noreferrer');
         } else {
             const msg = data.message || 'Erreur inconnue.';
-            // Fallback : soumettre le formulaire local
-            const localForm = document.getElementById('wf-local-' + executionId);
-            if (localForm) {
-                console.warn('API Signature:', msg, '— Repli sur action locale.');
-                localForm.submit();
-                return;
-            }
-            alert('Erreur : ' + msg);
+            alert('API Signature indisponible: ' + msg + '\n\nAucune action locale automatique n\'a été lancée pour éviter de masquer le problème.');
         }
     } catch (err) {
         console.error('wfInboxAction error:', err);
-        const localForm = document.getElementById('wf-local-' + executionId);
-        if (localForm) {
-            localForm.submit();
-            return;
-        }
-        alert('Erreur réseau. Veuillez réessayer.');
+        alert('Erreur réseau/API Signature: ' + (err?.message || 'inconnue') + '\n\nAucune action locale automatique n\'a été lancée.');
     } finally {
         if (icon) icon.className = originalClass;
         btn.disabled = false;

@@ -573,8 +573,12 @@ class SignatureController extends Controller
     public static function resolvePlatformUserIdByEmail(SignatureProviderConfig $cfg, string $email): ?string
     {
         $cacheKey = 'sunnystamp_uid_' . md5($cfg->endpoint . '|' . $email);
+        $cached = \Illuminate\Support\Facades\Cache::get($cacheKey);
+        if (is_string($cached) && $cached !== '') {
+            return $cached;
+        }
 
-        return \Illuminate\Support\Facades\Cache::remember($cacheKey, 3600, function () use ($cfg, $email) {
+        $resolved = (function () use ($cfg, $email) {
             try {
                 $resp = Http::withToken($cfg->api_key)
                     ->timeout(10)
@@ -609,7 +613,14 @@ class SignatureController extends Controller
                 ]);
             }
             return null;
-        });
+        })();
+
+        // Ne met en cache que les IDs valides pour éviter un faux négatif persistant.
+        if (is_string($resolved) && $resolved !== '') {
+            \Illuminate\Support\Facades\Cache::put($cacheKey, $resolved, 3600);
+        }
+
+        return $resolved;
     }
 
     /**
@@ -732,6 +743,11 @@ class SignatureController extends Controller
 
         $cfg = $this->resolveSignatureConfig();
         if (!$cfg) {
+            Log::warning('SunnyStamp: aucune configuration API active pour utilisateur', [
+                'user_id' => Auth::id(),
+                'email' => Auth::user()?->email,
+                'admin_id' => Auth::user()?->profile?->administration_id,
+            ]);
             return response()->json([
                 'ok'      => false,
                 'message' => 'Aucune configuration API Signature active pour votre administration.',
@@ -741,6 +757,12 @@ class SignatureController extends Controller
         $currentUser   = Auth::user();
         $platformUserId = self::resolvePlatformUserIdByEmail($cfg, $currentUser->email);
         if (!$platformUserId) {
+            Log::warning('SunnyStamp: compte plateforme introuvable pour utilisateur', [
+                'user_id' => $currentUser->id,
+                'email' => $currentUser->email,
+                'admin_id' => $currentUser->profile?->administration_id,
+                'endpoint' => $cfg->endpoint,
+            ]);
             return response()->json([
                 'ok'      => false,
                 'message' => 'Impossible de trouver votre compte sur la plateforme de signature. Vérifiez que l\'adresse e-mail ' . $currentUser->email . ' est bien enregistrée sur la plateforme.',
