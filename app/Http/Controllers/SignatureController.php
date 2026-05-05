@@ -605,6 +605,9 @@ class SignatureController extends Controller
      * Cherche l'utilisateur sur la plateforme via GET /api/users?email={email}.
      * Résultat mis en cache 1 h pour éviter des appels répétés.
      */
+    /** Dernière erreur API lors du lookup utilisateur (pour diagnostic). */
+    private static ?string $lastLookupApiError = null;
+
     public static function resolvePlatformUserIdByEmail(SignatureProviderConfig $cfg, string $email): ?string
     {
         $email = strtolower(trim($email));
@@ -621,6 +624,10 @@ class SignatureController extends Controller
                     ->timeout(10)
                     ->when(!(bool) $cfg->verify_ssl, fn($h) => $h->withoutVerifying())
                     ->get($endpoint . '/api/users', ['email' => $email]);
+
+                if (!$resp->successful()) {
+                    self::$lastLookupApiError = 'GET /api/users HTTP ' . $resp->status() . ' — ' . \Illuminate\Support\Str::limit((string) $resp->body(), 300);
+                }
 
                 if ($resp->successful()) {
                     $body = $resp->json();
@@ -694,6 +701,7 @@ class SignatureController extends Controller
                     'body'   => $resp->body(),
                 ]);
             } catch (\Throwable $e) {
+                self::$lastLookupApiError = 'Exception: ' . $e->getMessage();
                 Log::warning('SunnyStamp: erreur recherche utilisateur par email', [
                     'email' => $email,
                     'error' => $e->getMessage(),
@@ -724,6 +732,7 @@ class SignatureController extends Controller
                 ->get($endpoint . '/api/users/me');
 
             if (!$resp->successful()) {
+                self::$lastLookupApiError = 'GET /api/users/me HTTP ' . $resp->status() . ' — ' . \Illuminate\Support\Str::limit((string) $resp->body(), 300);
                 Log::warning('SunnyStamp: échec /api/users/me', [
                     'status' => $resp->status(),
                     'body' => $resp->body(),
@@ -1129,6 +1138,7 @@ class SignatureController extends Controller
         }
 
         $currentUser   = Auth::user();
+        self::$lastLookupApiError = null;
         $platformUserId = self::resolvePlatformUserIdByEmail($cfg, $currentUser->email);
         if (!$platformUserId) {
             // Fallback: certaines plateformes n'autorisent pas la recherche utilisateur par email.
@@ -1136,15 +1146,19 @@ class SignatureController extends Controller
             $platformUserId = self::resolvePlatformOwnerUserId($cfg);
         }
         if (!$platformUserId) {
+            $apiDetail = self::$lastLookupApiError
+                ? ' [Erreur API: ' . self::$lastLookupApiError . ']'
+                : '';
             Log::warning('SunnyStamp: compte plateforme introuvable pour utilisateur', [
-                'user_id' => $currentUser->id,
-                'email' => $currentUser->email,
-                'admin_id' => $currentUser->profile?->administration_id,
-                'endpoint' => $cfg->endpoint,
+                'user_id'    => $currentUser->id,
+                'email'      => $currentUser->email,
+                'admin_id'   => $currentUser->profile?->administration_id,
+                'endpoint'   => $cfg->endpoint,
+                'api_error'  => self::$lastLookupApiError,
             ]);
             return response()->json([
                 'ok'      => false,
-                'message' => 'Impossible de trouver votre compte sur la plateforme de signature. Vérifiez que l\'adresse e-mail ' . $currentUser->email . ' est bien enregistrée sur la plateforme.',
+                'message' => 'Impossible de trouver votre compte sur la plateforme de signature. Vérifiez que l\'adresse e-mail ' . $currentUser->email . ' est bien enregistrée sur la plateforme.' . $apiDetail,
             ], 422);
         }
 
