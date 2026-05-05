@@ -22,6 +22,8 @@ use Illuminate\Support\Str;
 
 class SignatureController extends Controller
 {
+    private ?string $lastPlatformError = null;
+
     public function index()
     {
         $userId = Auth::id();
@@ -730,6 +732,8 @@ class SignatureController extends Controller
         Document $document,
         User $signer
     ): ?string {
+        $this->lastPlatformError = null;
+
         $endpoint  = $cfg->endpoint;
         $token     = $cfg->api_key;
         $timeout   = max(10, (int) round($cfg->timeout_ms / 1000));
@@ -751,7 +755,7 @@ class SignatureController extends Controller
             $recipient['consentPageId'] = $consentPageId;
         }
 
-        $wflResp = $client->post("{$endpoint}/api/users/{$ownerUserId}/workflows", [
+        $workflowPayload = [
             'name'           => 'e-Parapheur — ' . $document->title,
             'steps'          => [[
                 'stepType'           => $stepType,
@@ -764,9 +768,32 @@ class SignatureController extends Controller
             ]],
             'workflowMode'   => 'FULL',
             'notifiedEvents' => ['workflowFinished', 'recipientFinished', 'recipientRefused'],
-        ]);
+        ];
+
+        $wflResp = $client->post("{$endpoint}/api/users/{$ownerUserId}/workflows", $workflowPayload);
 
         if (!$wflResp->successful()) {
+            // Fallback payload: certaines versions API refusent des champs avancés.
+            $fallbackPayload = [
+                'name' => 'e-Parapheur — ' . $document->title,
+                'steps' => [[
+                    'stepType' => $stepType,
+                    'recipients' => [[
+                        'email' => $signer->email,
+                        'firstName' => $signer->name,
+                    ]],
+                    'requiredRecipients' => 1,
+                ]],
+            ];
+
+            $fallbackResp = $client->post("{$endpoint}/api/users/{$ownerUserId}/workflows", $fallbackPayload);
+            if ($fallbackResp->successful()) {
+                $wflResp = $fallbackResp;
+            }
+        }
+
+        if (!$wflResp->successful()) {
+            $this->lastPlatformError = 'create_workflow: HTTP ' . $wflResp->status() . ' - ' . Str::limit((string) $wflResp->body(), 500, '...');
             Log::error('SunnyStamp: échec création workflow', [
                 'status' => $wflResp->status(), 'body' => $wflResp->body(),
             ]);
@@ -781,6 +808,7 @@ class SignatureController extends Controller
             : Storage::disk('public')->path($filePath);
 
         if (!file_exists($absolutePath)) {
+            $this->lastPlatformError = 'upload_document: fichier introuvable (' . $absolutePath . ')';
             Log::error('SunnyStamp: fichier introuvable', ['path' => $absolutePath]);
             return null;
         }
@@ -795,6 +823,7 @@ class SignatureController extends Controller
             ->post("{$endpoint}/api/workflows/{$workflowId}/parts?" . http_build_query($uploadQuery));
 
         if (!$uploadResp->successful()) {
+            $this->lastPlatformError = 'upload_document: HTTP ' . $uploadResp->status() . ' - ' . Str::limit((string) $uploadResp->body(), 500, '...');
             Log::error('SunnyStamp: échec upload document', [
                 'status' => $uploadResp->status(), 'body' => $uploadResp->body(),
             ]);
@@ -806,6 +835,7 @@ class SignatureController extends Controller
             'workflowStatus' => 'started',
         ]);
         if (!$startResp->successful()) {
+            $this->lastPlatformError = 'start_workflow: HTTP ' . $startResp->status() . ' - ' . Str::limit((string) $startResp->body(), 500, '...');
             Log::error('SunnyStamp: échec démarrage workflow', [
                 'status' => $startResp->status(), 'body' => $startResp->body(),
             ]);
@@ -823,6 +853,7 @@ class SignatureController extends Controller
         Log::warning('SunnyStamp: invite non créé, fallback portail', [
             'status' => $inviteResp->status(), 'body' => $inviteResp->body(),
         ]);
+        $this->lastPlatformError = 'invite: HTTP ' . $inviteResp->status() . ' - ' . Str::limit((string) $inviteResp->body(), 500, '...');
         return $endpoint . '/portal';
     }
 
@@ -898,9 +929,13 @@ class SignatureController extends Controller
         );
 
         if (!$inviteUrl) {
+            $msg = 'Erreur lors de la création du workflow sur la plateforme. Consultez les logs.';
+            if (!empty($this->lastPlatformError)) {
+                $msg .= ' Détail: ' . $this->lastPlatformError;
+            }
             return response()->json([
                 'ok'      => false,
-                'message' => 'Erreur lors de la création du workflow sur la plateforme. Consultez les logs.',
+                'message' => $msg,
             ], 500);
         }
 
