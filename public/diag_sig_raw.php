@@ -15,13 +15,11 @@ if ($secret !== 'DIAG2026') {
     exit;
 }
 
-// ─── Bootstrap Laravel ───────────────────────────────────────────────────────
+// ─── Bootstrap Laravel (console-style, sans routing HTTP) ────────────────────
 define('LARAVEL_START', microtime(true));
 require __DIR__ . '/../vendor/autoload.php';
 $app = require_once __DIR__ . '/../bootstrap/app.php';
-$kernel = $app->make(Illuminate\Contracts\Http\Kernel::class);
-$request = Illuminate\Http\Request::capture();
-$kernel->handle($request);
+$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 
 use Illuminate\Support\Facades\DB;
 use App\Models\SignatureProviderConfig;
