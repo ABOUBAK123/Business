@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Document;
+use App\Models\PersonnelEmployee;
 use App\Models\Signature;
 use App\Models\SignatureProviderConfig;
 use App\Models\SignatureRequest;
@@ -23,6 +24,30 @@ use Illuminate\Support\Str;
 class SignatureController extends Controller
 {
     private ?string $lastPlatformError = null;
+
+    /**
+     * Résout un numéro de téléphone exploitable pour le recipient plateforme.
+     */
+    private static function resolveRecipientPhone(User $user): ?string
+    {
+        $employee = PersonnelEmployee::where('user_id', $user->id)->first();
+
+        $candidate = (string) (
+            $employee?->phone
+            ?? $employee?->secondary_phone
+            ?? $user->phone
+            ?? $user->phone_number
+            ?? $user->mobile
+            ?? ''
+        );
+
+        $candidate = trim($candidate);
+        if ($candidate === '') {
+            return null;
+        }
+
+        return $candidate;
+    }
 
     /**
      * Formate une erreur API avec status + body + requestId/logId quand disponibles.
@@ -894,6 +919,7 @@ class SignatureController extends Controller
         $nameParts = preg_split('/\s+/', trim((string) $signer->name)) ?: [];
         $recipientFirstName = (string) ($nameParts[0] ?? $signer->name ?? 'Utilisateur');
         $recipientLastName = trim((string) implode(' ', array_slice($nameParts, 1)));
+        $recipientPhone = self::resolveRecipientPhone($signer);
 
         $client = Http::withToken($token)
             ->timeout($timeout)
@@ -908,6 +934,9 @@ class SignatureController extends Controller
             'name' => (string) $signer->name,
             'maxInvites' => 1,
         ];
+        if (!empty($recipientPhone)) {
+            $recipient['phoneNumber'] = $recipientPhone;
+        }
         if (!empty($recipientPlatformUserId)) {
             $recipient['id'] = $recipientPlatformUserId;
             $recipient['userId'] = $recipientPlatformUserId;
@@ -945,6 +974,7 @@ class SignatureController extends Controller
                         'email' => $signer->email,
                         'firstName' => $recipientFirstName,
                         'lastName' => $recipientLastName,
+                        'phoneNumber' => $recipientPhone,
                     ], fn($v) => !is_null($v) && $v !== '')],
                     'requiredRecipients' => 1,
                 ]],
@@ -957,6 +987,16 @@ class SignatureController extends Controller
         }
 
         if (!$wflResp->successful()) {
+            $errorCode = is_array($wflResp->json()) ? ($wflResp->json('code') ?? '') : '';
+            if ($errorCode === 'RecipientPhoneNumberRequired' && empty($recipientPhone)) {
+                $this->lastPlatformError = 'create_workflow: RecipientPhoneNumberRequired - le profil signataire ne contient pas de numero de telephone (champ personnel requis).';
+                Log::error('SunnyStamp: création workflow bloquée - phone manquant pour recipient', [
+                    'signer_user_id' => $signer->id,
+                    'signer_email' => $signer->email,
+                ]);
+                return null;
+            }
+
             $this->lastPlatformError = 'create_workflow: ' . self::formatApiErrorDetail($wflResp);
             Log::error('SunnyStamp: échec création workflow', [
                 'status' => $wflResp->status(), 'body' => $wflResp->body(),
@@ -1197,6 +1237,7 @@ class SignatureController extends Controller
             'firstName' => $recipientFirstName,
             'lastName' => $recipientLastName,
             'name' => (string) $signer->name,
+            'phoneNumber' => $recipientPhone,
         ], fn($v) => !is_null($v) && $v !== '');
 
         $inviteAttempts = [
