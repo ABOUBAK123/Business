@@ -4212,13 +4212,36 @@ class AdminController extends Controller
                 $avatarPath = 'storage/' . ltrim($storedPath, '/');
             }
 
+            $selectedAdminType = $data['administration_type'] ?? null;
+            $selectedAdminId = $data['administration_id'] ?? null;
+            $selectedProfileId = $data['profile_id'] ?? null;
+
+            if (!empty($selectedAdminType) && !empty($selectedAdminId)) {
+                $selectedProfile = $selectedProfileId ? AdministrationProfile::find($selectedProfileId) : null;
+                $profileMatchesScope = $selectedProfile
+                    && $selectedProfile->administration_id === $selectedAdminId
+                    && ($selectedProfile->effective_administration_type ?? 'emitter') === $selectedAdminType;
+
+                if (!$profileMatchesScope) {
+                    $fallbackProfile = AdministrationProfile::query()
+                        ->where('administration_id', $selectedAdminId)
+                        ->where('administration_type', $selectedAdminType)
+                        ->orderBy('name')
+                        ->first();
+
+                    if ($fallbackProfile) {
+                        $selectedProfileId = $fallbackProfile->id;
+                    }
+                }
+            }
+
             $payload = [
                 'name'       => $data['name'],
                 'full_name'  => $fullName,
                 'email'      => $data['email'],
                 'password'   => Hash::make($data['password']),
                 'role'       => $data['role'],
-                'profile_id' => $data['profile_id'] ?? null,
+                'profile_id' => $selectedProfileId,
                 'status'     => $data['status'] ?? 'active',
                 'quota'      => $data['quota'] ?? null,
                 'avatar'     => $avatarPath,
@@ -4282,13 +4305,36 @@ class AdminController extends Controller
             'sub_entity_id'        => 'nullable|string|max:36',
         ]);
 
+        $selectedAdminType = $data['administration_type'] ?? null;
+        $selectedAdminId = $data['administration_id'] ?? null;
+        $selectedProfileId = $data['profile_id'] ?? $user->profile_id;
+
+        if (!empty($selectedAdminType) && !empty($selectedAdminId)) {
+            $selectedProfile = $selectedProfileId ? AdministrationProfile::find($selectedProfileId) : null;
+            $profileMatchesScope = $selectedProfile
+                && $selectedProfile->administration_id === $selectedAdminId
+                && ($selectedProfile->effective_administration_type ?? 'emitter') === $selectedAdminType;
+
+            if (!$profileMatchesScope) {
+                $fallbackProfile = AdministrationProfile::query()
+                    ->where('administration_id', $selectedAdminId)
+                    ->where('administration_type', $selectedAdminType)
+                    ->orderBy('name')
+                    ->first();
+
+                if ($fallbackProfile) {
+                    $selectedProfileId = $fallbackProfile->id;
+                }
+            }
+        }
+
         $fullName = trim(($data['prenoms'] ?? '') . ' ' . $data['nom']);
         $update = [
             'name'       => $data['name'],
             'full_name'  => $fullName,
             'email'      => $data['email'],
             'role'       => $data['role'],
-            'profile_id' => $data['profile_id'] ?? $user->profile_id,
+            'profile_id' => $selectedProfileId,
             'status'     => $data['status'] ?? $user->status,
             'quota'      => $data['quota'] ?? $user->quota,
         ];

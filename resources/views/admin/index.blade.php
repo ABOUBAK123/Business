@@ -6188,7 +6188,7 @@ function toggleOoSecret() {
     $emittersJson   = $emitters->map(fn($e) => ['id'=>$e->id,'name'=>$e->name])->values();
     $recipientsJson = $recipients->map(fn($r) => ['id'=>$r->id,'name'=>$r->name])->values();
     $subEntJson     = $subEntities->map(fn($s) => ['id'=>$s->id,'name'=>$s->name,'code'=>$s->code,'scope_id'=>$s->scope_id,'scope_type'=>$s->scope_type])->values();
-    $profilesJson   = $profilesList->map(fn($p) => ['id'=>$p->id,'name'=>$p->name,'administration_id'=>$p->administration_id])->values();
+    $profilesJson   = $profilesList->map(fn($p) => ['id'=>$p->id,'name'=>$p->name,'administration_id'=>$p->administration_id,'administration_type'=>$p->administration_type])->values();
     $filteredUsers  = $usersSearch
         ? $users->getCollection()->filter(fn($u) => str_contains(strtolower($u->name ?? ''), strtolower($usersSearch))
             || str_contains(strtolower($u->full_name ?? ''), strtolower($usersSearch))
@@ -6695,6 +6695,7 @@ function userAdminIdChange(prefix) {
   var adminId = adminEl.value;
   var subSel = document.getElementById(prefix + '-sub-entity');
   var roleSel = document.getElementById(prefix + '-role-profile');
+  var profileSel = document.getElementById(prefix + '-profile');
   if (subSel) {
     subSel.innerHTML = '<option value="">Direction sous tutelle</option>';
     subSel.disabled = !adminId;
@@ -6719,6 +6720,27 @@ function userAdminIdChange(prefix) {
     filteredProfiles.forEach(function(p) {
       roleSel.innerHTML += '<option value="' + p.id + '">' + p.name + '</option>';
     });
+  }
+
+  if (profileSel) {
+    var prevValue = profileSel.value;
+    profileSel.innerHTML = '<option value="">« Aucun profil applicatif (super-admin si rôle admin) »</option>';
+
+    if (adminId && type) {
+      var filteredProfileOptions = __profiles.filter(function(p) {
+        return p.administration_id === adminId && (p.administration_type || 'emitter') === type;
+      });
+
+      filteredProfileOptions.forEach(function(p) {
+        profileSel.innerHTML += '<option value="' + p.id + '">' + p.name + '</option>';
+      });
+
+      if (filteredProfileOptions.some(function(p) { return p.id === prevValue; })) {
+        profileSel.value = prevValue;
+      } else if (filteredProfileOptions.length === 1) {
+        profileSel.value = filteredProfileOptions[0].id;
+      }
+    }
   }
 }
 
