@@ -185,7 +185,8 @@ class WorkflowController extends Controller
             ->where('role', 'signer');
 
         if (!$administrationId) {
-            return $usersQuery->whereRaw('1 = 0');
+            // Fallback: keep signer list available even if admin scope is missing.
+            return $usersQuery;
         }
 
         return $usersQuery->where(function ($query) use ($administrationId) {
