@@ -262,7 +262,8 @@ if ($workflowId) {
     $startOk = false;
     foreach ($startVariants as $i => [$m, $u, $p]) {
         $r = call($m, $u, $p, $client);
-        $steps["S4." . ($i + 1) . " — START ({$m} " . basename($u) . " status={$p['workflowStatus'] ?? $p['status'] ?? 'none'})"] = $r;
+        $startStatus = $p['workflowStatus'] ?? $p['status'] ?? 'none';
+        $steps["S4." . ($i + 1) . " — START ({$m} " . basename($u) . " status={$startStatus})"] = $r;
         if ($r['ok'] && !$startOk) {
             $startOk = true;
         }
