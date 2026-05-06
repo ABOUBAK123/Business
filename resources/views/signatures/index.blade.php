@@ -354,6 +354,19 @@
                 @php
                     $totalSteps   = $wf->steps->count() ?: 1;
                     $latestExec   = $wf->executions->sortByDesc('current_step')->first();
+                    $rejectionHistory = $wf->executions->flatMap(function ($exec) {
+                        $history = $exec->step_data['rejection_history'] ?? [];
+                        if (!is_array($history)) {
+                            return [];
+                        }
+
+                        return array_map(function ($entry) use ($exec) {
+                            return array_merge(['execution_id' => $exec->id], is_array($entry) ? $entry : []);
+                        }, $history);
+                    })->sortByDesc(function ($entry) {
+                        return $entry['rejected_at'] ?? '';
+                    })->values();
+                    $latestRejection = $rejectionHistory->first();
                     $completedSteps = $latestExec ? min($latestExec->current_step - 1, $totalSteps) : 0;
                     $progress     = (int) round(($completedSteps / $totalSteps) * 100);
                     if ($latestExec && $latestExec->status === 'completed') $progress = 100;
