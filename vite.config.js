@@ -6,13 +6,20 @@ export default defineConfig({
     plugins: [
         laravel({
             input: ['resources/css/app.css', 'resources/js/app.js'],
-            refresh: true,
+            refresh: ['resources/views/**', 'resources/css/**', 'resources/js/**'],
         }),
         tailwindcss(),
     ],
     server: {
         watch: {
-            ignored: ['**/storage/framework/views/**'],
+            ignored: [
+                '**/storage/**',
+                '**/bootstrap/cache/**',
+                '**/vendor/**',
+                '**/node_modules/**',
+                '**/*.log',
+                '**/*.lock',
+            ],
         },
     },
 });
