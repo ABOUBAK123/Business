@@ -249,6 +249,10 @@ $currentUserId = Auth::id();
             <div>
                 <h2 id="modal-title" class="text-lg font-bold text-gray-900">Nouveau Workflow</h2>
                 <p id="modal-subtitle" class="text-xs text-gray-400 hidden"></p>
+                <div id="modal-signed-badge" class="hidden mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 text-[11px] font-semibold">
+                    <i class="fas fa-badge-check"></i>
+                    Document signé disponible
+                </div>
             </div>
             <button onclick="closeModal()" class="h-8 w-8 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 text-xl leading-none transition">&times;</button>
         </div>
@@ -748,6 +752,7 @@ function openCreateModal(mode) {
     document.getElementById('modal-title').textContent =
         mode === 'template' ? 'Nouveau Modèle de Workflow' : 'Nouveau Workflow';
     document.getElementById('modal-subtitle').classList.add('hidden');
+    document.getElementById('modal-signed-badge').classList.add('hidden');
     document.getElementById('view-progress-bar').classList.add('hidden');
     document.getElementById('modal-main').classList.remove('hidden');
     renderStep();
@@ -779,11 +784,17 @@ function openViewMode(wf) {
     // En-tête modal
     document.getElementById('modal-title').textContent = wf.name || 'Détails du workflow';
     const subEl = document.getElementById('modal-subtitle');
+    const signedBadgeEl = document.getElementById('modal-signed-badge');
     if (wf.description) {
         subEl.textContent = wf.description;
         subEl.classList.remove('hidden');
     } else {
         subEl.classList.add('hidden');
+    }
+
+    const signedDownloadUrl = getCompletedSignedDownloadUrl(wf);
+    if (signedBadgeEl) {
+        signedBadgeEl.classList.toggle('hidden', !signedDownloadUrl);
     }
 
     // Barre de progression
@@ -806,6 +817,7 @@ function closeModal() {
         return;
     }
     document.getElementById('modal-main').classList.add('hidden');
+    document.getElementById('modal-signed-badge').classList.add('hidden');
     clearModalError();
     isViewMode = false; viewingWf = null;
 }
