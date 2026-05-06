@@ -93,7 +93,9 @@
                                 default     => 'bg-blue-100 text-blue-700',
                             };
                         @endphp
-                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold {{ $sc }}">
+                        <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold {{ $sc }}"
+                              data-exec-status-cell="{{ $row['actionableIds'][0] ?? '' }}"
+                              data-status="{{ $row['status'] }}">
                             {{ $row['statusLabel'] }}
                         </span>
                     </td>
@@ -617,6 +619,124 @@ function showSignatureFallback(message, executionId, actionType) {
     document.body.appendChild(modal);
 }
 
+// ── Suivi en temps réel du statut du workflow plateforme ───────────────────
+const __wfStatusPollUrl = "{{ route('signatures.platform-status', ['executionId' => '__EXEC_ID__']) }}".replace('__EXEC_ID__', '__PLACEHOLDER__');
+const __wfStatusPolls = {}; // { executionId: intervalId }
+
+const wfPhaseLabels = {
+    'pending':    { label: 'En attente', color: 'bg-blue-100 text-blue-700' },
+    'consent':    { label: 'Page de consentement', color: 'bg-purple-100 text-purple-700' },
+    'signing':    { label: 'Phase de signature', color: 'bg-indigo-100 text-indigo-700' },
+    'in_progress': { label: 'En cours', color: 'bg-amber-100 text-amber-800' },
+    'completed':  { label: 'Terminé', color: 'bg-green-100 text-green-800' },
+    'rejected':   { label: 'Refusé', color: 'bg-red-100 text-red-700' },
+};
+
+function updateExecutionStatusCell(executionId, phase) {
+    const cell = document.querySelector(`[data-exec-status-cell="${executionId}"]`);
+    if (!cell) return;
+
+    const phaseInfo = wfPhaseLabels[phase] || { label: phase, color: 'bg-gray-100 text-gray-700' };
+    cell.textContent = phaseInfo.label;
+    cell.className = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ' + phaseInfo.color;
+    cell.setAttribute('data-phase', phase);
+}
+
+function startPlatformStatusPolling(executionId) {
+    if (__wfStatusPolls[executionId]) return;
+
+    let failureCount = 0;
+    const pollInterval = setInterval(async () => {
+        try {
+            const resp = await fetch(__wfStatusPollUrl.replace('__PLACEHOLDER__', executionId), {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+            });
+
+            if (!resp.ok) {
+                failureCount++;
+                if (failureCount >= 5) {
+                    console.warn(`Polling stopped for ${executionId} after 5 failures`);
+                    clearInterval(pollInterval);
+                    delete __wfStatusPolls[executionId];
+                }
+                return;
+            }
+
+            failureCount = 0;
+            const data = await resp.json();
+            if (!data.ok) return;
+
+            const phase = data.phase || data.platform_status || 'pending';
+            const currentPhase = document.querySelector(`[data-exec-status-cell="${executionId}"]`)?.getAttribute('data-phase');
+
+            if (phase !== currentPhase) {
+                updateExecutionStatusCell(executionId, phase);
+
+                // Notification pour certaines transitions importantes
+                if (phase === 'signing') {
+                    showNotification('Signature commencée', 'La page de signature est maintenant active.', 'info');
+                } else if (phase === 'completed') {
+                    showNotification('Workflow terminé', 'Le workflow a été complété avec succès.', 'success');
+                    clearInterval(pollInterval);
+                    delete __wfStatusPolls[executionId];
+                } else if (phase === 'rejected') {
+                    showNotification('Workflow refusé', 'Le workflow a été refusé par un signataire.', 'error');
+                    clearInterval(pollInterval);
+                    delete __wfStatusPolls[executionId];
+                }
+            }
+        } catch (err) {
+            console.warn('Error polling workflow status:', err);
+            failureCount++;
+            if (failureCount >= 5) {
+                console.warn(`Polling stopped for ${executionId} after 5 failures`);
+                clearInterval(pollInterval);
+                delete __wfStatusPolls[executionId];
+            }
+        }
+    }, 3000); // Poll every 3 seconds
+
+    __wfStatusPolls[executionId] = pollInterval;
+}
+
+function showNotification(title, message, type = 'info') {
+    const bgColor = {
+        'success': 'bg-green-50 border-green-200',
+        'error': 'bg-red-50 border-red-200',
+        'info': 'bg-blue-50 border-blue-200',
+    }[type] || 'bg-blue-50 border-blue-200';
+
+    const textColor = {
+        'success': 'text-green-700',
+        'error': 'text-red-700',
+        'info': 'text-blue-700',
+    }[type] || 'text-blue-700';
+
+    const icon = {
+        'success': 'fa-circle-check',
+        'error': 'fa-circle-xmark',
+        'info': 'fa-circle-info',
+    }[type] || 'fa-circle-info';
+
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 z-50 px-4 py-3 ${bgColor} border rounded-lg ${textColor} text-sm font-medium flex items-start gap-3`;
+    notification.innerHTML = `
+        <i class="fa-solid ${icon} mt-0.5 flex-shrink-0"></i>
+        <div>
+            <strong>${escapeHtml(title)}</strong>
+            <p class="text-xs mt-0.5 opacity-90">${escapeHtml(message)}</p>
+        </div>
+        <button class="ml-4 text-gray-400 hover:text-gray-600" onclick="this.closest('div').remove()">✕</button>
+    `;
+
+    document.body.appendChild(notification);
+    setTimeout(() => { notification.remove(); }, 5000);
+}
+
 async function wfInboxAction(btn, executionId, actionType) {
     const icon = btn.querySelector('.wf-btn-icon');
     const originalClass = icon?.className ?? '';
@@ -647,7 +767,14 @@ async function wfInboxAction(btn, executionId, actionType) {
         }
 
         if (data.ok && data.url) {
+            // Commence le polling du statut AVANT d'ouvrir la fenêtre
+            startPlatformStatusPolling(executionId);
+            updateExecutionStatusCell(executionId, 'consent');
+
+            // Ouvre l'URL dans une nouvelle fenêtre
             window.open(data.url, '_blank', 'noopener,noreferrer');
+
+            showNotification('Redirection vers la plateforme', 'Page de consentement/signature en cours de chargement...', 'info');
         } else {
             const msg = data.message || 'Erreur inconnue.';
             showSignatureFallback(msg, executionId, actionType);
