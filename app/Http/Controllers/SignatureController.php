@@ -54,6 +54,21 @@ class SignatureController extends Controller
         $totalSteps = max($steps->count(), 1);
         $currentStep = (int) ($execution->current_step ?? 1);
         $currentStepObj = $steps->firstWhere('order', $currentStep);
+        $isSignatureStep = (bool) ($currentStepObj?->requires_signature ?? false);
+
+        // Fermer la demande de signature en cours pour éviter de réutiliser la même zone
+        // sur une étape suivante (cas multi-signatures avec même signataire).
+        if ($isSignatureStep && $execution->document_id && $currentStepObj?->assignee_id) {
+            SignatureRequest::query()
+                ->where('document_id', $execution->document_id)
+                ->where('requested_to', $currentStepObj->assignee_id)
+                ->where('status', 'pending')
+                ->update([
+                    'status' => 'signed',
+                    'responded_at' => now(),
+                ]);
+        }
+
         $nextStep = $currentStep + 1;
 
         if ($nextStep > $totalSteps) {
