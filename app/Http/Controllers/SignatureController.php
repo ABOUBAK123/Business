@@ -1482,7 +1482,12 @@ class SignatureController extends Controller
         $this->lastPlatformWorkflowId = $workflowId;
 
         // 2. Uploader le document PDF
-        $filePath = trim((string) ($document->file_path ?? ''));
+        // Si un PDF déjà signé existe, l'utiliser comme base pour conserver les signatures précédentes.
+        $sourceFilePath = !empty($document->signed_file_path)
+            ? (string) $document->signed_file_path
+            : (string) ($document->file_path ?? '');
+
+        $filePath = trim($sourceFilePath);
         $normalizedPublicDiskPath = ltrim($filePath, '/');
         if (str_starts_with($normalizedPublicDiskPath, 'public/')) {
             $normalizedPublicDiskPath = substr($normalizedPublicDiskPath, 7);
@@ -2391,6 +2396,20 @@ class SignatureController extends Controller
                 $doneStatuses = ['finished', 'completed', 'done', 'FINISHED', 'COMPLETED', 'DONE'];
                 $isNowDone = in_array($platformStatus, $doneStatuses, true);
                 if ($isNowDone) {
+                    $totalSteps = max($steps->count(), 1);
+                    $currentStep = (int) ($execution->current_step ?? 1);
+                    $willCompleteNow = $currentStep >= $totalSteps;
+
+                    // Télécharger la version signée de cette étape AVANT d'avancer l'exécution.
+                    $this->downloadSignedDocumentFromPlatform(
+                        $execution->fresh(),
+                        $endpoint,
+                        $apiToken,
+                        (bool) ($cfg->verify_ssl ?? true),
+                        true,
+                        $willCompleteNow
+                    );
+
                     $result = $this->advanceExecutionAfterPlatformDone($execution, $platformStatus);
                     $execution->refresh();
 
@@ -2404,16 +2423,6 @@ class SignatureController extends Controller
                 } else {
                     $execution->update($updates);
                     $execution->refresh();
-                }
-
-                // Télécharger le document signé depuis la plateforme.
-                if ($isNowDone && $execution->status === 'completed') {
-                    $this->downloadSignedDocumentFromPlatform(
-                        $execution->fresh(),
-                        $endpoint,
-                        $apiToken,
-                        (bool) ($cfg->verify_ssl ?? true)
-                    );
                 }
             }
 
@@ -2453,7 +2462,14 @@ class SignatureController extends Controller
      * Appelé automatiquement quand le workflow passe à l'état "finished".
      * GET /api/workflows/{wflId}/downloadDocuments
      */
-    private function downloadSignedDocumentFromPlatform(WorkflowExecution $execution, string $endpoint, string $token, bool $verifySSL = true): void
+    private function downloadSignedDocumentFromPlatform(
+        WorkflowExecution $execution,
+        string $endpoint,
+        string $token,
+        bool $verifySSL = true,
+        bool $forceRefresh = false,
+        bool $markAsFinalSignature = true
+    ): void
     {
         $platformWorkflowId = $execution->platform_workflow_id;
         if (!$platformWorkflowId || !$execution->document_id) {
@@ -2465,8 +2481,8 @@ class SignatureController extends Controller
             return;
         }
 
-        // Éviter de re-télécharger si déjà récupéré.
-        if (!empty($document->signed_file_path)) {
+        // Éviter de re-télécharger si déjà récupéré, sauf en mode chaînage multi-signatures.
+        if (!$forceRefresh && !empty($document->signed_file_path)) {
             Log::info('SunnyStamp: document signé déjà téléchargé', [
                 'execution_id' => $execution->id,
                 'signed_file_path' => $document->signed_file_path,
@@ -2515,11 +2531,16 @@ class SignatureController extends Controller
             Storage::disk('public')->put($storagePath, $pdfContent);
 
             // Mettre à jour le document en base.
-            $document->update([
+            $documentUpdates = [
                 'signed_file_path' => $storagePath,
-                'status'           => 'signed',
-                'signed_at'        => now(),
-            ]);
+            ];
+
+            if ($markAsFinalSignature) {
+                $documentUpdates['status'] = 'signed';
+                $documentUpdates['signed_at'] = now();
+            }
+
+            $document->update($documentUpdates);
 
             Log::info('SunnyStamp: document signé sauvegardé ✅', [
                 'execution_id'     => $execution->id,
@@ -2614,6 +2635,24 @@ class SignatureController extends Controller
         $doneStatuses  = ['FINISHED', 'COMPLETED', 'DONE', 'finished', 'completed', 'done'];
 
         if (in_array($event, $doneEvents, true) || in_array($platformStatus, $doneStatuses, true)) {
+            $wf = $execution->workflow()->with('steps')->first();
+            $steps = $wf?->steps?->sortBy('order') ?? collect();
+            $totalSteps = max($steps->count(), 1);
+            $currentStep = (int) ($execution->current_step ?? 1);
+            $willCompleteNow = $currentStep >= $totalSteps;
+
+            $cfg = $this->resolveSignatureConfig();
+            if ($cfg) {
+                $this->downloadSignedDocumentFromPlatform(
+                    $execution->fresh(),
+                    rtrim((string) $cfg->endpoint, '/'),
+                    (string) ($cfg->api_key ?? $cfg->api_token ?? ''),
+                    (bool) ($cfg->verify_ssl ?? true),
+                    true,
+                    $willCompleteNow
+                );
+            }
+
             $result = $this->advanceExecutionAfterPlatformDone($execution, $platformStatus !== '' ? $platformStatus : 'finished');
             $execution->refresh();
             $updates['platform_status'] = $execution->platform_status;
