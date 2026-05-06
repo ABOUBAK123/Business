@@ -43,6 +43,78 @@ class SignatureController extends Controller
         $execution->update(['step_data' => $stepData]);
     }
 
+    private function advanceExecutionAfterPlatformDone(WorkflowExecution $execution, ?string $platformStatus = null): array
+    {
+        if ($execution->status !== 'in_progress') {
+            return ['completed' => $execution->status === 'completed'];
+        }
+
+        $workflow = $execution->workflow()->with('steps.assignee', 'creator')->first();
+        $steps = $workflow?->steps?->sortBy('order')->values() ?? collect();
+        $totalSteps = max($steps->count(), 1);
+        $currentStep = (int) ($execution->current_step ?? 1);
+        $currentStepObj = $steps->firstWhere('order', $currentStep);
+        $nextStep = $currentStep + 1;
+
+        if ($nextStep > $totalSteps) {
+            $execution->update([
+                'status' => 'completed',
+                'current_step' => $totalSteps,
+                'completed_at' => now(),
+                'platform_status' => $platformStatus,
+            ]);
+
+            $isSignatureStep = (bool) ($currentStepObj?->requires_signature ?? false);
+            if ($execution->document_id && $isSignatureStep) {
+                Document::find($execution->document_id)?->update(['status' => 'signed', 'signed_at' => now()]);
+                Signature::create([
+                    'id'          => Str::uuid(),
+                    'document_id' => $execution->document_id,
+                    'signer_id'   => $currentStepObj?->assignee_id ?? Auth::id(),
+                    'signature'   => hash('sha256', (string) ($currentStepObj?->assignee_id ?? Auth::id()) . $execution->document_id . now()),
+                    'status'      => 'valid',
+                    'is_valid'    => true,
+                    'signed_at'   => now(),
+                    'reason'      => 'Signature via plateforme workflow ' . ($workflow?->name ?? ''),
+                ]);
+            }
+
+            if ($workflow?->created_by) {
+                NotificationService::notify(
+                    recipientId: (string) $workflow->created_by,
+                    type: 'workflow',
+                    title: 'Workflow terminé',
+                    message: sprintf('Le workflow "%s" est terminé après la dernière étape de signature.', $workflow->name ?? 'Sans nom'),
+                    actionUrl: route('signatures.index'),
+                    workflowId: (string) ($workflow->id ?? null),
+                    executionId: (string) $execution->id
+                );
+            }
+
+            return ['completed' => true];
+        }
+
+        $nextStepObj = $steps->firstWhere('order', $nextStep);
+        $docZones = $execution->step_data['doc_zones'] ?? [];
+
+        $execution->update([
+            'current_step' => $nextStep,
+            // Réinitialiser la liaison plateforme pour éviter un nouvel avancement sur le même workflow externe.
+            'platform_workflow_id' => null,
+            'platform_status' => null,
+        ]);
+
+        if ($workflow && $nextStepObj && $nextStepObj->requires_signature) {
+            $this->createSignatureRequestsForStep($workflow, $nextStepObj, is_array($docZones) ? $docZones : []);
+        }
+
+        if ($workflow) {
+            NotificationService::workflowStepAdvanced($workflow, $nextStep, $currentStepObj?->assignee?->name ?? 'Signataire');
+        }
+
+        return ['completed' => false];
+    }
+
     private function getSignatureStepIndex(Workflow $workflow, WorkflowStep $step): ?int
     {
         if (!$step->requires_signature) {
@@ -2318,23 +2390,24 @@ class SignatureController extends Controller
 
                 $doneStatuses = ['finished', 'completed', 'done', 'FINISHED', 'COMPLETED', 'DONE'];
                 $isNowDone = in_array($platformStatus, $doneStatuses, true);
-                if ($isNowDone && $execution->status !== 'completed') {
-                    $updates['status']       = 'completed';
-                    $updates['completed_at'] = now();
-                    if ($execution->document_id) {
-                        Document::find($execution->document_id)?->update(['status' => 'signed', 'signed_at' => now()]);
-                    }
-                    Log::info('SunnyStamp: exécution transitionnée vers completed', [
+                if ($isNowDone) {
+                    $result = $this->advanceExecutionAfterPlatformDone($execution, $platformStatus);
+                    $execution->refresh();
+
+                    Log::info('SunnyStamp: signature plateforme terminée, transition locale appliquée', [
                         'execution_id' => $executionId,
                         'platform_status' => $platformStatus,
+                        'completed' => (bool) ($result['completed'] ?? false),
+                        'current_step' => $execution->current_step,
+                        'status' => $execution->status,
                     ]);
+                } else {
+                    $execution->update($updates);
+                    $execution->refresh();
                 }
 
-                $execution->update($updates);
-                $execution->refresh();
-
                 // Télécharger le document signé depuis la plateforme.
-                if ($isNowDone) {
+                if ($isNowDone && $execution->status === 'completed') {
                     $this->downloadSignedDocumentFromPlatform(
                         $execution->fresh(),
                         $endpoint,
@@ -2541,33 +2614,15 @@ class SignatureController extends Controller
         $doneStatuses  = ['FINISHED', 'COMPLETED', 'DONE', 'finished', 'completed', 'done'];
 
         if (in_array($event, $doneEvents, true) || in_array($platformStatus, $doneStatuses, true)) {
-            if ($execution->status === 'in_progress') {
+            $result = $this->advanceExecutionAfterPlatformDone($execution, $platformStatus !== '' ? $platformStatus : 'finished');
+            $execution->refresh();
+            $updates['platform_status'] = $execution->platform_status;
+            if ($execution->status === 'completed') {
                 $updates['status'] = 'completed';
-                $updates['completed_at'] = now();
-
-                if ($execution->document_id) {
-                    Document::find($execution->document_id)?->update(['status' => 'signed', 'signed_at' => now()]);
-                }
-
-                // Notifier l'utilisateur que le workflow est terminé.
-                try {
-                    $wf = $execution->workflow()->with('steps', 'creator')->first();
-                    if ($wf?->created_by) {
-                        Notification::create([
-                            'user_id'  => $wf->created_by,
-                            'type'     => 'workflow_completed',
-                            'title'    => 'Workflow de signature terminé',
-                            'message'  => 'Le workflow « ' . ($wf->name ?? 'Sans titre') . ' » a été signé avec succès sur la plateforme.',
-                            'data'     => json_encode([
-                                'execution_id'         => $execution->id,
-                                'platform_workflow_id' => $platformWorkflowId,
-                                'event'                => $event,
-                            ]),
-                        ]);
-                    }
-                } catch (\Throwable $e) {
-                    Log::warning('SunnyStamp: webhook - notification création échouée', ['error' => $e->getMessage()]);
-                }
+                $updates['completed_at'] = $execution->completed_at;
+            } else {
+                $updates['status'] = $execution->status;
+                $updates['current_step'] = $execution->current_step;
             }
         } elseif (in_array($event, $refusedEvents, true)) {
             $updates['status'] = 'rejected';
@@ -2601,7 +2656,7 @@ class SignatureController extends Controller
         }
 
         // Télécharger le document signé si le workflow vient de se terminer.
-        $justCompleted = !empty($updates['status']) && $updates['status'] === 'completed';
+        $justCompleted = $execution->fresh()->status === 'completed';
         if ($justCompleted) {
             $cfg = $this->resolveSignatureConfig();
             if ($cfg) {
