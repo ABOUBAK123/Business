@@ -1117,57 +1117,137 @@ class SignatureController extends Controller
             return null;
         }
 
-        $uploadAttempts = [
-            ['field' => 'document', 'url' => "{$endpoint}/api/workflows/{$workflowId}/parts?" . http_build_query($uploadQuery)],
-            ['field' => 'file',     'url' => "{$endpoint}/api/workflows/{$workflowId}/parts?" . http_build_query($uploadQuery)],
-            ['field' => 'part',     'url' => "{$endpoint}/api/workflows/{$workflowId}/parts?" . http_build_query($uploadQuery)],
-            ['field' => 'document', 'url' => "{$endpoint}/api/workflows/{$workflowId}/parts"],
-            ['field' => 'file',     'url' => "{$endpoint}/api/workflows/{$workflowId}/parts"],
-            ['field' => 'document', 'url' => "{$endpoint}/api/workflows/{$workflowId}/documents"],
-            ['field' => 'file',     'url' => "{$endpoint}/api/workflows/{$workflowId}/documents"],
-        ];
+        $fileSize = strlen($pdfBytes);
+        $fileHash = base64_encode(hash('sha256', $pdfBytes, true));
+        $fileName = basename($absolutePath);
+
+        // Étape 2a: Upload raw binary (Content-Type: application/pdf) → /parts
+        // C'est la méthode documentée dans la collection Postman UVCI/ARTCI.
+        $uploadUrlWithQuery = "{$endpoint}/api/workflows/{$workflowId}/parts?" . http_build_query($uploadQuery);
+        $uploadUrlBase      = "{$endpoint}/api/workflows/{$workflowId}/parts";
 
         $uploadResp = null;
-        foreach ($uploadAttempts as $attempt) {
+        foreach ([$uploadUrlWithQuery, $uploadUrlBase] as $uploadUrl) {
             try {
-                $candidate = $client
-                    ->attach($attempt['field'], $pdfBytes, basename($absolutePath), ['Content-Type' => 'application/pdf'])
-                    ->post($attempt['url']);
+                $candidate = Http::withToken($token)
+                    ->timeout($timeout)
+                    ->when(!$verifySSL, fn($h) => $h->withoutVerifying())
+                    ->withBody($pdfBytes, 'application/pdf')
+                    ->withHeaders([
+                        'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+                    ])
+                    ->post($uploadUrl);
 
-                Log::info('SunnyStamp: tentative upload document', [
+                Log::info('SunnyStamp: tentative upload raw PDF', [
                     'workflow_id' => $workflowId,
-                    'field' => $attempt['field'],
-                    'url' => $attempt['url'],
+                    'url'    => $uploadUrl,
                     'status' => $candidate->status(),
+                    'body_excerpt' => substr($candidate->body(), 0, 200),
                 ]);
 
                 if ($candidate->successful()) {
                     $uploadResp = $candidate;
                     break;
                 }
-
                 $uploadResp = $candidate;
-
-                // Auth/droits -> inutile de continuer les variantes.
                 if (in_array($candidate->status(), [401, 403], true)) {
                     break;
                 }
             } catch (\Throwable $e) {
-                Log::warning('SunnyStamp: exception tentative upload', [
+                Log::warning('SunnyStamp: exception upload raw PDF', [
                     'workflow_id' => $workflowId,
-                    'field' => $attempt['field'],
-                    'url' => $attempt['url'],
+                    'url' => $uploadUrl,
                     'error' => $e->getMessage(),
                 ]);
+            }
+        }
+
+        // Étape 2b: Si upload raw OK → lier le document via POST /documents
+        // (requis quand createDocuments=true n'est pas supporté par l'instance).
+        if ($uploadResp && $uploadResp->successful()) {
+            $partData = $uploadResp->json();
+            $partId   = $partData['id'] ?? $partData['partId'] ?? null;
+
+            // Construire le payload /documents avec les métadonnées du fichier.
+            $docPayload = [
+                'parts' => [[
+                    'filename'    => $fileName,
+                    'contentType' => 'application/pdf',
+                    'size'        => $fileSize,
+                    'hash'        => $fileHash,
+                ]],
+            ];
+            if ($partId) {
+                $docPayload['parts'][0]['id'] = $partId;
+            }
+            if (!empty($sigProfileId)) {
+                $docPayload['signatureProfileId'] = $sigProfileId;
+            }
+            // Zone de signature par défaut en bas à droite de la dernière page.
+            $docPayload['pdfSignatureFields'] = [[
+                'imagePage'   => -1,
+                'imageX'      => 390.0,
+                'imageY'      => 710.0,
+                'imageWidth'  => 150.0,
+                'imageHeight' => 80.0,
+            ]];
+
+            try {
+                $docResp = $client->post("{$endpoint}/api/workflows/{$workflowId}/documents", $docPayload);
+                Log::info('SunnyStamp: création document via /documents', [
+                    'workflow_id' => $workflowId,
+                    'status' => $docResp->status(),
+                    'body_excerpt' => substr($docResp->body(), 0, 200),
+                ]);
+                // Non bloquant: certaines instances créent le doc automatiquement via createDocuments=true.
+            } catch (\Throwable $e) {
+                Log::warning('SunnyStamp: exception création document /documents', [
+                    'workflow_id' => $workflowId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        // Fallback multipart si raw binary a échoué.
+        if (!$uploadResp || !$uploadResp->successful()) {
+            foreach ([
+                ['field' => 'document', 'url' => $uploadUrlWithQuery],
+                ['field' => 'file',     'url' => $uploadUrlWithQuery],
+                ['field' => 'document', 'url' => $uploadUrlBase],
+            ] as $attempt) {
+                try {
+                    $candidate = $client
+                        ->attach($attempt['field'], $pdfBytes, $fileName, ['Content-Type' => 'application/pdf'])
+                        ->post($attempt['url']);
+
+                    Log::info('SunnyStamp: fallback upload multipart', [
+                        'workflow_id' => $workflowId,
+                        'field' => $attempt['field'],
+                        'url'   => $attempt['url'],
+                        'status' => $candidate->status(),
+                    ]);
+
+                    if ($candidate->successful()) {
+                        $uploadResp = $candidate;
+                        break;
+                    }
+                    $uploadResp = $candidate;
+                    if (in_array($candidate->status(), [401, 403], true)) {
+                        break;
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning('SunnyStamp: exception fallback upload multipart', [
+                        'workflow_id' => $workflowId,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
             }
         }
 
         if (!$uploadResp || !$uploadResp->successful()) {
             if (!$uploadResp) {
                 $this->lastPlatformError = 'upload_document: aucune réponse exploitable reçue';
-                Log::error('SunnyStamp: échec upload document (aucune réponse)', [
-                    'workflow_id' => $workflowId,
-                ]);
+                Log::error('SunnyStamp: échec upload document (aucune réponse)', ['workflow_id' => $workflowId]);
                 return null;
             }
             $this->lastPlatformError = 'upload_document: ' . self::formatApiErrorDetail($uploadResp);
@@ -1805,31 +1885,101 @@ class SignatureController extends Controller
         $platformStatus = null;
         $platformPhase  = null;
         try {
+            // 1. GET /api/workflows/{wflId} → champ workflowStatus (API ARTCI/UVCI)
             $resp = $client->get("{$endpoint}/api/workflows/{$execution->platform_workflow_id}");
+            Log::info('SunnyStamp: polling workflow status', [
+                'execution_id' => $executionId,
+                'platform_workflow_id' => $execution->platform_workflow_id,
+                'http_status' => $resp->status(),
+                'body_excerpt' => substr($resp->body(), 0, 300),
+            ]);
+
             if ($resp->successful()) {
                 $data = $resp->json();
-                $platformStatus = $data['status'] ?? $data['workflowStatus'] ?? $data['state'] ?? null;
+                // workflowStatus est le champ principal selon la doc SunnyStamp/ARTCI.
+                $platformStatus = $data['workflowStatus'] ?? $data['status'] ?? $data['state'] ?? null;
+            }
 
-                // Normaliser les valeurs connues SunnyStamp vers nos phases.
-                $platformPhase = self::mapExecutionPhase($execution->status, is_string($platformStatus) ? $platformStatus : null);
-
-                // Mettre à jour localement si le statut a changé.
-                if (is_string($platformStatus) && $platformStatus !== $execution->platform_status) {
-                    $updates = ['platform_status' => $platformStatus];
-
-                    // Transitions automatiques : si la plateforme dit FINISHED/COMPLETED → marquer terminé localement.
-                    $doneStatuses = ['FINISHED', 'COMPLETED', 'DONE', 'finished', 'completed', 'done'];
-                    if (in_array($platformStatus, $doneStatuses, true) && $execution->status === 'in_progress') {
-                        $updates['status'] = 'completed';
-                        $updates['completed_at'] = now();
-                        if ($execution->document_id) {
-                            Document::find($execution->document_id)?->update(['status' => 'signed', 'signed_at' => now()]);
+            // 2. Fallback via GET /api/notifications?items.workflowId={wflId}
+            //    pour détecter workflowFinished/recipientFinished même si GET /workflows ne suffit pas.
+            if (!$platformStatus || !in_array(strtolower((string)$platformStatus), ['finished','completed','done','refused','rejected'], true)) {
+                try {
+                    $notifResp = $client->get("{$endpoint}/api/notifications", [
+                        'items.workflowId' => $execution->platform_workflow_id,
+                    ]);
+                    if ($notifResp->successful()) {
+                        $notifItems = $notifResp->json('items') ?? $notifResp->json('data') ?? ($notifResp->json() ?? []);
+                        $notifItems = is_array($notifItems) ? $notifItems : [];
+                        // Trier par date décroissante pour avoir l'événement le plus récent.
+                        usort($notifItems, fn($a, $b) => strcmp(
+                            (string)($b['createdAt'] ?? $b['date'] ?? ''),
+                            (string)($a['createdAt'] ?? $a['date'] ?? '')
+                        ));
+                        foreach ($notifItems as $notif) {
+                            $eventType = (string)($notif['eventType'] ?? $notif['type'] ?? $notif['event'] ?? '');
+                            if (in_array($eventType, ['workflowFinished','workflow_finished','WORKFLOW_FINISHED'], true)) {
+                                $platformStatus = 'finished';
+                                Log::info('SunnyStamp: workflowFinished détecté via /notifications', [
+                                    'execution_id' => $executionId,
+                                    'event' => $eventType,
+                                ]);
+                                break;
+                            }
+                            if (in_array($eventType, ['recipientFinished','recipient_finished'], true)) {
+                                $platformStatus = $platformStatus ?? 'signing';
+                            }
                         }
                     }
-
-                    $execution->update($updates);
+                } catch (\Throwable $ne) {
+                    Log::debug('SunnyStamp: /notifications non accessible', ['error' => $ne->getMessage()]);
                 }
             }
+
+            // 3. Fallback via GET /api/webhookEvents/?items.workflowId={wflId}&items.eventType=workflowFinished
+            if (!$platformStatus || strtolower((string)$platformStatus) === 'started') {
+                try {
+                    $wbResp = $client->get("{$endpoint}/api/webhookEvents/", [
+                        'items.workflowId' => $execution->platform_workflow_id,
+                        'items.eventType'  => 'workflowFinished',
+                    ]);
+                    if ($wbResp->successful()) {
+                        $wbItems = $wbResp->json('items') ?? $wbResp->json('data') ?? ($wbResp->json() ?? []);
+                        if (!empty($wbItems)) {
+                            $platformStatus = 'finished';
+                            Log::info('SunnyStamp: workflowFinished détecté via /webhookEvents', [
+                                'execution_id' => $executionId,
+                            ]);
+                        }
+                    }
+                } catch (\Throwable $we) {
+                    Log::debug('SunnyStamp: /webhookEvents non accessible', ['error' => $we->getMessage()]);
+                }
+            }
+
+            // 4. Appliquer les transitions locales si statut changé.
+            if (is_string($platformStatus) && $platformStatus !== '' && $platformStatus !== $execution->platform_status) {
+                $platformPhase = self::mapExecutionPhase($execution->status, $platformStatus);
+                $updates = ['platform_status' => $platformStatus];
+
+                $doneStatuses = ['finished', 'completed', 'done', 'FINISHED', 'COMPLETED', 'DONE'];
+                if (in_array($platformStatus, $doneStatuses, true) && $execution->status !== 'completed') {
+                    $updates['status']       = 'completed';
+                    $updates['completed_at'] = now();
+                    if ($execution->document_id) {
+                        Document::find($execution->document_id)?->update(['status' => 'signed', 'signed_at' => now()]);
+                    }
+                    Log::info('SunnyStamp: exécution transitionnée vers completed', [
+                        'execution_id' => $executionId,
+                        'platform_status' => $platformStatus,
+                    ]);
+                }
+
+                $execution->update($updates);
+                $execution->refresh();
+            }
+
+            $platformPhase = $platformPhase ?? self::mapExecutionPhase($execution->status, is_string($platformStatus) ? $platformStatus : null);
+
         } catch (\Throwable $e) {
             Log::warning('SunnyStamp: getPlatformWorkflowStatus exception', [
                 'execution_id' => $executionId,
