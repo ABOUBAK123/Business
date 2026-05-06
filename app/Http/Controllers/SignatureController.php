@@ -188,7 +188,7 @@ class SignatureController extends Controller
 
             $zone = $this->getDocumentZoneForSignatureStep($docZones, (string) $docId, $signatureStepIndex);
 
-            SignatureRequest::create([
+            $created = SignatureRequest::create([
                 'id'           => Str::uuid(),
                 'document_id'  => $docId,
                 'requested_by' => Auth::id(),
@@ -201,6 +201,22 @@ class SignatureController extends Controller
                 'zone_width'   => $zone['width']  ?? $zone['w'] ?? null,
                 'zone_height'  => $zone['height'] ?? $zone['h'] ?? null,
                 'zone_label'   => $zone['label']  ?? null,
+            ]);
+
+            Log::info('SunnyStamp Audit: zone assignée à une étape de signature', [
+                'workflow_id' => $workflow->id,
+                'workflow_name' => $workflow->name,
+                'step_id' => $step->id,
+                'step_order' => $step->order,
+                'step_name' => $step->name,
+                'signer_id' => $step->assignee_id,
+                'document_id' => $docId,
+                'signature_request_id' => $created->id,
+                'zone_page' => $zone['page'] ?? null,
+                'zone_x' => $zone['x'] ?? null,
+                'zone_y' => $zone['y'] ?? null,
+                'zone_width' => $zone['width'] ?? $zone['w'] ?? null,
+                'zone_height' => $zone['height'] ?? $zone['h'] ?? null,
             ]);
         }
     }
@@ -1306,6 +1322,8 @@ class SignatureController extends Controller
                 'y' => (float) $requestZone->zone_y,
                 'w' => (float) $requestZone->zone_width,
                 'h' => (float) $requestZone->zone_height,
+                'source' => 'signature_request',
+                'signature_request_id' => (string) $requestZone->id,
             ];
         }
 
@@ -1324,6 +1342,8 @@ class SignatureController extends Controller
                         'y' => (float) ($zones[0]['y'] ?? 0),
                         'w' => (float) ($zones[0]['w'] ?? $zones[0]['width'] ?? 0),
                         'h' => (float) ($zones[0]['h'] ?? $zones[0]['height'] ?? 0),
+                        'source' => 'document_template',
+                        'template_id' => (string) $template->id,
                     ];
                 }
             }
@@ -1332,7 +1352,7 @@ class SignatureController extends Controller
         return null;
     }
 
-    private function buildPdfSignatureFields(Document $document, User $signer): array
+    private function buildPdfSignatureFields(Document $document, User $signer, array $auditContext = []): array
     {
         $defaultField = [[
             'imagePage' => -1,
@@ -1344,20 +1364,41 @@ class SignatureController extends Controller
 
         $zone = $this->resolveSignatureZoneForPlatform($document, $signer);
         if (!$zone) {
+            Log::warning('SunnyStamp Audit: aucune zone trouvée, fallback par défaut', array_merge($auditContext, [
+                'document_id' => $document->id,
+                'signer_id' => $signer->id,
+                'zone_page' => -1,
+                'zone_x' => null,
+                'zone_y' => null,
+            ]));
             return $defaultField;
         }
 
         $field = self::mapPercentZoneToPdfSignatureField($zone);
         if (!$field) {
+            Log::warning('SunnyStamp Audit: zone invalide, fallback par défaut', array_merge($auditContext, [
+                'document_id' => $document->id,
+                'signer_id' => $signer->id,
+                'zone_page' => $zone['page'] ?? null,
+                'zone_x' => $zone['x'] ?? null,
+                'zone_y' => $zone['y'] ?? null,
+            ]));
             return $defaultField;
         }
 
-        Log::info('SunnyStamp: zone locale convertie en pdfSignatureFields', [
+        Log::info('SunnyStamp Audit: zone utilisée pour la signature plateforme', array_merge($auditContext, [
             'document_id' => $document->id,
             'signer_id' => $signer->id,
-            'zone' => $zone,
+            'signer_email' => $signer->email,
+            'zone_source' => $zone['source'] ?? 'unknown',
+            'signature_request_id' => $zone['signature_request_id'] ?? null,
+            'zone_page' => $zone['page'] ?? null,
+            'zone_x' => $zone['x'] ?? null,
+            'zone_y' => $zone['y'] ?? null,
+            'zone_width' => $zone['w'] ?? null,
+            'zone_height' => $zone['h'] ?? null,
             'pdf_field' => $field,
-        ]);
+        ]));
 
         return [$field];
     }
@@ -1367,7 +1408,8 @@ class SignatureController extends Controller
         string $ownerUserId,
         string $actionType,
         Document $document,
-        User $signer
+        User $signer,
+        array $auditContext = []
     ): ?string {
         $this->lastPlatformError = null;
 
@@ -1647,7 +1689,7 @@ class SignatureController extends Controller
 
         $docPayload = [
             'parts' => [$docPart],
-            'pdfSignatureFields' => $this->buildPdfSignatureFields($document, $signer),
+            'pdfSignatureFields' => $this->buildPdfSignatureFields($document, $signer, $auditContext),
         ];
         if (!empty($sigProfileId)) {
             $docPayload['signatureProfileId'] = $sigProfileId;
@@ -2227,7 +2269,14 @@ class SignatureController extends Controller
             $platformUserId,
             $request->input('action_type'),
             $document,
-            $currentUser
+            $currentUser,
+            [
+                'execution_id' => $execution->id,
+                'workflow_id' => $wf?->id,
+                'workflow_name' => $wf?->name,
+                'step_order' => (int) ($stepObj->order ?? 0),
+                'step_name' => (string) ($stepObj->name ?? ''),
+            ]
         );
 
         if (!$inviteUrl) {
