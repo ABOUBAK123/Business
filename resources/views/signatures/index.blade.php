@@ -426,7 +426,7 @@
 
 {{-- ═══ Modal : Creer un workflow de signature ══════════════════════ --}}
 <div id="modal-create-wf" class="hidden fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-2xl h-[90vh] overflow-hidden flex flex-col">
+    <div id="wf-create-modal-panel" class="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-2xl h-[90vh] overflow-hidden flex flex-col transition-all duration-200">
         <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
             <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
                 <i class="fa-solid fa-diagram-project text-[#2453d6]"></i>
@@ -505,6 +505,33 @@ window.addEventListener('message', function (event) {
     if (data.type === 'workflow-created') {
         closeWorkflowCreateModal();
         window.location.reload();
+        return;
+    }
+
+    if (data.type === 'zone-modal-open') {
+        // Expand the outer modal to full-screen so the PDF zone editor has enough space
+        const outerModal = document.getElementById('modal-create-wf');
+        const panel = document.getElementById('wf-create-modal-panel');
+        if (outerModal && panel) {
+            outerModal.classList.remove('p-4');
+            outerModal.classList.add('p-0');
+            panel.classList.remove('max-w-2xl', 'h-[90vh]', 'rounded-2xl');
+            panel.classList.add('max-w-none', 'w-screen', 'h-screen', 'rounded-none');
+        }
+        return;
+    }
+
+    if (data.type === 'zone-modal-close') {
+        // Restore original modal size
+        const outerModal = document.getElementById('modal-create-wf');
+        const panel = document.getElementById('wf-create-modal-panel');
+        if (outerModal && panel) {
+            outerModal.classList.add('p-4');
+            outerModal.classList.remove('p-0');
+            panel.classList.add('max-w-2xl', 'h-[90vh]', 'rounded-2xl');
+            panel.classList.remove('max-w-none', 'w-screen', 'h-screen', 'rounded-none');
+        }
+        return;
     }
 });
 

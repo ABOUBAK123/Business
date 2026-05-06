@@ -1474,6 +1474,11 @@ function openZoneModal(docId) {
     modal.classList.remove('hidden');
     document.body.style.overflow = 'hidden';
 
+    // Notify parent frame to expand to full-screen when zone modal opens in embedded mode
+    if (IS_EMBEDDED && window.parent && window.parent !== window) {
+        window.parent.postMessage({ source: 'wf-embedded', type: 'zone-modal-open' }, '*');
+    }
+
     loading.classList.remove('hidden');
     errorBox.classList.add('hidden');
     openNewTab.href = inlineUrl;
@@ -1497,6 +1502,10 @@ function openZoneModal(docId) {
 }
 
 function closeZoneModal() {
+    // Notify parent frame to restore modal size when zone modal closes in embedded mode
+    if (IS_EMBEDDED && window.parent && window.parent !== window) {
+        window.parent.postMessage({ source: 'wf-embedded', type: 'zone-modal-close' }, '*');
+    }
     document.getElementById('zone-modal').classList.add('hidden');
     document.body.style.overflow = '';
     document.getElementById('zm-pages').innerHTML = '';
