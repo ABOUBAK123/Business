@@ -10,7 +10,7 @@ class WorkflowExecution extends Model
     use HasUuids;
     public $timestamps = false;
 
-    protected $fillable = ['workflow_id', 'document_id', 'current_step', 'status', 'step_data', 'started_at', 'completed_at'];
+    protected $fillable = ['workflow_id', 'document_id', 'platform_workflow_id', 'platform_status', 'current_step', 'status', 'step_data', 'started_at', 'completed_at'];
     protected $casts = ['step_data' => 'array', 'started_at' => 'datetime', 'completed_at' => 'datetime'];
 
     public function workflow() { return $this->belongsTo(Workflow::class); }

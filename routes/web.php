@@ -83,6 +83,10 @@ Route::get('/e-administration_laravel/public/documents/{document}/onlyoffice-fil
 Route::get('/public/documents/{document}/onlyoffice-file', [DocumentController::class, 'onlyofficeFile'])
     ->name('documents.onlyofficeFile.public');
 
+// Webhook SunnyStamp (sans session, sans CSRF, appelé par la plateforme externe)
+Route::post('/api/signature/platform-webhook', [SignatureController::class, 'platformWebhook'])
+    ->name('signature.platform-webhook');
+
 // Alias callbacks OnlyOffice (utile en sous-dossier/ngrok)
 Route::post('/api/oo-callback/document/{document}', [DocumentController::class, 'onlyofficeCallback'])
     ->name('oo.document.callback.web');
@@ -201,6 +205,7 @@ Route::middleware('auth')->group(function () {
     // Actions workflow depuis la boîte de réception
     Route::post('/signatures/workflow-action',  [SignatureController::class, 'workflowAction'])->name('signatures.workflow-action');
     Route::post('/signatures/get-invite-url',   [SignatureController::class, 'getSignatureInviteUrl'])->name('signatures.get-invite-url');
+    Route::get('/signatures/platform-status/{executionId}', [SignatureController::class, 'getPlatformWorkflowStatus'])->name('signatures.platform-status');
     // Création d'un workflow de signature
     Route::post('/signatures/workflow-create',  [SignatureController::class, 'workflowCreate'])->name('signatures.workflow-create');
 
@@ -292,6 +297,8 @@ Route::middleware('auth')->group(function () {
         Route::post('/personnel/employee-skills', [AdminController::class, 'storePersonnelEmployeeSkill'])->name('personnel.employees.skills.store');
         Route::get('/personnel/documents/{document}/download', [AdminController::class, 'downloadPersonnelEmployeeDocument'])->name('personnel.documents.download');
         Route::post('/personnel/leave-types', [AdminController::class, 'storePersonnelLeaveType'])->name('personnel.leave-types.store');
+        Route::put('/personnel/leave-types/{leaveType}', [AdminController::class, 'updatePersonnelLeaveType'])->name('personnel.leave-types.update');
+        Route::delete('/personnel/leave-types/{leaveType}', [AdminController::class, 'destroyPersonnelLeaveType'])->name('personnel.leave-types.destroy');
         Route::get('/personnel/leave-types/{leaveType}/justification-zip', [AdminController::class, 'downloadPersonnelLeaveTypeJustificationZip'])->name('personnel.leave-types.justification-zip.download');
         Route::post('/personnel/leave-requests', [AdminController::class, 'storePersonnelLeaveRequest'])->name('personnel.leave-requests.store');
         Route::get('/personnel/leave-requests/{leaveRequest}/attachment', [AdminController::class, 'downloadPersonnelLeaveRequestAttachment'])->name('personnel.leave-requests.attachment.download');

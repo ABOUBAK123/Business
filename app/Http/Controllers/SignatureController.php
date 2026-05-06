@@ -24,6 +24,7 @@ use Illuminate\Support\Str;
 class SignatureController extends Controller
 {
     private ?string $lastPlatformError = null;
+    private ?string $lastPlatformWorkflowId = null;
 
     /**
      * Convertit le détail technique plateforme en message métier plus clair.
@@ -982,9 +983,11 @@ class SignatureController extends Controller
             $recipient['consentPageId'] = $consentPageId;
         }
 
+        $platformWebhookUrl = rtrim(config('app.url'), '/') . '/api/signature/platform-webhook';
+
         $workflowPayload = [
-            'name'           => 'e-Parapheur — ' . $document->title,
-            'steps'          => [[
+            'name'            => 'e-Parapheur — ' . $document->title,
+            'steps'           => [[
                 'stepType'           => $stepType,
                 'recipients'         => [$recipient],
                 'requiredRecipients' => 1,
@@ -993,8 +996,11 @@ class SignatureController extends Controller
                 'maxInvites'         => 1,
                 'sendDownloadLink'   => false,
             ]],
-            'workflowMode'   => 'FULL',
-            'notifiedEvents' => ['workflowFinished', 'recipientFinished', 'recipientRefused'],
+            'workflowMode'    => 'FULL',
+            'notifiedEvents'  => ['workflowFinished', 'recipientFinished', 'recipientRefused', 'workflowStarted', 'recipientStarted'],
+            'notificationUrl' => $platformWebhookUrl,
+            'webhookUrl'      => $platformWebhookUrl,
+            'callbackUrl'     => $platformWebhookUrl,
         ];
 
         $wflResp = $client->post("{$endpoint}/api/users/{$ownerUserId}/workflows", $workflowPayload);
@@ -1015,6 +1021,9 @@ class SignatureController extends Controller
                     ], fn($v) => !is_null($v) && $v !== '')],
                     'requiredRecipients' => 1,
                 ]],
+                'notificationUrl' => $platformWebhookUrl,
+                'webhookUrl'      => $platformWebhookUrl,
+                'callbackUrl'     => $platformWebhookUrl,
             ];
 
             $fallbackResp = $client->post("{$endpoint}/api/users/{$ownerUserId}/workflows", $fallbackPayload);
@@ -1041,6 +1050,7 @@ class SignatureController extends Controller
             return null;
         }
         $workflowId = $wflResp->json('id');
+        $this->lastPlatformWorkflowId = is_string($workflowId) ? $workflowId : null;
 
         // 2. Uploader le document PDF
         $filePath = trim((string) ($document->file_path ?? ''));
@@ -1690,6 +1700,261 @@ class SignatureController extends Controller
             ], 500);
         }
 
-        return response()->json(['ok' => true, 'url' => $inviteUrl]);
+        // Stocker le platform_workflow_id dans l'exécution pour le suivi de statut.
+        if ($this->lastPlatformWorkflowId) {
+            $execution->update([
+                'platform_workflow_id' => $this->lastPlatformWorkflowId,
+                'platform_status'      => 'started',
+            ]);
+        }
+
+        return response()->json([
+            'ok'                  => true,
+            'url'                 => $inviteUrl,
+            'platform_workflow_id' => $this->lastPlatformWorkflowId,
+        ]);
+    }
+
+    /**
+     * AJAX — Récupère le statut actuel du workflow sur la plateforme de signature.
+     * GET /signatures/platform-status/{execution}
+     */
+    public function getPlatformWorkflowStatus(string $executionId): JsonResponse
+    {
+        $execution = WorkflowExecution::find($executionId);
+        if (!$execution) {
+            return response()->json(['ok' => false, 'message' => 'Exécution introuvable.'], 404);
+        }
+
+        // Vérifier que l'utilisateur a le droit de voir cette exécution
+        $wf = $execution->workflow()->with('steps')->first();
+        $steps = $wf?->steps?->sortBy('order') ?? collect();
+        $stepObj = $steps->firstWhere('order', (int) ($execution->current_step ?? 1));
+        $userId = Auth::id();
+        if ($stepObj?->assignee_id && $stepObj->assignee_id !== $userId) {
+            return response()->json(['ok' => false, 'message' => 'Accès refusé.'], 403);
+        }
+
+        // Retourner le statut local s'il n'y a pas de platform_workflow_id.
+        if (empty($execution->platform_workflow_id)) {
+            return response()->json([
+                'ok'              => true,
+                'local_status'    => $execution->status,
+                'platform_status' => null,
+                'phase'           => self::mapExecutionPhase($execution->status, null),
+            ]);
+        }
+
+        // Interroger la plateforme pour le statut temps réel.
+        $cfg = $this->resolveSignatureConfig();
+        if (!$cfg) {
+            return response()->json([
+                'ok'              => true,
+                'local_status'    => $execution->status,
+                'platform_status' => $execution->platform_status,
+                'phase'           => self::mapExecutionPhase($execution->status, $execution->platform_status),
+            ]);
+        }
+
+        $endpoint  = rtrim((string) $cfg->endpoint, '/');
+        $apiToken  = (string) $cfg->api_token;
+        $client    = Http::withToken($apiToken)->timeout(10)->acceptJson();
+
+        $platformStatus = null;
+        $platformPhase  = null;
+        try {
+            $resp = $client->get("{$endpoint}/api/workflows/{$execution->platform_workflow_id}");
+            if ($resp->successful()) {
+                $data = $resp->json();
+                $platformStatus = $data['status'] ?? $data['workflowStatus'] ?? $data['state'] ?? null;
+
+                // Normaliser les valeurs connues SunnyStamp vers nos phases.
+                $platformPhase = self::mapExecutionPhase($execution->status, is_string($platformStatus) ? $platformStatus : null);
+
+                // Mettre à jour localement si le statut a changé.
+                if (is_string($platformStatus) && $platformStatus !== $execution->platform_status) {
+                    $updates = ['platform_status' => $platformStatus];
+
+                    // Transitions automatiques : si la plateforme dit FINISHED/COMPLETED → marquer terminé localement.
+                    $doneStatuses = ['FINISHED', 'COMPLETED', 'DONE', 'finished', 'completed', 'done'];
+                    if (in_array($platformStatus, $doneStatuses, true) && $execution->status === 'in_progress') {
+                        $updates['status'] = 'completed';
+                        $updates['completed_at'] = now();
+                        if ($execution->document_id) {
+                            Document::find($execution->document_id)?->update(['status' => 'signed', 'signed_at' => now()]);
+                        }
+                    }
+
+                    $execution->update($updates);
+                }
+            }
+        } catch (\Throwable $e) {
+            Log::warning('SunnyStamp: getPlatformWorkflowStatus exception', [
+                'execution_id' => $executionId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return response()->json([
+            'ok'                  => true,
+            'local_status'        => $execution->fresh()->status,
+            'platform_status'     => $platformStatus ?? $execution->platform_status,
+            'platform_workflow_id' => $execution->platform_workflow_id,
+            'phase'               => $platformPhase ?? self::mapExecutionPhase($execution->status, $execution->platform_status),
+        ]);
+    }
+
+    /**
+     * Webhook — Reçoit les événements de la plateforme de signature.
+     * POST /api/signature/platform-webhook
+     * Sans authentification session, sans CSRF, mais valider via secret HMAC si configuré.
+     */
+    public function platformWebhook(Request $request): JsonResponse
+    {
+        $payload = $request->all();
+
+        Log::info('SunnyStamp: webhook reçu', [
+            'payload' => $payload,
+            'headers' => $request->headers->all(),
+        ]);
+
+        // Extraire l'ID du workflow plateforme depuis la payload.
+        $platformWorkflowId = $payload['workflowId']
+            ?? $payload['workflow_id']
+            ?? ($payload['workflow']['id'] ?? null)
+            ?? ($payload['data']['workflowId'] ?? null)
+            ?? null;
+
+        if (!is_string($platformWorkflowId) || $platformWorkflowId === '') {
+            Log::warning('SunnyStamp: webhook sans workflowId exploitable', ['payload' => $payload]);
+            return response()->json(['ok' => true, 'note' => 'no workflowId']);
+        }
+
+        $execution = WorkflowExecution::where('platform_workflow_id', $platformWorkflowId)->first();
+        if (!$execution) {
+            Log::warning('SunnyStamp: webhook - aucune execution locale pour platform_workflow_id', [
+                'platform_workflow_id' => $platformWorkflowId,
+            ]);
+            return response()->json(['ok' => true, 'note' => 'execution not found']);
+        }
+
+        $event          = (string) ($payload['event'] ?? $payload['type'] ?? $payload['eventType'] ?? '');
+        $platformStatus = (string) ($payload['workflowStatus']
+            ?? $payload['status']
+            ?? ($payload['workflow']['status'] ?? '')
+            ?? ($payload['workflow']['workflowStatus'] ?? ''));
+
+        $updates = [];
+        if ($platformStatus !== '') {
+            $updates['platform_status'] = $platformStatus;
+        }
+
+        // Transitions de statut locales selon l'événement plateforme.
+        $doneEvents    = ['workflowFinished', 'workflow_finished', 'WORKFLOW_FINISHED'];
+        $refusedEvents = ['recipientRefused', 'recipient_refused', 'RECIPIENT_REFUSED'];
+        $signingEvents = ['recipientStarted', 'recipient_started', 'RECIPIENT_STARTED', 'signingStarted', 'signing_started'];
+        $doneStatuses  = ['FINISHED', 'COMPLETED', 'DONE', 'finished', 'completed', 'done'];
+
+        if (in_array($event, $doneEvents, true) || in_array($platformStatus, $doneStatuses, true)) {
+            if ($execution->status === 'in_progress') {
+                $updates['status'] = 'completed';
+                $updates['completed_at'] = now();
+
+                if ($execution->document_id) {
+                    Document::find($execution->document_id)?->update(['status' => 'signed', 'signed_at' => now()]);
+                }
+
+                // Notifier l'utilisateur que le workflow est terminé.
+                try {
+                    $wf = $execution->workflow()->with('steps', 'creator')->first();
+                    if ($wf?->created_by) {
+                        Notification::create([
+                            'user_id'  => $wf->created_by,
+                            'type'     => 'workflow_completed',
+                            'title'    => 'Workflow de signature terminé',
+                            'message'  => 'Le workflow « ' . ($wf->name ?? 'Sans titre') . ' » a été signé avec succès sur la plateforme.',
+                            'data'     => json_encode([
+                                'execution_id'         => $execution->id,
+                                'platform_workflow_id' => $platformWorkflowId,
+                                'event'                => $event,
+                            ]),
+                        ]);
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning('SunnyStamp: webhook - notification création échouée', ['error' => $e->getMessage()]);
+                }
+            }
+        } elseif (in_array($event, $refusedEvents, true)) {
+            $updates['status'] = 'rejected';
+            try {
+                $wf = $execution->workflow()->with('creator')->first();
+                if ($wf?->created_by) {
+                    Notification::create([
+                        'user_id' => $wf->created_by,
+                        'type'    => 'workflow_rejected',
+                        'title'   => 'Workflow de signature refusé',
+                        'message' => 'Un signataire a refusé de signer le workflow « ' . ($wf->name ?? 'Sans titre') . ' ».',
+                        'data'    => json_encode([
+                            'execution_id'         => $execution->id,
+                            'platform_workflow_id' => $platformWorkflowId,
+                            'event'                => $event,
+                        ]),
+                    ]);
+                }
+            } catch (\Throwable $e) {
+                Log::warning('SunnyStamp: webhook - notification refus échouée', ['error' => $e->getMessage()]);
+            }
+        } elseif (in_array($event, $signingEvents, true)) {
+            // Passage à la phase de signature : mettre à jour platform_status seulement.
+            if ($platformStatus === '') {
+                $updates['platform_status'] = 'signing';
+            }
+        }
+
+        if (!empty($updates)) {
+            $execution->update($updates);
+        }
+
+        Log::info('SunnyStamp: webhook traité', [
+            'platform_workflow_id' => $platformWorkflowId,
+            'event'                => $event,
+            'platform_status'      => $platformStatus,
+            'updates'              => $updates,
+        ]);
+
+        return response()->json(['ok' => true]);
+    }
+
+    /**
+     * Mappe le statut local + plateforme vers une phase lisible côté frontend.
+     */
+    private static function mapExecutionPhase(string $localStatus, ?string $platformStatus): string
+    {
+        if ($localStatus === 'completed') {
+            return 'completed';
+        }
+        if ($localStatus === 'rejected') {
+            return 'rejected';
+        }
+
+        $ps = strtolower((string) $platformStatus);
+        if (in_array($ps, ['finished', 'completed', 'done'], true)) {
+            return 'completed';
+        }
+        if (in_array($ps, ['refused', 'rejected', 'recipient_refused'], true)) {
+            return 'rejected';
+        }
+        if (str_contains($ps, 'sign') || $ps === 'signing') {
+            return 'signing';
+        }
+        if (str_contains($ps, 'consent') || $ps === 'consent') {
+            return 'consent';
+        }
+        if (in_array($ps, ['started', 'in_progress', 'inprogress'], true)) {
+            return 'in_progress';
+        }
+
+        return 'pending';
     }
 }
+
