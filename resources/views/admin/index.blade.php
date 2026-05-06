@@ -440,7 +440,18 @@ $_oc = [
           </div>
           <div>
             <label class="block text-sm font-semibold text-gray-700 mb-1">Direction Générale</label>
-            <input type="text" name="meta_direction_generale" value="{{ old('meta_direction_generale', $empMeta['direction_generale'] ?? '') }}" placeholder="Sélectionner" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+            @php
+              $dirGenEntities = $subEntities->filter(function($se) {
+                  $typeName = mb_strtoupper(trim($se->directionType?->name ?? ''));
+                  return in_array($typeName, ['DIRECTION GENERALE', 'DIRECTION GÉNÉRALE'], true);
+              })->values();
+            @endphp
+            <select name="meta_direction_generale" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+              <option value="">Sélectionner</option>
+              @foreach($dirGenEntities as $dge)
+              <option value="{{ $dge->name }}" {{ old('meta_direction_generale', $empMeta['direction_generale'] ?? '') === $dge->name ? 'selected' : '' }}>{{ $dge->name }}</option>
+              @endforeach
+            </select>
           </div>
           <div>
             <label class="block text-sm font-semibold text-gray-700 mb-1">Direction Centrale</label>
