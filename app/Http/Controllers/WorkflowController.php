@@ -123,6 +123,18 @@ class WorkflowController extends Controller
         }
     }
 
+    private function formatExecution(WorkflowExecution $e): array
+    {
+        return [
+            'id'               => $e->id,
+            'workflow_id'      => $e->workflow_id,
+            'status'           => $e->status,
+            'current_step'     => $e->current_step,
+            'document_id'      => $e->document_id,
+            'signed_file_path' => $e->document?->signed_file_path,
+        ];
+    }
+
     private function formatWorkflow(Workflow $wf): array
     {
         return [
@@ -152,6 +164,7 @@ class WorkflowController extends Controller
                 'status'       => $e->status,
                 'current_step' => $e->current_step,
                 'document_id'  => $e->document_id,
+                'signed_file_path' => $e->document?->signed_file_path,
             ])->values(),
         ];
     }
@@ -218,7 +231,7 @@ class WorkflowController extends Controller
     public function index()
     {
         $userId = Auth::id();
-        $workflows = Workflow::with(['steps.assignee', 'executions'])
+        $workflows = Workflow::with(['steps.assignee', 'executions.document'])
             ->whereIn('id', $this->visibleWorkflowIdsForUser($userId))
             ->latest()->get();
 
@@ -327,7 +340,7 @@ class WorkflowController extends Controller
             ]);
         }
 
-        $workflow->load(['steps.assignee', 'executions']);
+        $workflow->load(['steps.assignee', 'executions.document']);
 
         // Notifier les assignés des étapes
         NotificationService::workflowStepsAssigned($workflow, $workflow->steps, Auth::user()->name);
@@ -360,7 +373,7 @@ class WorkflowController extends Controller
         $workflow->update($request->only('name', 'description', 'status'));
 
         if ($request->wantsJson()) {
-            $workflow->load(['steps.assignee', 'executions']);
+            $workflow->load(['steps.assignee', 'executions.document']);
             return response()->json(['workflow' => $this->formatWorkflow($workflow)]);
         }
 
@@ -406,7 +419,7 @@ class WorkflowController extends Controller
             ]);
         }
 
-        $copy->load(['steps.assignee', 'executions']);
+        $copy->load(['steps.assignee', 'executions.document']);
 
         return response()->json(['workflow' => $this->formatWorkflow($copy)], 201);
     }
@@ -512,7 +525,7 @@ class WorkflowController extends Controller
             NotificationService::workflowStepAdvanced($workflow, $next, Auth::user()->name);
         }
 
-        return response()->json(['execution' => $execution->fresh()]);
+        return response()->json(['execution' => $this->formatExecution($execution->fresh()->load('document'))]);
     }
 
     public function reject(Request $request, Workflow $workflow)
@@ -525,7 +538,7 @@ class WorkflowController extends Controller
 
         $execution->update(['status' => 'rejected']);
 
-        return response()->json(['execution' => $execution->fresh()]);
+        return response()->json(['execution' => $this->formatExecution($execution->fresh()->load('document'))]);
     }
 
     // ── Templates ────────────────────────────────────────────────────────────
