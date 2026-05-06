@@ -1305,9 +1305,16 @@ class SignatureController extends Controller
             fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite-link", ['recipientEmail' => $signer->email]),
             fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite-link", ['recipientId' => $recipientPlatformUserId]),
 
+            // Endpoint officiel doc SunnyStamp: /sendInvite
+            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/sendInvite", ['recipientEmail' => $signer->email]),
+            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/sendInvite", ['email' => $signer->email]),
+
             // Variantes sous /api/users/{ownerUserId}/workflows/{workflowId}/invite-link
             fn() => $client->post("{$endpoint}/api/users/{$ownerUserId}/workflows/{$workflowId}/invite-link", ['recipientEmail' => $signer->email]),
             fn() => $client->post("{$endpoint}/api/users/{$ownerUserId}/workflows/{$workflowId}/invite-link", ['recipientId' => $recipientPlatformUserId]),
+
+            // Variante multi-routes éventuelle de /sendInvite
+            fn() => $client->post("{$endpoint}/api/users/{$ownerUserId}/workflows/{$workflowId}/sendInvite", ['recipientEmail' => $signer->email]),
 
             // Variante legacy observée sur certaines instances
             fn() => $client->post("{$endpoint}/api/users/{$ownerUserId}/invite", [
