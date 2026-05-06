@@ -418,47 +418,65 @@ class WorkflowController extends Controller
         $this->ensureWorkflowVisibility($workflow);
         $request->validate(['document_id' => 'nullable|exists:documents,id']);
 
-        // Zones de signature par document {docId: [{page,x,y,width,height,label}, ...]}
-        $docZones = $request->input('doc_zones', []);
+        try {
+            // Zones de signature par document {docId: [{page,x,y,width,height,label}, ...]}
+            $docZones = $request->input('doc_zones', []);
 
-        $docIds = $workflow->docs_to_sign ?? [];
-        if (empty($docIds) && $request->document_id) {
-            $docIds = [$request->document_id];
-        }
-        if (empty($docIds)) {
-            $docIds = [null];
-        }
+            $docIds = $workflow->docs_to_sign ?? [];
+            if (empty($docIds) && $request->document_id) {
+                $docIds = [$request->document_id];
+            }
+            if (empty($docIds)) {
+                $docIds = [null];
+            }
 
-        $executions = collect($docIds)->map(function ($docId) use ($workflow, $docZones) {
-            return WorkflowExecution::create([
-                'id'           => Str::uuid(),
-                'workflow_id'  => $workflow->id,
-                'document_id'  => $docId,
-                'status'       => 'in_progress',
-                'current_step' => 1,
-                'step_data'    => ['doc_zones' => $docZones],
+            $executions = collect($docIds)->map(function ($docId) use ($workflow, $docZones) {
+                return WorkflowExecution::create([
+                    'workflow_id'  => $workflow->id,
+                    'document_id'  => $docId,
+                    'status'       => 'in_progress',
+                    'current_step' => 1,
+                    'step_data'    => ['doc_zones' => $docZones],
+                ]);
+            });
+
+            // Créer des SignatureRequests pour la première étape du workflow
+            $firstStep = $workflow->steps()->orderBy('order')->first();
+            if ($firstStep && $firstStep->assignee_id && $firstStep->requires_signature) {
+                $this->createSignatureRequestsForStep($workflow, $firstStep, $docZones);
+            }
+
+            // Notifier l'assigné de la première étape
+            if ($firstStep) {
+                NotificationService::workflowExecutionStarted($workflow, $firstStep, Auth::user()->name);
+            }
+
+            if ($request->wantsJson()) {
+                return response()->json([
+                    'execution'  => $executions->first(),
+                    'executions' => $executions->values(),
+                ]);
+            }
+
+            return redirect()->route('workflows.show', $workflow)->with('success', 'Workflow lancé.');
+
+        } catch (\Throwable $e) {
+            Log::error('WorkflowController::execute exception', [
+                'workflow_id' => $workflow->id,
+                'message'     => $e->getMessage(),
+                'file'        => $e->getFile(),
+                'line'        => $e->getLine(),
             ]);
-        });
 
-        // Créer des SignatureRequests pour la première étape du workflow
-        $firstStep = $workflow->steps()->orderBy('order')->first();
-        if ($firstStep && $firstStep->assignee_id && $firstStep->requires_signature) {
-            $this->createSignatureRequestsForStep($workflow, $firstStep, $docZones);
+            if ($request->wantsJson()) {
+                return response()->json([
+                    'message' => 'Erreur lors du lancement du workflow: ' . $e->getMessage(),
+                    'debug'   => config('app.debug') ? ['file' => $e->getFile(), 'line' => $e->getLine()] : null,
+                ], 500);
+            }
+
+            return back()->with('error', 'Erreur lors du lancement du workflow: ' . $e->getMessage());
         }
-
-        // Notifier l'assigné de la première étape
-        if ($firstStep) {
-            NotificationService::workflowExecutionStarted($workflow, $firstStep, Auth::user()->name);
-        }
-
-        if ($request->wantsJson()) {
-            return response()->json([
-                'execution' => $executions->first(),
-                'executions' => $executions->values(),
-            ]);
-        }
-
-        return redirect()->route('workflows.show', $workflow)->with('success', 'Workflow lancé.');
     }
 
     public function advance(Request $request, Workflow $workflow)
