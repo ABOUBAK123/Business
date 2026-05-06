@@ -1278,59 +1278,191 @@ class SignatureController extends Controller
         ], fn($v) => !is_null($v) && $v !== '');
 
         $inviteAttempts = [
-            // Variantes endpoint /invite
-            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite", ['recipientEmail' => $signer->email]),
-            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite/", ['recipientEmail' => $signer->email]),
-            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite", ['email' => $signer->email]),
-            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite/", ['email' => $signer->email]),
-            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite", ['recipientId' => $recipientPlatformUserId]),
-            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite", ['userId' => $recipientPlatformUserId]),
-            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite", ['recipient' => $recipientIdentity]),
-            fn() => $client->send('GET', "{$endpoint}/api/workflows/{$workflowId}/invite", ['query' => ['recipientEmail' => $signer->email]]),
+            // Endpoints officiels SunnyStamp d'abord.
+            [
+                'label' => 'POST /api/workflows/{workflowId}/sendInvite recipientEmail',
+                'method' => 'POST',
+                'url' => "{$endpoint}/api/workflows/{$workflowId}/sendInvite",
+                'payloadType' => 'json',
+                'payload' => ['recipientEmail' => $signer->email],
+            ],
+            [
+                'label' => 'POST /api/workflows/{workflowId}/sendInvite email',
+                'method' => 'POST',
+                'url' => "{$endpoint}/api/workflows/{$workflowId}/sendInvite",
+                'payloadType' => 'json',
+                'payload' => ['email' => $signer->email],
+            ],
+            [
+                'label' => 'POST /api/workflows/{workflowId}/invite recipientEmail',
+                'method' => 'POST',
+                'url' => "{$endpoint}/api/workflows/{$workflowId}/invite",
+                'payloadType' => 'json',
+                'payload' => ['recipientEmail' => $signer->email],
+            ],
+            [
+                'label' => 'POST /api/workflows/{workflowId}/invite email',
+                'method' => 'POST',
+                'url' => "{$endpoint}/api/workflows/{$workflowId}/invite",
+                'payloadType' => 'json',
+                'payload' => ['email' => $signer->email],
+            ],
+            [
+                'label' => 'POST /api/workflows/{workflowId}/invite recipient',
+                'method' => 'POST',
+                'url' => "{$endpoint}/api/workflows/{$workflowId}/invite",
+                'payloadType' => 'json',
+                'payload' => ['recipient' => $recipientIdentity],
+            ],
+            [
+                'label' => 'POST /api/workflows/{workflowId}/invite recipientId',
+                'method' => 'POST',
+                'url' => "{$endpoint}/api/workflows/{$workflowId}/invite",
+                'payloadType' => 'json',
+                'payload' => ['recipientId' => $recipientPlatformUserId],
+            ],
+            [
+                'label' => 'POST /api/workflows/{workflowId}/invite userId',
+                'method' => 'POST',
+                'url' => "{$endpoint}/api/workflows/{$workflowId}/invite",
+                'payloadType' => 'json',
+                'payload' => ['userId' => $recipientPlatformUserId],
+            ],
+            [
+                'label' => 'POST /api/workflows/{workflowId}/invite/',
+                'method' => 'POST',
+                'url' => "{$endpoint}/api/workflows/{$workflowId}/invite/",
+                'payloadType' => 'json',
+                'payload' => ['recipientEmail' => $signer->email],
+            ],
+            [
+                'label' => 'GET /api/workflows/{workflowId}/invite recipientEmail',
+                'method' => 'GET',
+                'url' => "{$endpoint}/api/workflows/{$workflowId}/invite",
+                'payloadType' => 'query',
+                'payload' => ['recipientEmail' => $signer->email],
+            ],
 
-            // Variantes sous /api/users/{ownerUserId}/workflows/{workflowId}/invite
-            fn() => $client->post("{$endpoint}/api/users/{$ownerUserId}/workflows/{$workflowId}/invite", ['recipientEmail' => $signer->email]),
-            fn() => $client->post("{$endpoint}/api/users/{$ownerUserId}/workflows/{$workflowId}/invite/", ['recipientEmail' => $signer->email]),
-            fn() => $client->post("{$endpoint}/api/users/{$ownerUserId}/workflows/{$workflowId}/invite", ['email' => $signer->email]),
-            fn() => $client->send('GET', "{$endpoint}/api/users/{$ownerUserId}/workflows/{$workflowId}/invite", ['query' => ['recipientEmail' => $signer->email]]),
+            // Variantes sous /api/users/{ownerUserId}/workflows/{workflowId}
+            [
+                'label' => 'POST /api/users/{ownerUserId}/workflows/{workflowId}/sendInvite recipientEmail',
+                'method' => 'POST',
+                'url' => "{$endpoint}/api/users/{$ownerUserId}/workflows/{$workflowId}/sendInvite",
+                'payloadType' => 'json',
+                'payload' => ['recipientEmail' => $signer->email],
+            ],
+            [
+                'label' => 'POST /api/users/{ownerUserId}/workflows/{workflowId}/invite recipientEmail',
+                'method' => 'POST',
+                'url' => "{$endpoint}/api/users/{$ownerUserId}/workflows/{$workflowId}/invite",
+                'payloadType' => 'json',
+                'payload' => ['recipientEmail' => $signer->email],
+            ],
+            [
+                'label' => 'POST /api/users/{ownerUserId}/workflows/{workflowId}/invite email',
+                'method' => 'POST',
+                'url' => "{$endpoint}/api/users/{$ownerUserId}/workflows/{$workflowId}/invite",
+                'payloadType' => 'json',
+                'payload' => ['email' => $signer->email],
+            ],
+            [
+                'label' => 'GET /api/users/{ownerUserId}/workflows/{workflowId}/invite recipientEmail',
+                'method' => 'GET',
+                'url' => "{$endpoint}/api/users/{$ownerUserId}/workflows/{$workflowId}/invite",
+                'payloadType' => 'query',
+                'payload' => ['recipientEmail' => $signer->email],
+            ],
+            [
+                'label' => 'POST /api/users/{ownerUserId}/workflows/{workflowId}/invite-link recipientEmail',
+                'method' => 'POST',
+                'url' => "{$endpoint}/api/users/{$ownerUserId}/workflows/{$workflowId}/invite-link",
+                'payloadType' => 'json',
+                'payload' => ['recipientEmail' => $signer->email],
+            ],
+            [
+                'label' => 'POST /api/users/{ownerUserId}/workflows/{workflowId}/invite-link recipientId',
+                'method' => 'POST',
+                'url' => "{$endpoint}/api/users/{$ownerUserId}/workflows/{$workflowId}/invite-link",
+                'payloadType' => 'json',
+                'payload' => ['recipientId' => $recipientPlatformUserId],
+            ],
 
-            // Variantes endpoint /invites
-            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invites", ['recipientEmail' => $signer->email]),
-            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invites", ['email' => $signer->email]),
-            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invites", ['recipientId' => $recipientPlatformUserId]),
-            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invites", ['userId' => $recipientPlatformUserId]),
-            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invites", ['recipient' => $recipientIdentity]),
-
-            // Variante endpoint /invite-link
-            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite-link", ['recipientEmail' => $signer->email]),
-            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/invite-link", ['recipientId' => $recipientPlatformUserId]),
-
-            // Endpoint officiel doc SunnyStamp: /sendInvite
-            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/sendInvite", ['recipientEmail' => $signer->email]),
-            fn() => $client->post("{$endpoint}/api/workflows/{$workflowId}/sendInvite", ['email' => $signer->email]),
-
-            // Variantes sous /api/users/{ownerUserId}/workflows/{workflowId}/invite-link
-            fn() => $client->post("{$endpoint}/api/users/{$ownerUserId}/workflows/{$workflowId}/invite-link", ['recipientEmail' => $signer->email]),
-            fn() => $client->post("{$endpoint}/api/users/{$ownerUserId}/workflows/{$workflowId}/invite-link", ['recipientId' => $recipientPlatformUserId]),
-
-            // Variante multi-routes éventuelle de /sendInvite
-            fn() => $client->post("{$endpoint}/api/users/{$ownerUserId}/workflows/{$workflowId}/sendInvite", ['recipientEmail' => $signer->email]),
-
-            // Variante legacy observée sur certaines instances
-            fn() => $client->post("{$endpoint}/api/users/{$ownerUserId}/invite", [
-                'workflowId' => $workflowId,
-                'recipientEmail' => $signer->email,
-            ]),
-            fn() => $client->post("{$endpoint}/api/users/{$ownerUserId}/invite", [
-                'workflowId' => $workflowId,
-                'email' => $signer->email,
-            ]),
+            // Autres variantes observées sur certains tenants.
+            [
+                'label' => 'POST /api/workflows/{workflowId}/invites recipientEmail',
+                'method' => 'POST',
+                'url' => "{$endpoint}/api/workflows/{$workflowId}/invites",
+                'payloadType' => 'json',
+                'payload' => ['recipientEmail' => $signer->email],
+            ],
+            [
+                'label' => 'POST /api/workflows/{workflowId}/invites recipient',
+                'method' => 'POST',
+                'url' => "{$endpoint}/api/workflows/{$workflowId}/invites",
+                'payloadType' => 'json',
+                'payload' => ['recipient' => $recipientIdentity],
+            ],
+            [
+                'label' => 'POST /api/workflows/{workflowId}/invite-link recipientEmail',
+                'method' => 'POST',
+                'url' => "{$endpoint}/api/workflows/{$workflowId}/invite-link",
+                'payloadType' => 'json',
+                'payload' => ['recipientEmail' => $signer->email],
+            ],
+            [
+                'label' => 'POST /api/users/{ownerUserId}/invite workflowId+recipientEmail',
+                'method' => 'POST',
+                'url' => "{$endpoint}/api/users/{$ownerUserId}/invite",
+                'payloadType' => 'json',
+                'payload' => [
+                    'workflowId' => $workflowId,
+                    'recipientEmail' => $signer->email,
+                ],
+            ],
+            [
+                'label' => 'POST /api/users/{ownerUserId}/invite workflowId+email',
+                'method' => 'POST',
+                'url' => "{$endpoint}/api/users/{$ownerUserId}/invite",
+                'payloadType' => 'json',
+                'payload' => [
+                    'workflowId' => $workflowId,
+                    'email' => $signer->email,
+                ],
+            ],
         ];
 
         $inviteResp = null;
+        $inviteAttemptTrace = [];
         foreach ($inviteAttempts as $attempt) {
+            $label = (string) ($attempt['label'] ?? 'attempt');
+
             try {
-                $candidate = $attempt();
+                $method = strtoupper((string) ($attempt['method'] ?? 'POST'));
+                $url = (string) ($attempt['url'] ?? '');
+                $payloadType = (string) ($attempt['payloadType'] ?? 'json');
+                $payload = (array) ($attempt['payload'] ?? []);
+
+                if ($method === 'GET' || $payloadType === 'query') {
+                    $candidate = $client->send($method, $url, ['query' => $payload]);
+                } else {
+                    $candidate = $client->send($method, $url, ['json' => $payload]);
+                }
+
+                $candidateJson = $candidate->json();
+                $candidateApiCode = null;
+                if (is_array($candidateJson)) {
+                    $candidateApiCode = $candidateJson['code']
+                        ?? $candidateJson['errorCode']
+                        ?? $candidateJson['error']
+                        ?? null;
+                }
+
+                $traceLine = $label . ' => HTTP ' . $candidate->status();
+                if (is_string($candidateApiCode) && $candidateApiCode !== '') {
+                    $traceLine .= ' [' . Str::limit($candidateApiCode, 60, '...') . ']';
+                }
+                $inviteAttemptTrace[] = $traceLine;
+
                 if ($candidate->successful()) {
                     $inviteResp = $candidate;
                     break;
@@ -1344,12 +1476,16 @@ class SignatureController extends Controller
 
                 $inviteResp = $candidate;
             } catch (\Throwable $e) {
+                $inviteAttemptTrace[] = $label . ' => EXCEPTION ' . Str::limit($e->getMessage(), 100, '...');
                 Log::warning('SunnyStamp: tentative invite en exception', [
                     'workflow_id' => $workflowId,
+                    'attempt_label' => $label,
                     'error' => $e->getMessage(),
                 ]);
             }
         }
+
+        $inviteAttemptSummary = implode(' | ', array_slice($inviteAttemptTrace, -12));
 
         if ($inviteResp && $inviteResp->successful()) {
             Log::info('SunnyStamp: réponse invite reçue', [
@@ -1373,18 +1509,22 @@ class SignatureController extends Controller
                 return $inviteUrl;
             }
 
-            $this->lastPlatformError = 'invite: réponse sans URL exploitable - ' . self::formatApiErrorDetail($inviteResp);
+            $this->lastPlatformError = 'invite: réponse sans URL exploitable - ' . self::formatApiErrorDetail($inviteResp)
+                . ' | attempts=' . ($inviteAttemptSummary !== '' ? $inviteAttemptSummary : 'n/a');
             Log::warning('SunnyStamp: invite créé mais URL absente', [
                 'status' => $inviteResp->status(),
                 'body' => $inviteResp->body(),
+                'attempt_summary' => $inviteAttemptSummary,
             ]);
             return null;
         }
 
         if (!$inviteResp) {
-            $this->lastPlatformError = 'invite: aucune réponse exploitable reçue';
+            $this->lastPlatformError = 'invite: aucune réponse exploitable reçue'
+                . ' | attempts=' . ($inviteAttemptSummary !== '' ? $inviteAttemptSummary : 'n/a');
             Log::error('SunnyStamp: échec invite (aucune réponse)', [
                 'workflow_id' => $workflowId,
+                'attempt_summary' => $inviteAttemptSummary,
             ]);
             return null;
         }
@@ -1399,7 +1539,10 @@ class SignatureController extends Controller
                     'last_invite_body' => Str::limit((string) $inviteResp->body(), 300),
                 ]);
 
+                $workflowFallbackTrace = [];
+
                 $workflowResp = $client->get("{$endpoint}/api/workflows/{$workflowId}");
+                $workflowFallbackTrace[] = 'GET /api/workflows/{workflowId} => HTTP ' . $workflowResp->status();
                 if ($workflowResp->successful()) {
                     Log::info('SunnyStamp: détail workflow reçu pour extraction invite URL', [
                         'workflow_id' => $workflowId,
@@ -1419,6 +1562,7 @@ class SignatureController extends Controller
 
                 // Variante read sous espace users/{ownerId} pour instances multi-routes.
                 $workflowByUserResp = $client->get("{$endpoint}/api/users/{$ownerUserId}/workflows/{$workflowId}");
+                $workflowFallbackTrace[] = 'GET /api/users/{ownerUserId}/workflows/{workflowId} => HTTP ' . $workflowByUserResp->status();
                 if ($workflowByUserResp->successful()) {
                     $workflowByUserUrl = $this->extractInviteUrl($workflowByUserResp->json(), $endpoint);
                     if (is_string($workflowByUserUrl) && $workflowByUserUrl !== '') {
@@ -1429,6 +1573,8 @@ class SignatureController extends Controller
                         return $workflowByUserUrl;
                     }
                 }
+
+                $inviteAttemptSummary .= ($inviteAttemptSummary !== '' ? ' | ' : '') . implode(' | ', $workflowFallbackTrace);
             } catch (\Throwable $e) {
                 Log::warning('SunnyStamp: fallback détail workflow en exception', [
                     'workflow_id' => $workflowId,
@@ -1438,18 +1584,22 @@ class SignatureController extends Controller
 
             // Eviter de retourner un lien approximatif qui mène à "invitation invalide".
             // On échoue explicitement pour forcer un diagnostic côté API.
-            $this->lastPlatformError = 'invite: aucun lien exploitable trouvé (endpoints invite en 404 et workflow sans URL/token)';
+            $this->lastPlatformError = 'invite: aucun lien exploitable trouvé (endpoints invite en 404 et workflow sans URL/token)'
+                . ' | attempts=' . ($inviteAttemptSummary !== '' ? $inviteAttemptSummary : 'n/a');
             Log::warning('SunnyStamp: aucun lien invite exploitable trouvé après fallback', [
                 'workflow_id' => $workflowId,
                 'endpoint' => $endpoint,
+                'attempt_summary' => $inviteAttemptSummary,
             ]);
             return null;
         }
 
         Log::warning('SunnyStamp: invite non créé', [
             'status' => $inviteResp->status(), 'body' => $inviteResp->body(),
+            'attempt_summary' => $inviteAttemptSummary,
         ]);
-        $this->lastPlatformError = 'invite: ' . self::formatApiErrorDetail($inviteResp);
+        $this->lastPlatformError = 'invite: ' . self::formatApiErrorDetail($inviteResp)
+            . ' | attempts=' . ($inviteAttemptSummary !== '' ? $inviteAttemptSummary : 'n/a');
         return null;
     }
 
