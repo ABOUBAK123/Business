@@ -28,6 +28,21 @@ class SignatureController extends Controller
     private ?string $lastPlatformError = null;
     private ?string $lastPlatformWorkflowId = null;
 
+    private function appendWorkflowRejectionHistory(WorkflowExecution $execution, array $entry): void
+    {
+        $stepData = is_array($execution->step_data) ? $execution->step_data : [];
+        $history = $stepData['rejection_history'] ?? [];
+        if (!is_array($history)) {
+            $history = [];
+        }
+
+        $history[] = $entry;
+        $stepData['rejection_history'] = $history;
+        $stepData['latest_rejection'] = $entry;
+
+        $execution->update(['step_data' => $stepData]);
+    }
+
     private function getSignatureStepIndex(Workflow $workflow, WorkflowStep $step): ?int
     {
         if (!$step->requires_signature) {
@@ -670,10 +685,26 @@ class SignatureController extends Controller
                     continue;
                 }
 
+                $actorName = Auth::user()?->name ?? 'Un utilisateur';
+                $rejectedAt = now();
+                $actorRole = $isSignatureStep ? 'signataire' : 'valideur';
+                $historyEntry = [
+                    'actor_id' => $userId,
+                    'actor_name' => $actorName,
+                    'actor_role' => $actorRole,
+                    'reason' => $rejectReason,
+                    'step_order' => $currentStep,
+                    'step_name' => $currentStepObj?->name ?? ($isSignatureStep ? 'Signature' : 'Validation'),
+                    'action_type' => $actionType,
+                    'rejected_at' => $rejectedAt->toIso8601String(),
+                ];
+
                 $execution->update([
                     'status' => 'rejected',
-                    'completed_at' => now(),
+                    'completed_at' => $rejectedAt,
                 ]);
+                $execution->refresh();
+                $this->appendWorkflowRejectionHistory($execution, $historyEntry);
 
                 if ($wf?->created_by) {
                     NotificationService::notify(
@@ -681,9 +712,11 @@ class SignatureController extends Controller
                         type: 'workflow',
                         title: 'Workflow refusé',
                         message: sprintf(
-                            '%s a refusé le workflow "%s". Motif: %s',
-                            Auth::user()?->name ?? 'Un utilisateur',
+                            '%s (%s) a refusé le workflow "%s" le %s. Motif: %s',
+                            $actorName,
+                            $actorRole,
                             $wf->name ?? 'Sans nom',
+                            $rejectedAt->format('d/m/Y à H:i'),
                             $rejectReason
                         ),
                         actionUrl: route('signatures.index'),

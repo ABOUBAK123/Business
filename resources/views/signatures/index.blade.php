@@ -375,7 +375,24 @@
                     $isSignStep = str_contains(strtolower($currentStepObj?->description ?? $currentStepObj?->name ?? ''), 'signature') || ($currentStepObj?->requires_signature ?? false);
                 @endphp
                 <tr class="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                    <td class="px-4 py-4 font-medium text-gray-900">{{ $wf->name }}</td>
+                    <td class="px-4 py-4">
+                        <p class="font-medium text-gray-900">{{ $wf->name }}</p>
+                        @if($latestRejection)
+                            <div class="mt-2 flex flex-wrap items-center gap-2">
+                                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-red-50 text-red-700 border border-red-200">
+                                    <i class="fa-solid fa-triangle-exclamation text-[10px]"></i>
+                                    Dernier refus: {{ $latestRejection['actor_name'] ?? 'Utilisateur' }} · {{ !empty($latestRejection['rejected_at']) ? \Carbon\Carbon::parse($latestRejection['rejected_at'])->format('d/m/Y H:i') : 'date inconnue' }}
+                                </span>
+                                <button
+                                    type="button"
+                                    onclick='openWorkflowRejectionHistoryModal(@json($wf->name), @json($rejectionHistory->values()->all()))'
+                                    class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-white text-red-700 border border-red-200 hover:bg-red-50 transition">
+                                    <i class="fa-solid fa-clock-rotate-left text-[10px]"></i>
+                                    Voir les motifs
+                                </button>
+                            </div>
+                        @endif
+                    </td>
                     <td class="px-4 py-4">
                         <div class="flex items-center gap-2">
                             <div class="w-8 h-8 rounded-full bg-[#2453d6] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
@@ -415,6 +432,21 @@
     </div>
     @endif
 </section>
+
+<div id="workflow-rejection-history-modal" class="hidden fixed inset-0 z-[75] bg-black/60 flex items-center justify-center p-4">
+    <div class="w-full max-w-3xl max-h-[85vh] bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col">
+        <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
+            <div>
+                <h3 class="text-lg font-bold text-gray-800">Historique des refus</h3>
+                <p id="workflow-rejection-history-title" class="text-sm text-gray-500 mt-1"></p>
+            </div>
+            <button type="button" onclick="closeWorkflowRejectionHistoryModal()" class="h-9 w-9 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 transition">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <div id="workflow-rejection-history-body" class="flex-1 overflow-y-auto px-6 py-5 bg-gray-50"></div>
+    </div>
+</div>
 
 {{-- ── Historique complet des signatures ──────────────────────────── --}}
 <section class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden mb-6">
@@ -536,6 +568,9 @@ const workflowValidationDecision = document.getElementById('workflow-validation-
 const workflowValidationReasonInput = document.getElementById('workflow-validation-reason-input');
 const workflowRejectReasonModal = document.getElementById('workflow-reject-reason-modal');
 const workflowRejectReasonField = document.getElementById('workflow-reject-reason');
+const workflowRejectionHistoryModal = document.getElementById('workflow-rejection-history-modal');
+const workflowRejectionHistoryTitle = document.getElementById('workflow-rejection-history-title');
+const workflowRejectionHistoryBody = document.getElementById('workflow-rejection-history-body');
 
 const workflowValidationState = {
     executionIds: [],
@@ -618,6 +653,51 @@ function submitWorkflowValidationDecision(decision) {
     document.getElementById('workflow-validation-form').submit();
 }
 
+function openWorkflowRejectionHistoryModal(workflowName, history) {
+    const entries = Array.isArray(history) ? history : [];
+    workflowRejectionHistoryTitle.textContent = workflowName || 'Workflow';
+
+    if (entries.length === 0) {
+        workflowRejectionHistoryBody.innerHTML = '<p class="text-sm text-gray-500">Aucun motif de refus enregistré.</p>';
+    } else {
+        workflowRejectionHistoryBody.innerHTML = entries.map((entry) => {
+            const actor = escapeHtml(entry.actor_name || 'Utilisateur');
+            const role = escapeHtml(entry.actor_role || 'acteur');
+            const reason = escapeHtml(entry.reason || 'Aucun motif');
+            const stepName = escapeHtml(entry.step_name || 'Étape');
+            const date = escapeHtml(formatWorkflowHistoryDate(entry.rejected_at));
+
+            return `
+                <div class="bg-white border border-gray-200 rounded-2xl p-4 shadow-sm mb-3">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                        <div class="text-sm font-semibold text-gray-800">${stepName}</div>
+                        <span class="text-xs text-gray-500">${date}</span>
+                    </div>
+                    <p class="text-xs text-red-700 font-semibold mb-2">Refus par ${actor} (${role})</p>
+                    <p class="text-sm text-gray-700 leading-relaxed">${reason}</p>
+                </div>
+            `;
+        }).join('');
+    }
+
+    workflowRejectionHistoryModal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeWorkflowRejectionHistoryModal() {
+    workflowRejectionHistoryModal.classList.add('hidden');
+    if (workflowValidationModal.classList.contains('hidden')) {
+        document.body.style.overflow = '';
+    }
+}
+
+function formatWorkflowHistoryDate(value) {
+    if (!value) return 'Date inconnue';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString('fr-FR');
+}
+
 workflowCreateModal.addEventListener('click', function (e) {
     if (e.target === workflowCreateModal) {
         closeWorkflowCreateModal();
@@ -636,6 +716,11 @@ document.addEventListener('keydown', function (e) {
         } else {
             closeWorkflowValidationModal();
         }
+        return;
+    }
+
+    if (e.key === 'Escape' && !workflowRejectionHistoryModal.classList.contains('hidden')) {
+        closeWorkflowRejectionHistoryModal();
     }
 });
 
