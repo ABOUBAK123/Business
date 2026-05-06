@@ -32,6 +32,7 @@ $wfJson = $workflows->map(fn($w) => [
         'status'       => $e->status,
         'current_step' => $e->current_step,
         'document_id'  => $e->document_id,
+        'signed_file_path' => $e->document?->signed_file_path,
     ])->values(),
 ])->values();
 
@@ -474,6 +475,7 @@ const IS_EMBEDDED = @json($embedded);
 const CSRF      = '{{ csrf_token() }}';
 const WORKFLOWS_BASE = '{{ url('/workflows') }}';
 const WORKFLOW_TEMPLATES_BASE = '{{ url('/workflow-templates') }}';
+const SIGNED_DOC_DOWNLOAD_TEMPLATE = @json(route('signatures.signed-document', ['executionId' => '__EXEC_ID__']));
 let templates   = [];
 let statusFilter = 'Tous';
 
@@ -574,6 +576,15 @@ function renderTable() {
         const isOwner = wf.created_by === ME;
         const date = wf.updated_at ? new Date(wf.updated_at).toLocaleDateString('fr-FR') : '—';
         const rowBg = idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/60';
+        const completedExecWithSigned = (wf.executions || []).find((e) => {
+            const s = String(e.status || '').toLowerCase();
+            const isCompleted = /complet|approved|termine|valide/.test(s) || s === 'completed';
+            return isCompleted && !!e.signed_file_path;
+        });
+        const signedDownloadUrl = completedExecWithSigned
+            ? SIGNED_DOC_DOWNLOAD_TEMPLATE.replace('__EXEC_ID__', encodeURIComponent(completedExecWithSigned.id || ''))
+            : '';
+        const showSignedDownload = isOwner && !!signedDownloadUrl;
         return `<tr class="${rowBg} border-b border-gray-100 hover:bg-blue-50/30 transition-colors">
             <td class="px-4 py-3">
                 <p class="text-sm font-semibold text-gray-900">${esc(wf.name)}</p>
@@ -608,14 +619,19 @@ function renderTable() {
                         class="p-1.5 text-blue-500 hover:bg-blue-50 rounded-lg transition" title="Détails">
                         <i class="fas fa-eye text-sm"></i>
                     </button>
-                    <button onclick='openViewMode(${JSON.stringify(wf)})'
-                        class="p-1.5 text-purple-500 hover:bg-purple-50 rounded-lg transition" title="Vue lecture">
-                        <i class="fas fa-expand text-sm"></i>
-                    </button>
-                    <button onclick='duplicateWorkflow("${wf.id}")'
-                        class="p-1.5 text-green-500 hover:bg-green-50 rounded-lg transition" title="Dupliquer">
-                        <i class="fas fa-copy text-sm"></i>
-                    </button>
+                    ${showSignedDownload
+                        ? `<a href="${signedDownloadUrl}" target="_blank"
+                            class="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition" title="Télécharger signé">
+                            <i class="fas fa-download text-sm"></i>
+                        </a>`
+                        : `<button onclick='openViewMode(${JSON.stringify(wf)})'
+                            class="p-1.5 text-purple-500 hover:bg-purple-50 rounded-lg transition" title="Vue lecture">
+                            <i class="fas fa-expand text-sm"></i>
+                        </button>
+                        <button onclick='duplicateWorkflow("${wf.id}")'
+                            class="p-1.5 text-green-500 hover:bg-green-50 rounded-lg transition" title="Dupliquer">
+                            <i class="fas fa-copy text-sm"></i>
+                        </button>`}
                     ${isOwner ? `<button onclick='openDeleteModal("${wf.id}")'
                         class="p-1.5 text-red-400 hover:bg-red-50 rounded-lg transition" title="Supprimer">
                         <i class="fas fa-trash-alt text-sm"></i>
