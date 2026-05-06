@@ -550,6 +550,20 @@ function getTracking(wf) {
     return { total, pending, inProg, completed, rejected, label, cls, pct, curStep, totalSteps };
 }
 
+function getCompletedSignedDownloadUrl(wf) {
+    const completedExecWithSigned = (wf.executions || []).find((e) => {
+        const s = String(e.status || '').toLowerCase();
+        const isCompleted = /complet|approved|termine|valide/.test(s) || s === 'completed';
+        return isCompleted && !!e.signed_file_path;
+    });
+
+    if (!completedExecWithSigned || !completedExecWithSigned.id) {
+        return '';
+    }
+
+    return SIGNED_DOC_DOWNLOAD_TEMPLATE.replace('__EXEC_ID__', encodeURIComponent(completedExecWithSigned.id));
+}
+
 function computeTileCounts() {
     const c = { 'En attente':0, 'Brouillon':0, 'En cours':0, 'Terminé':0, 'Rejeté':0 };
     workflows.forEach(wf => { const t = getTracking(wf); if (c[t.label] !== undefined) c[t.label]++; });
@@ -576,14 +590,7 @@ function renderTable() {
         const isOwner = wf.created_by === ME;
         const date = wf.updated_at ? new Date(wf.updated_at).toLocaleDateString('fr-FR') : '—';
         const rowBg = idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/60';
-        const completedExecWithSigned = (wf.executions || []).find((e) => {
-            const s = String(e.status || '').toLowerCase();
-            const isCompleted = /complet|approved|termine|valide/.test(s) || s === 'completed';
-            return isCompleted && !!e.signed_file_path;
-        });
-        const signedDownloadUrl = completedExecWithSigned
-            ? SIGNED_DOC_DOWNLOAD_TEMPLATE.replace('__EXEC_ID__', encodeURIComponent(completedExecWithSigned.id || ''))
-            : '';
+        const signedDownloadUrl = getCompletedSignedDownloadUrl(wf);
         const showSignedDownload = isOwner && !!signedDownloadUrl;
         return `<tr class="${rowBg} border-b border-gray-100 hover:bg-blue-50/30 transition-colors">
             <td class="px-4 py-3">
@@ -2106,6 +2113,9 @@ function renderStepSummary() {
 // ── Étape Opération (vue lecture seule, step 3) ────────────
 function renderStepOperation() {
     if (!viewingWf) return '';
+    const isOwner = viewingWf.created_by === ME;
+    const signedDownloadUrl = getCompletedSignedDownloadUrl(viewingWf);
+    const showSignedDownload = isOwner && !!signedDownloadUrl;
     const steps = (viewingWf.steps||[]).slice().sort((a,b) => a.order - b.order);
     const stepsHtml = steps.map(s => {
         const isSig = s.requires_signature;
@@ -2130,10 +2140,15 @@ function renderStepOperation() {
         <div class="bg-gray-50 border border-gray-200 rounded-xl p-4">
             <p class="text-sm font-bold text-gray-700 mb-3">Actions</p>
             <div class="flex flex-wrap gap-2">
-                <button type="button" onclick='duplicateWorkflow("${viewingWf.id}")'
-                    class="px-4 py-2 bg-[#2453d6] hover:bg-[#1f47bb] text-white text-sm font-semibold rounded-lg flex items-center gap-2 transition">
-                    <i class="fas fa-copy"></i> Dupliquer
-                </button>
+                ${showSignedDownload
+                    ? `<a href="${signedDownloadUrl}" target="_blank"
+                        class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg flex items-center gap-2 transition">
+                        <i class="fas fa-download"></i> Télécharger signé
+                    </a>`
+                    : `<button type="button" onclick='duplicateWorkflow("${viewingWf.id}")'
+                        class="px-4 py-2 bg-[#2453d6] hover:bg-[#1f47bb] text-white text-sm font-semibold rounded-lg flex items-center gap-2 transition">
+                        <i class="fas fa-copy"></i> Dupliquer
+                    </button>`}
                 <button type="button" onclick='closeModal();openDeleteModal("${viewingWf.id}")'
                     class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-semibold rounded-lg flex items-center gap-2 transition">
                     <i class="fas fa-trash"></i> Supprimer
