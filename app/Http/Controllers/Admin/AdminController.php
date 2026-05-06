@@ -1478,6 +1478,14 @@ class AdminController extends Controller
 
     public function storePersonnelJobReference(Request $request)
     {
+        if (!Schema::hasTable('personnel_job_references')) {
+            return redirect()->route('admin.index', [
+                'tab' => 'personnel',
+                'personnel_tab' => $request->input('personnel_tab', 'leave'),
+                'leave_subtab' => $request->input('leave_subtab', 'parameters'),
+            ])->with('error', 'Le référentiel métier n\'est pas encore initialisé (table personnel_job_references absente). Veuillez exécuter les migrations.');
+        }
+
         $validated = $request->validate([
             'personnel_tab' => ['nullable', 'string'],
             'leave_subtab' => ['nullable', 'string'],

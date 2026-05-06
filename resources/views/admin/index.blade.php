@@ -435,6 +435,25 @@ $_oc = [
         <h5 class="text-sm font-bold text-gray-600 uppercase tracking-wide mb-3 pb-2 border-b border-gray-100">Informations Professionnelles</h5>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_admin_type') }}</label>
+            <select name="administration_type" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+              <option value="emitter" {{ old('administration_type', $editingPersonnel->administration_type ?? ($adminScope['type'] ?? 'emitter')) === 'emitter' ? 'selected' : '' }}>{{ __('personnel.ui.employees.admin_emitter') }}</option>
+              <option value="recipient" {{ old('administration_type', $editingPersonnel->administration_type ?? ($adminScope['type'] ?? 'emitter')) === 'recipient' ? 'selected' : '' }}>{{ __('personnel.ui.employees.admin_recipient') }}</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_administration') }}</label>
+            <select name="administration_id" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+              <option value="">{{ __('personnel.ui.employees.form_select_admin') }}</option>
+              @foreach($emitters as $e)
+              <option value="{{ $e->id }}" {{ old('administration_id', $editingPersonnel->administration_id ?? ($adminScope['id'] ?? '')) === $e->id ? 'selected' : '' }}>{{ $e->name }} {{ __('personnel.ui.employees.admin_emitter_bracket') }}</option>
+              @endforeach
+              @foreach($recipients as $r)
+              <option value="{{ $r->id }}" {{ old('administration_id', $editingPersonnel->administration_id ?? ($adminScope['id'] ?? '')) === $r->id ? 'selected' : '' }}>{{ $r->name }} {{ __('personnel.ui.employees.admin_recipient_bracket') }}</option>
+              @endforeach
+            </select>
+          </div>
+          <div>
             <label class="block text-sm font-semibold text-gray-700 mb-1">Matricule <span class="text-red-500">*</span></label>
             <input type="text" name="employee_number" value="{{ old('employee_number', $editingPersonnel->employee_number ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
           </div>
@@ -455,32 +474,125 @@ $_oc = [
           </div>
           <div>
             <label class="block text-sm font-semibold text-gray-700 mb-1">Direction Centrale</label>
-            <input type="text" name="meta_direction_centrale" value="{{ old('meta_direction_centrale', $empMeta['direction_centrale'] ?? '') }}" placeholder="Sélectionner" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+            @php
+              $dirCentraleEntities = $subEntities->filter(function($se) {
+                  $typeName = mb_strtoupper(trim($se->directionType?->name ?? ''));
+                  return in_array($typeName, ['DIRECTION CENTRALE', 'DIRECTION CENTRALE'], true);
+              })->values();
+            @endphp
+            <select id="select_direction_centrale" name="meta_direction_centrale" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+              <option value="">Sélectionner</option>
+              @foreach($dirCentraleEntities as $dce)
+              <option value="{{ $dce->name }}" data-code="{{ $dce->code }}" {{ old('meta_direction_centrale', $empMeta['direction_centrale'] ?? '') === $dce->name ? 'selected' : '' }}>{{ $dce->name }}</option>
+              @endforeach
+            </select>
           </div>
           <div>
             <label class="block text-sm font-semibold text-gray-700 mb-1">Sous-Direction</label>
-            <input type="text" name="meta_sous_direction" value="{{ old('meta_sous_direction', $empMeta['sous_direction'] ?? '') }}" placeholder="Sélectionner" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+            @php
+              $allSubEntitiesJson = $subEntities->map(fn($se) => [
+                  'name'        => $se->name,
+                  'code'        => $se->code,
+                  'parent_code' => $se->parent_code,
+              ])->values()->toJson();
+              $currentSousDir = old('meta_sous_direction', $empMeta['sous_direction'] ?? '');
+            @endphp
+            <select id="select_sous_direction" name="meta_sous_direction" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+              <option value="">Sélectionner</option>
+            </select>
+            <script>
+            (function () {
+              var allEntities = {!! $allSubEntitiesJson !!};
+              var currentVal  = @json($currentSousDir);
+              var selDC  = document.getElementById('select_direction_centrale');
+              var selSD  = document.getElementById('select_sous_direction');
+
+              var selSVC = document.getElementById('select_service');
+              var currentSVC = @json(old('meta_service', $empMeta['service'] ?? ''));
+
+              function populateService(parentCode) {
+                var prev = selSVC.value || currentSVC;
+                selSVC.innerHTML = '<option value="">Sélectionner</option>';
+                if (!parentCode) return;
+                allEntities.forEach(function(e) {
+                  if ((e.parent_code || '').toUpperCase() === parentCode.toUpperCase()) {
+                    var opt = document.createElement('option');
+                    opt.value = e.name;
+                    opt.textContent = e.name;
+                    if (e.name === prev) opt.selected = true;
+                    selSVC.appendChild(opt);
+                  }
+                });
+              }
+
+              function populateSousDirection(parentCode) {
+                var prev = selSD.value || currentVal;
+                selSD.innerHTML = '<option value="">Sélectionner</option>';
+                selSVC.innerHTML = '<option value="">Sélectionner</option>';
+                if (!parentCode) return;
+                allEntities.forEach(function(e) {
+                  if ((e.parent_code || '').toUpperCase() === parentCode.toUpperCase()) {
+                    var opt = document.createElement('option');
+                    opt.value = e.name;
+                    opt.dataset.code = e.code || '';
+                    opt.textContent = e.name;
+                    if (e.name === prev) opt.selected = true;
+                    selSD.appendChild(opt);
+                  }
+                });
+                // populate service based on restored sous-direction
+                var selSDOpt = selSD.options[selSD.selectedIndex];
+                populateService(selSDOpt ? (selSDOpt.dataset.code || '') : '');
+              }
+
+              // Init on page load
+              var initOpt = selDC.options[selDC.selectedIndex];
+              populateSousDirection(initOpt ? (initOpt.dataset.code || '') : '');
+
+              selDC.addEventListener('change', function() {
+                var opt = selDC.options[selDC.selectedIndex];
+                populateSousDirection(opt ? (opt.dataset.code || '') : '');
+              });
+
+              selSD.addEventListener('change', function() {
+                var opt = selSD.options[selSD.selectedIndex];
+                populateService(opt ? (opt.dataset.code || '') : '');
+              });
+            })();
+            </script>
           </div>
           <div>
             <label class="block text-sm font-semibold text-gray-700 mb-1">Service</label>
-            <input type="text" name="meta_service" value="{{ old('meta_service', $empMeta['service'] ?? '') }}" placeholder="Sélectionner" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+            <select id="select_service" name="meta_service" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+              <option value="">Sélectionner</option>
+            </select>
           </div>
           <div>
             <label class="block text-sm font-semibold text-gray-700 mb-1">Catégorie</label>
             <select name="meta_categorie" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
               <option value="">Sélectionner</option>
-              @foreach(['A1','A2','B1','B2','C1','C2','D1','D2'] as $cat)
+              @foreach(['A','B','C','D'] as $cat)
               <option value="{{ $cat }}" {{ old('meta_categorie', $empMeta['categorie'] ?? '') === $cat ? 'selected' : '' }}>{{ $cat }}</option>
               @endforeach
             </select>
           </div>
           <div>
             <label class="block text-sm font-semibold text-gray-700 mb-1">Grade</label>
-            <input type="text" name="meta_grade" value="{{ old('meta_grade', $empMeta['grade'] ?? '') }}" placeholder="Sélectionner" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+            <select name="meta_grade" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+              <option value="">Sélectionner</option>
+              @foreach(collect($personnelJobReferences)->where('reference_type', 'grade') as $gradeRef)
+              <option value="{{ $gradeRef->label }}" {{ old('meta_grade', $empMeta['grade'] ?? '') === $gradeRef->label ? 'selected' : '' }}>{{ $gradeRef->label }}</option>
+              @endforeach
+            </select>
           </div>
           <div>
             <label class="block text-sm font-semibold text-gray-700 mb-1">Emploi</label>
-            <input type="text" name="job_title" value="{{ old('job_title', $editingPersonnel->job_title ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+            <select name="job_title" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+              <option value="">Sélectionner</option>
+              @foreach(collect($personnelJobReferences)->where('reference_type', 'employment') as $employmentRef)
+              <option value="{{ $employmentRef->label }}" {{ old('job_title', $editingPersonnel->job_title ?? '') === $employmentRef->label ? 'selected' : '' }}>{{ $employmentRef->label }}</option>
+              @endforeach
+            </select>
           </div>
           <div>
             <label class="block text-sm font-semibold text-gray-700 mb-1">Lieu de Travail</label>
@@ -504,25 +616,6 @@ $_oc = [
               <option value="">{{ __('personnel.ui.employees.form_no_superior') }}</option>
               @foreach($allUsers as $u)
               <option value="{{ $u->id }}" {{ old('user_id', $editingPersonnel->user_id ?? '') === $u->id ? 'selected' : '' }}>{{ $u->name }} - {{ $u->email }}</option>
-              @endforeach
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_admin_type') }}</label>
-            <select name="administration_type" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
-              <option value="emitter" {{ old('administration_type', $editingPersonnel->administration_type ?? ($adminScope['type'] ?? 'emitter')) === 'emitter' ? 'selected' : '' }}>{{ __('personnel.ui.employees.admin_emitter') }}</option>
-              <option value="recipient" {{ old('administration_type', $editingPersonnel->administration_type ?? ($adminScope['type'] ?? 'emitter')) === 'recipient' ? 'selected' : '' }}>{{ __('personnel.ui.employees.admin_recipient') }}</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_administration') }}</label>
-            <select name="administration_id" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
-              <option value="">{{ __('personnel.ui.employees.form_select_admin') }}</option>
-              @foreach($emitters as $e)
-              <option value="{{ $e->id }}" {{ old('administration_id', $editingPersonnel->administration_id ?? ($adminScope['id'] ?? '')) === $e->id ? 'selected' : '' }}>{{ $e->name }} {{ __('personnel.ui.employees.admin_emitter_bracket') }}</option>
-              @endforeach
-              @foreach($recipients as $r)
-              <option value="{{ $r->id }}" {{ old('administration_id', $editingPersonnel->administration_id ?? ($adminScope['id'] ?? '')) === $r->id ? 'selected' : '' }}>{{ $r->name }} {{ __('personnel.ui.employees.admin_recipient_bracket') }}</option>
               @endforeach
             </select>
           </div>
@@ -551,26 +644,43 @@ $_oc = [
   <section class="xl:col-span-3 space-y-5">
     <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
       <h3 class="text-lg font-bold text-gray-800 mb-4">{{ __('personnel.ui.employees.table_title') }}</h3>
+      <div class="mb-4">
+        <input
+          id="employees-directory-search"
+          type="text"
+          placeholder="Rechercher un agent (nom, matricule, administration, emploi...)"
+          class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400"
+        >
+      </div>
       <div class="overflow-x-auto">
-        <table class="min-w-full text-sm">
+        <table id="employees-directory-table" class="min-w-full text-sm">
           <thead>
             <tr class="text-left text-gray-500 border-b border-gray-100">
               <th class="py-3 pr-4">{{ __('personnel.ui.employees.table_col_agent') }}</th>
               <th class="py-3 pr-4">{{ __('personnel.ui.employees.table_col_admin') }}</th>
-              <th class="py-3 pr-4">{{ __('personnel.ui.employees.table_col_function') }}</th>
+              <th class="py-3 pr-4">Emploi</th>
               <th class="py-3 pr-4">{{ __('personnel.ui.employees.table_col_status') }}</th>
               <th class="py-3 pr-4">{{ __('personnel.ui.employees.table_col_docs') }}</th>
               <th class="py-3">{{ __('personnel.ui.employees.table_col_action') }}</th>
             </tr>
           </thead>
+          @php
+            $emitterCodesMap = collect($emitters ?? [])->mapWithKeys(fn($e) => [$e->id => ($e->code ?? $e->name)]);
+            $recipientCodesMap = collect($recipients ?? [])->mapWithKeys(fn($r) => [$r->id => ($r->code ?? $r->name)]);
+          @endphp
           <tbody>
             @forelse($personnelEmployees as $employee)
+            @php
+              $adminCode = $employee->administration_type === 'recipient'
+                ? ($recipientCodesMap[$employee->administration_id] ?? null)
+                : ($emitterCodesMap[$employee->administration_id] ?? null);
+            @endphp
             <tr class="border-b border-gray-100">
               <td class="py-3 pr-4">
                 <div class="font-semibold text-gray-800">{{ $employee->full_name }}</div>
                 <div class="text-xs text-gray-500">{{ $employee->employee_number ?: __('personnel.ui.employees.table_no_employee_number') }}</div>
               </td>
-              <td class="py-3 pr-4 text-gray-600">{{ $employee->administration_id ?: __('personnel.ui.employees.table_not_assigned') }}</td>
+              <td class="py-3 pr-4 text-gray-600">{{ $adminCode ?: __('personnel.ui.employees.table_not_assigned') }}</td>
               <td class="py-3 pr-4 text-gray-600">{{ $employee->job_title ?: __('personnel.ui.employees.table_not_defined') }}</td>
               <td class="py-3 pr-4">
                 <span class="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-700">{{ __('personnel.ui.statuses.' . $employee->employment_status) }}</span>
@@ -588,6 +698,27 @@ $_oc = [
           </tbody>
         </table>
       </div>
+      <script>
+      (function () {
+        var searchInput = document.getElementById('employees-directory-search');
+        var table = document.getElementById('employees-directory-table');
+        if (!searchInput || !table) return;
+
+        var rows = Array.prototype.slice.call(table.querySelectorAll('tbody tr'));
+
+        searchInput.addEventListener('input', function () {
+          var q = (searchInput.value || '').trim().toLowerCase();
+          rows.forEach(function (row) {
+            if (row.querySelector('td[colspan]')) {
+              row.style.display = '';
+              return;
+            }
+            var txt = (row.textContent || '').toLowerCase();
+            row.style.display = q === '' || txt.indexOf(q) !== -1 ? '' : 'none';
+          });
+        });
+      })();
+      </script>
       @if(method_exists($personnelEmployees, 'links'))
       <div class="mt-4">{{ $personnelEmployees->appends(['tab' => 'personnel', 'personnel_tab' => 'employees', 'selected_employee' => request('selected_employee')])->links() }}</div>
       @endif
