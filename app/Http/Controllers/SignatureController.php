@@ -231,6 +231,10 @@ class SignatureController extends Controller
             return 'Erreur de communication avec la plateforme de signature.';
         }
 
+        if (str_contains($d, 'EntityLocked') || str_contains($d, 'entity is being updated')) {
+            return 'La plateforme est en cours de synchronisation du workflow. Merci de reessayer dans quelques secondes.';
+        }
+
         if (str_contains($d, 'RecipientPhoneNumberRequired')) {
             return 'Le profil du signataire doit contenir un numéro de téléphone pour cette page de consentement.';
         }
@@ -308,6 +312,26 @@ class SignatureController extends Controller
         }
 
         return $detail;
+    }
+
+    /**
+     * Détecte le conflit transitoire API "EntityLocked".
+     */
+    private static function isEntityLockedResponse(\Illuminate\Http\Client\Response $resp): bool
+    {
+        if ($resp->status() !== 409) {
+            return false;
+        }
+
+        $json = $resp->json();
+        $code = '';
+        $message = '';
+        if (is_array($json)) {
+            $code = (string) ($json['code'] ?? $json['errorCode'] ?? $json['error'] ?? '');
+            $message = (string) ($json['message'] ?? '');
+        }
+
+        return strcasecmp($code, 'EntityLocked') === 0 || str_contains(strtolower($message), 'entity is being updated');
     }
 
     /**
@@ -2013,30 +2037,59 @@ class SignatureController extends Controller
                 $payloadType = (string) ($attempt['payloadType'] ?? 'json');
                 $payload = (array) ($attempt['payload'] ?? []);
 
-                if ($method === 'GET' || $payloadType === 'query') {
-                    $candidate = $client->send($method, $url, ['query' => $payload]);
-                } else {
-                    $candidate = $client->send($method, $url, ['json' => $payload]);
+                $maxEntityLockRetries = 4;
+                $candidate = null;
+
+                for ($retry = 1; $retry <= $maxEntityLockRetries; $retry++) {
+                    if ($method === 'GET' || $payloadType === 'query') {
+                        $candidate = $client->send($method, $url, ['query' => $payload]);
+                    } else {
+                        $candidate = $client->send($method, $url, ['json' => $payload]);
+                    }
+
+                    $candidateJson = $candidate->json();
+                    $candidateApiCode = null;
+                    if (is_array($candidateJson)) {
+                        $candidateApiCode = $candidateJson['code']
+                            ?? $candidateJson['errorCode']
+                            ?? $candidateJson['error']
+                            ?? null;
+                    }
+
+                    $traceLine = $label . ' => HTTP ' . $candidate->status();
+                    if (is_string($candidateApiCode) && $candidateApiCode !== '') {
+                        $traceLine .= ' [' . Str::limit($candidateApiCode, 60, '...') . ']';
+                    }
+                    if ($retry > 1) {
+                        $traceLine .= ' (retry ' . $retry . '/' . $maxEntityLockRetries . ')';
+                    }
+                    $inviteAttemptTrace[] = $traceLine;
+
+                    if ($candidate->successful()) {
+                        break;
+                    }
+
+                    if (self::isEntityLockedResponse($candidate) && $retry < $maxEntityLockRetries) {
+                        usleep(250000 * $retry);
+                        continue;
+                    }
+
+                    break;
                 }
 
-                $candidateJson = $candidate->json();
-                $candidateApiCode = null;
-                if (is_array($candidateJson)) {
-                    $candidateApiCode = $candidateJson['code']
-                        ?? $candidateJson['errorCode']
-                        ?? $candidateJson['error']
-                        ?? null;
+                if (!$candidate) {
+                    continue;
                 }
-
-                $traceLine = $label . ' => HTTP ' . $candidate->status();
-                if (is_string($candidateApiCode) && $candidateApiCode !== '') {
-                    $traceLine .= ' [' . Str::limit($candidateApiCode, 60, '...') . ']';
-                }
-                $inviteAttemptTrace[] = $traceLine;
 
                 if ($candidate->successful()) {
                     $inviteResp = $candidate;
                     break;
+                }
+
+                // Si toujours verrouillé après retries, on poursuit d'autres variantes.
+                if (self::isEntityLockedResponse($candidate)) {
+                    $inviteResp = $candidate;
+                    continue;
                 }
 
                 // Continuer sur endpoints non trouvés / méthode non supportée / payload refusé.
