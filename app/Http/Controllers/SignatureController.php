@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Document;
+use App\Models\DocumentTemplate;
 use App\Models\PersonnelEmployee;
 use App\Models\Signature;
 use App\Models\SignatureProviderConfig;
@@ -46,6 +47,10 @@ class SignatureController extends Controller
 
         if (str_starts_with($d, 'upload_document:')) {
             return 'Le workflow a été créé, mais le document n\'a pas pu être chargé sur la plateforme.';
+        }
+
+        if (str_starts_with($d, 'create_document:')) {
+            return 'Le fichier a été transmis, mais la création du document de signature sur la plateforme a échoué.';
         }
 
         if (str_starts_with($d, 'start_workflow:')) {
@@ -940,6 +945,130 @@ class SignatureController extends Controller
         return $endpoint;
     }
 
+    /**
+     * Convertit une zone exprimée en pourcentage (UI locale) en champ PDF API SunnyStamp.
+     */
+    private static function mapPercentZoneToPdfSignatureField(array $zone): ?array
+    {
+        $x = (float) ($zone['x'] ?? 0);
+        $y = (float) ($zone['y'] ?? 0);
+        $w = (float) ($zone['w'] ?? $zone['width'] ?? 0);
+        $h = (float) ($zone['h'] ?? $zone['height'] ?? 0);
+        $page = (int) ($zone['page'] ?? -1);
+
+        if ($w <= 0 || $h <= 0) {
+            return null;
+        }
+
+        // Si la zone ressemble déjà à des coordonnées PDF absolues, on la conserve.
+        if ($x > 100 || $y > 100 || $w > 100 || $h > 100) {
+            return [
+                'imagePage' => $page === 0 ? -1 : $page,
+                'imageX' => round($x, 2),
+                'imageY' => round($y, 2),
+                'imageWidth' => round($w, 2),
+                'imageHeight' => round($h, 2),
+            ];
+        }
+
+        // Conversion en points PDF (A4 portrait: 595 x 842).
+        $pageWidth = 595.0;
+        $pageHeight = 842.0;
+
+        $imageX = max(0.0, min($pageWidth - 10.0, ($x / 100.0) * $pageWidth));
+        $imageY = max(0.0, min($pageHeight - 10.0, ($y / 100.0) * $pageHeight));
+        $imageW = max(20.0, min($pageWidth - $imageX, ($w / 100.0) * $pageWidth));
+        $imageH = max(20.0, min($pageHeight - $imageY, ($h / 100.0) * $pageHeight));
+
+        return [
+            'imagePage' => $page <= 0 ? -1 : $page,
+            'imageX' => round($imageX, 2),
+            'imageY' => round($imageY, 2),
+            'imageWidth' => round($imageW, 2),
+            'imageHeight' => round($imageH, 2),
+        ];
+    }
+
+    /**
+     * Résout la zone de signature à envoyer à la plateforme.
+     * Priorité: zone posée par utilisateur (signature_requests), sinon zone template.
+     */
+    private function resolveSignatureZoneForPlatform(Document $document, User $signer): ?array
+    {
+        $requestZone = SignatureRequest::query()
+            ->where('document_id', $document->id)
+            ->where('requested_to', $signer->id)
+            ->whereNotNull('zone_x')
+            ->whereNotNull('zone_y')
+            ->whereNotNull('zone_width')
+            ->whereNotNull('zone_height')
+            ->orderByRaw("CASE WHEN status = 'pending' THEN 0 ELSE 1 END")
+            ->orderByDesc('created_at')
+            ->first();
+
+        if ($requestZone) {
+            return [
+                'page' => (int) ($requestZone->zone_page ?? -1),
+                'x' => (float) $requestZone->zone_x,
+                'y' => (float) $requestZone->zone_y,
+                'w' => (float) $requestZone->zone_width,
+                'h' => (float) $requestZone->zone_height,
+            ];
+        }
+
+        $templateId = (string) ($document->template_id ?? '');
+        if ($templateId !== '') {
+            $template = DocumentTemplate::find($templateId);
+            if ($template && !empty($template->signature_zones)) {
+                $zones = is_string($template->signature_zones)
+                    ? json_decode($template->signature_zones, true)
+                    : $template->signature_zones;
+
+                if (is_array($zones) && !empty($zones[0]) && is_array($zones[0])) {
+                    return [
+                        'page' => (int) ($zones[0]['page'] ?? -1),
+                        'x' => (float) ($zones[0]['x'] ?? 0),
+                        'y' => (float) ($zones[0]['y'] ?? 0),
+                        'w' => (float) ($zones[0]['w'] ?? $zones[0]['width'] ?? 0),
+                        'h' => (float) ($zones[0]['h'] ?? $zones[0]['height'] ?? 0),
+                    ];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function buildPdfSignatureFields(Document $document, User $signer): array
+    {
+        $defaultField = [[
+            'imagePage' => -1,
+            'imageX' => 390.0,
+            'imageY' => 710.0,
+            'imageWidth' => 150.0,
+            'imageHeight' => 80.0,
+        ]];
+
+        $zone = $this->resolveSignatureZoneForPlatform($document, $signer);
+        if (!$zone) {
+            return $defaultField;
+        }
+
+        $field = self::mapPercentZoneToPdfSignatureField($zone);
+        if (!$field) {
+            return $defaultField;
+        }
+
+        Log::info('SunnyStamp: zone locale convertie en pdfSignatureFields', [
+            'document_id' => $document->id,
+            'signer_id' => $signer->id,
+            'zone' => $zone,
+            'pdf_field' => $field,
+        ]);
+
+        return [$field];
+    }
+
     private function buildPlatformInviteUrl(
         SignatureProviderConfig $cfg,
         string $ownerUserId,
@@ -1109,11 +1238,6 @@ class SignatureController extends Controller
             return null;
         }
 
-        $uploadQuery = ['createDocuments' => 'true'];
-        if (!empty($sigProfileId)) {
-            $uploadQuery['signatureProfileId'] = $sigProfileId;
-        }
-
         $pdfBytes = file_get_contents($absolutePath);
         if ($pdfBytes === false) {
             $this->lastPlatformError = 'upload_document: impossible de lire le fichier (' . $absolutePath . ')';
@@ -1127,109 +1251,46 @@ class SignatureController extends Controller
         $fileHash = base64_encode(hash('sha256', $pdfBytes, true));
         $fileName = basename($absolutePath);
 
-        // Étape 2a: Upload raw binary (Content-Type: application/pdf) → /parts
-        // C'est la méthode documentée dans la collection Postman UVCI/ARTCI.
-        $uploadUrlWithQuery = "{$endpoint}/api/workflows/{$workflowId}/parts?" . http_build_query($uploadQuery);
-        $uploadUrlBase      = "{$endpoint}/api/workflows/{$workflowId}/parts";
-
+        // Étape 2a: POST /parts (raw application/pdf) selon Postman ARTCI.
+        $uploadUrl = "{$endpoint}/api/workflows/{$workflowId}/parts";
         $uploadResp = null;
-        foreach ([$uploadUrlWithQuery, $uploadUrlBase] as $uploadUrl) {
-            try {
-                $candidate = Http::withToken($token)
-                    ->timeout($timeout)
-                    ->when(!$verifySSL, fn($h) => $h->withoutVerifying())
-                    ->withBody($pdfBytes, 'application/pdf')
-                    ->withHeaders([
-                        'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
-                    ])
-                    ->post($uploadUrl);
 
-                Log::info('SunnyStamp: tentative upload raw PDF', [
-                    'workflow_id' => $workflowId,
-                    'url'    => $uploadUrl,
-                    'status' => $candidate->status(),
-                    'body_excerpt' => substr($candidate->body(), 0, 200),
-                ]);
+        try {
+            $uploadResp = Http::withToken($token)
+                ->timeout($timeout)
+                ->when(!$verifySSL, fn($h) => $h->withoutVerifying())
+                ->withBody($pdfBytes, 'application/pdf')
+                ->withHeaders([
+                    'Content-Disposition' => 'attachment; filename="' . $fileName . '"',
+                ])
+                ->post($uploadUrl);
 
-                if ($candidate->successful()) {
-                    $uploadResp = $candidate;
-                    break;
-                }
-                $uploadResp = $candidate;
-                if (in_array($candidate->status(), [401, 403], true)) {
-                    break;
-                }
-            } catch (\Throwable $e) {
-                Log::warning('SunnyStamp: exception upload raw PDF', [
-                    'workflow_id' => $workflowId,
-                    'url' => $uploadUrl,
-                    'error' => $e->getMessage(),
-                ]);
-            }
+            Log::info('SunnyStamp: tentative upload raw PDF', [
+                'workflow_id' => $workflowId,
+                'url' => $uploadUrl,
+                'status' => $uploadResp->status(),
+                'body_excerpt' => substr($uploadResp->body(), 0, 250),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('SunnyStamp: exception upload raw PDF', [
+                'workflow_id' => $workflowId,
+                'url' => $uploadUrl,
+                'error' => $e->getMessage(),
+            ]);
         }
 
-        // Étape 2b: Si upload raw OK → lier le document via POST /documents
-        // (requis quand createDocuments=true n'est pas supporté par l'instance).
-        if ($uploadResp && $uploadResp->successful()) {
-            $partData = $uploadResp->json();
-            $partId   = $partData['id'] ?? $partData['partId'] ?? null;
-
-            // Construire le payload /documents avec les métadonnées du fichier.
-            $docPayload = [
-                'parts' => [[
-                    'filename'    => $fileName,
-                    'contentType' => 'application/pdf',
-                    'size'        => $fileSize,
-                    'hash'        => $fileHash,
-                ]],
-            ];
-            if ($partId) {
-                $docPayload['parts'][0]['id'] = $partId;
-            }
-            if (!empty($sigProfileId)) {
-                $docPayload['signatureProfileId'] = $sigProfileId;
-            }
-            // Zone de signature par défaut en bas à droite de la dernière page.
-            $docPayload['pdfSignatureFields'] = [[
-                'imagePage'   => -1,
-                'imageX'      => 390.0,
-                'imageY'      => 710.0,
-                'imageWidth'  => 150.0,
-                'imageHeight' => 80.0,
-            ]];
-
-            try {
-                $docResp = $client->post("{$endpoint}/api/workflows/{$workflowId}/documents", $docPayload);
-                Log::info('SunnyStamp: création document via /documents', [
-                    'workflow_id' => $workflowId,
-                    'status' => $docResp->status(),
-                    'body_excerpt' => substr($docResp->body(), 0, 200),
-                ]);
-                // Non bloquant: certaines instances créent le doc automatiquement via createDocuments=true.
-            } catch (\Throwable $e) {
-                Log::warning('SunnyStamp: exception création document /documents', [
-                    'workflow_id' => $workflowId,
-                    'error' => $e->getMessage(),
-                ]);
-            }
-        }
-
-        // Fallback multipart si raw binary a échoué.
+        // Fallback multipart si le tenant refuse le raw.
         if (!$uploadResp || !$uploadResp->successful()) {
-            foreach ([
-                ['field' => 'document', 'url' => $uploadUrlWithQuery],
-                ['field' => 'file',     'url' => $uploadUrlWithQuery],
-                ['field' => 'document', 'url' => $uploadUrlBase],
-            ] as $attempt) {
+            foreach (['document', 'file', 'part'] as $field) {
                 try {
                     $candidate = $client
-                        ->attach($attempt['field'], $pdfBytes, $fileName, ['Content-Type' => 'application/pdf'])
-                        ->post($attempt['url']);
+                        ->attach($field, $pdfBytes, $fileName, ['Content-Type' => 'application/pdf'])
+                        ->post($uploadUrl);
 
                     Log::info('SunnyStamp: fallback upload multipart', [
                         'workflow_id' => $workflowId,
-                        'field' => $attempt['field'],
-                        'url'   => $attempt['url'],
+                        'field' => $field,
+                        'url' => $uploadUrl,
                         'status' => $candidate->status(),
                     ]);
 
@@ -1237,6 +1298,7 @@ class SignatureController extends Controller
                         $uploadResp = $candidate;
                         break;
                     }
+
                     $uploadResp = $candidate;
                     if (in_array($candidate->status(), [401, 403], true)) {
                         break;
@@ -1244,6 +1306,7 @@ class SignatureController extends Controller
                 } catch (\Throwable $e) {
                     Log::warning('SunnyStamp: exception fallback upload multipart', [
                         'workflow_id' => $workflowId,
+                        'field' => $field,
                         'error' => $e->getMessage(),
                     ]);
                 }
@@ -1256,10 +1319,66 @@ class SignatureController extends Controller
                 Log::error('SunnyStamp: échec upload document (aucune réponse)', ['workflow_id' => $workflowId]);
                 return null;
             }
+
             $this->lastPlatformError = 'upload_document: ' . self::formatApiErrorDetail($uploadResp);
             Log::error('SunnyStamp: échec upload document', [
                 'status' => $uploadResp->status(),
                 'body' => $uploadResp->body(),
+            ]);
+            return null;
+        }
+
+        // Étape 2b: POST /documents avec pdfSignatureFields (obligatoire pour positionner la zone).
+        $partData = $uploadResp->json();
+        $displayedPart = $partData['documents'][0]['displayedParts'][0]
+            ?? $partData['displayedParts'][0]
+            ?? $partData['parts'][0]
+            ?? null;
+
+        $docPart = [
+            'filename' => $displayedPart['filename'] ?? $fileName,
+            'contentType' => $displayedPart['contentType'] ?? 'application/pdf',
+            'size' => (int) ($displayedPart['size'] ?? $fileSize),
+            'hash' => $displayedPart['hash'] ?? $fileHash,
+        ];
+
+        $partId = $partData['id'] ?? $partData['partId'] ?? ($displayedPart['id'] ?? null);
+        if (is_string($partId) && $partId !== '') {
+            $docPart['id'] = $partId;
+        }
+
+        $docPayload = [
+            'parts' => [$docPart],
+            'pdfSignatureFields' => $this->buildPdfSignatureFields($document, $signer),
+        ];
+        if (!empty($sigProfileId)) {
+            $docPayload['signatureProfileId'] = $sigProfileId;
+        }
+
+        try {
+            $docResp = $client->post("{$endpoint}/api/workflows/{$workflowId}/documents", $docPayload);
+            Log::info('SunnyStamp: création document via /documents', [
+                'workflow_id' => $workflowId,
+                'status' => $docResp->status(),
+                'body_excerpt' => substr($docResp->body(), 0, 250),
+                'pdf_fields' => $docPayload['pdfSignatureFields'],
+            ]);
+
+            if (!$docResp->successful()) {
+                $this->lastPlatformError = 'create_document: ' . self::formatApiErrorDetail($docResp);
+                Log::error('SunnyStamp: échec création document via /documents', [
+                    'workflow_id' => $workflowId,
+                    'status' => $docResp->status(),
+                    'body' => $docResp->body(),
+                    'doc_payload' => $docPayload,
+                ]);
+                return null;
+            }
+        } catch (\Throwable $e) {
+            $this->lastPlatformError = 'create_document: exception ' . $e->getMessage();
+            Log::error('SunnyStamp: exception création document /documents', [
+                'workflow_id' => $workflowId,
+                'error' => $e->getMessage(),
             ]);
             return null;
         }
