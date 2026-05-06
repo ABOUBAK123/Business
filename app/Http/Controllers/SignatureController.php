@@ -14,6 +14,7 @@ use App\Models\Workflow;
 use App\Models\WorkflowExecution;
 use App\Models\WorkflowStep;
 use App\Models\Notification;
+use App\Services\NotificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -26,6 +27,81 @@ class SignatureController extends Controller
 {
     private ?string $lastPlatformError = null;
     private ?string $lastPlatformWorkflowId = null;
+
+    private function getSignatureStepIndex(Workflow $workflow, WorkflowStep $step): ?int
+    {
+        if (!$step->requires_signature) {
+            return null;
+        }
+
+        $signatureSteps = $workflow->steps()
+            ->where('requires_signature', true)
+            ->orderBy('order')
+            ->get(['id']);
+
+        $index = $signatureSteps->search(fn($signatureStep) => $signatureStep->id === $step->id);
+
+        return $index === false ? null : $index;
+    }
+
+    private function getDocumentZoneForSignatureStep(array $docZones, string $docId, ?int $signatureStepIndex): array
+    {
+        $zones = $docZones[$docId] ?? [];
+
+        if (!is_array($zones)) {
+            return [];
+        }
+
+        if (array_key_exists('page', $zones)) {
+            return $zones;
+        }
+
+        if ($signatureStepIndex === null) {
+            return [];
+        }
+
+        $zone = $zones[$signatureStepIndex] ?? [];
+
+        return is_array($zone) ? $zone : [];
+    }
+
+    private function createSignatureRequestsForStep(Workflow $workflow, WorkflowStep $step, array $docZones): void
+    {
+        if (!$step->assignee_id || !$step->requires_signature) {
+            return;
+        }
+
+        $docsToSign = $workflow->docs_to_sign ?? [];
+        $signatureStepIndex = $this->getSignatureStepIndex($workflow, $step);
+
+        foreach ($docsToSign as $docId) {
+            $exists = SignatureRequest::where('document_id', $docId)
+                ->where('requested_to', $step->assignee_id)
+                ->where('status', 'pending')
+                ->exists();
+
+            if ($exists) {
+                continue;
+            }
+
+            $zone = $this->getDocumentZoneForSignatureStep($docZones, (string) $docId, $signatureStepIndex);
+
+            SignatureRequest::create([
+                'id'           => Str::uuid(),
+                'document_id'  => $docId,
+                'requested_by' => Auth::id(),
+                'requested_to' => $step->assignee_id,
+                'message'      => "Workflow: {$workflow->name} — Étape {$step->order}: " . ($step->name ?? 'Action requise'),
+                'status'       => 'pending',
+                'zone_page'    => $zone['page']   ?? null,
+                'zone_x'       => $zone['x']      ?? null,
+                'zone_y'       => $zone['y']      ?? null,
+                'zone_width'   => $zone['width']  ?? $zone['w'] ?? null,
+                'zone_height'  => $zone['height'] ?? $zone['h'] ?? null,
+                'zone_label'   => $zone['label']  ?? null,
+            ]);
+        }
+    }
 
     /**
      * Convertit le détail technique plateforme en message métier plus clair.
@@ -522,6 +598,37 @@ class SignatureController extends Controller
 
     public function create() { return view('signatures.create'); }
 
+    public function serveWorkflowDocument(string $executionId)
+    {
+        $execution = WorkflowExecution::with(['workflow.steps.assignee', 'document'])->find($executionId);
+        abort_unless($execution && $execution->document, 404);
+
+        $userId = (string) Auth::id();
+        $workflow = $execution->workflow;
+        $steps = $workflow?->steps?->sortBy('order') ?? collect();
+        $currentStep = (int) ($execution->current_step ?? 1);
+        $currentStepObj = $steps->firstWhere('order', $currentStep);
+
+        $isCreator = (string) ($workflow?->created_by ?? '') === $userId;
+        $isCurrentActor = (string) ($currentStepObj?->assignee_id ?? '') === $userId;
+
+        abort_unless($isCreator || $isCurrentActor, 403);
+
+        $document = $execution->document;
+        $path = ltrim(str_replace('/storage/', '', (string) $document->file_path), '/');
+        abort_if($path === '' || !Storage::disk('public')->exists($path), 404, 'Fichier introuvable sur le serveur.');
+
+        $ext  = pathinfo((string) $document->file_path, PATHINFO_EXTENSION) ?: 'bin';
+        $safeTitle = preg_replace('/[\/\\\\\x00-\x1f]+/', '-', (string) $document->title);
+        $safeTitle = trim((string) $safeTitle, '-') ?: 'document';
+        $name = pathinfo($safeTitle, PATHINFO_EXTENSION) === $ext ? $safeTitle : ($safeTitle . '.' . $ext);
+
+        return Storage::disk('public')->response($path, $name, [
+            'Content-Type' => $document->mime_type ?: 'application/octet-stream',
+            'Content-Disposition' => 'inline; filename="' . addslashes($name) . '"',
+        ]);
+    }
+
     /**
      * Action workflow depuis la boîte de réception (signer ou valider une exécution).
      */
@@ -531,10 +638,14 @@ class SignatureController extends Controller
             'execution_ids'   => 'required|array',
             'execution_ids.*' => 'required|string',
             'action_type'     => 'required|in:signature,validation',
+            'action_decision' => 'nullable|in:approve,reject',
+            'reject_reason'   => 'nullable|string|max:2000',
         ]);
 
         $userId = Auth::id();
         $actionType = $request->action_type;
+        $decision = $request->input('action_decision', 'approve');
+        $rejectReason = trim((string) $request->input('reject_reason', ''));
         $successCount = 0;
 
         foreach ($request->execution_ids as $executionId) {
@@ -546,17 +657,53 @@ class SignatureController extends Controller
             $currentStep = (int) ($execution->current_step ?? 1);
             $currentStepObj = $steps->firstWhere('order', $currentStep);
             $assigneeId = $currentStepObj?->assignee_id;
+            $isSignatureStep = (bool) ($currentStepObj?->requires_signature ?? false);
 
             // Vérifier que c'est bien le tour de l'utilisateur
             if ($assigneeId && $assigneeId !== $userId) continue;
+
+            if ($actionType === 'validation' && $isSignatureStep) continue;
+            if ($actionType === 'signature' && !$isSignatureStep) continue;
+
+            if ($decision === 'reject') {
+                if ($rejectReason === '') {
+                    continue;
+                }
+
+                $execution->update([
+                    'status' => 'rejected',
+                    'completed_at' => now(),
+                ]);
+
+                if ($wf?->created_by) {
+                    NotificationService::notify(
+                        recipientId: (string) $wf->created_by,
+                        type: 'workflow',
+                        title: 'Workflow refusé',
+                        message: sprintf(
+                            '%s a refusé le workflow "%s". Motif: %s',
+                            Auth::user()?->name ?? 'Un utilisateur',
+                            $wf->name ?? 'Sans nom',
+                            $rejectReason
+                        ),
+                        actionUrl: route('signatures.index'),
+                        workflowId: (string) ($wf->id ?? null),
+                        executionId: (string) $execution->id
+                    );
+                }
+
+                $successCount++;
+                continue;
+            }
 
             $totalSteps = $steps->count();
             $nextStep   = $currentStep + 1;
 
             if ($nextStep > $totalSteps) {
                 // Dernière étape : terminer le workflow
-                $execution->update(['status' => 'completed', 'current_step' => $nextStep, 'completed_at' => now()]);
-                if ($execution->document_id) {
+                $execution->update(['status' => 'completed', 'current_step' => $totalSteps, 'completed_at' => now()]);
+
+                if ($execution->document_id && $isSignatureStep) {
                     Document::find($execution->document_id)?->update(['status' => 'signed', 'signed_at' => now()]);
                     // Créer une signature automatique
                     Signature::create([
@@ -570,17 +717,43 @@ class SignatureController extends Controller
                         'reason'      => 'Signature via workflow ' . ($wf?->name ?? ''),
                     ]);
                 }
+
+                if ($wf?->created_by) {
+                    NotificationService::notify(
+                        recipientId: (string) $wf->created_by,
+                        type: 'workflow',
+                        title: 'Workflow terminé',
+                        message: $isSignatureStep
+                            ? sprintf('Le workflow "%s" est terminé et le document a été signé.', $wf->name ?? 'Sans nom')
+                            : sprintf('Le workflow "%s" est terminé après validation finale.', $wf->name ?? 'Sans nom'),
+                        actionUrl: route('signatures.index'),
+                        workflowId: (string) ($wf->id ?? null),
+                        executionId: (string) $execution->id
+                    );
+                }
             } else {
                 $execution->update(['current_step' => $nextStep]);
+
+                $nextStepObj = $steps->firstWhere('order', $nextStep);
+                if ($wf && $nextStepObj && $nextStepObj->requires_signature) {
+                    $docZones = $execution->step_data['doc_zones'] ?? [];
+                    $this->createSignatureRequestsForStep($wf, $nextStepObj, is_array($docZones) ? $docZones : []);
+                }
+
+                if ($wf) {
+                    NotificationService::workflowStepAdvanced($wf, $nextStep, Auth::user()->name);
+                }
             }
 
             $successCount++;
         }
 
         $msg = $successCount > 0
-            ? ($actionType === 'signature'
-                ? "Signature effectuée sur {$successCount} document(s)."
-                : "Validation effectuée sur {$successCount} document(s).")
+            ? ($decision === 'reject'
+                ? "Refus enregistré sur {$successCount} document(s)."
+                : ($actionType === 'signature'
+                    ? "Signature effectuée sur {$successCount} document(s)."
+                    : "Validation effectuée sur {$successCount} document(s)."))
             : 'Aucune action effectuée (vérifiez les droits ou le statut des exécutions).';
 
         return back()->with($successCount > 0 ? 'success' : 'error', $msg);

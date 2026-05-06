@@ -219,6 +219,7 @@ Route::middleware('auth')->group(function () {
     // Actions workflow depuis la boîte de réception
     Route::post('/signatures/workflow-action',  [SignatureController::class, 'workflowAction'])->name('signatures.workflow-action');
     Route::post('/signatures/get-invite-url',   [SignatureController::class, 'getSignatureInviteUrl'])->name('signatures.get-invite-url');
+    Route::get('/signatures/workflow-document/{executionId}', [SignatureController::class, 'serveWorkflowDocument'])->name('signatures.workflow-document');
     Route::get('/signatures/platform-status/{executionId}', [SignatureController::class, 'getPlatformWorkflowStatus'])->name('signatures.platform-status');
     Route::get('/signatures/signed-document/{executionId}', [SignatureController::class, 'serveSignedDocument'])->name('signatures.signed-document');
     // Création d'un workflow de signature

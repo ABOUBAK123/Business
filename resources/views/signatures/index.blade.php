@@ -117,8 +117,12 @@
                                 onclick="wfInboxAction(this, '{{ $firstExecId }}', '{{ $row['actionType'] }}')"
                                 data-action="{{ $row['actionType'] }}"
                                 data-exec="{{ $firstExecId }}"
+                                data-execution-ids='@json($row['actionableIds'])'
+                                data-document-url="{{ !empty($row['firstExecutionId']) ? route('signatures.workflow-document', ['executionId' => $row['firstExecutionId']]) : '' }}"
+                                data-workflow-name="{{ $row['workflowName'] }}"
+                                data-document-title="{{ $row['documentTitle'] }}"
                                 class="inline-flex items-center justify-center h-8 w-8 rounded-lg border {{ $row['actionType'] === 'signature' ? 'border-blue-200 text-blue-600 hover:bg-blue-50' : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50' }} transition"
-                                title="{{ $row['actionType'] === 'signature' ? 'Signer sur la plateforme' : 'Valider sur la plateforme' }}">
+                                title="{{ $row['actionType'] === 'signature' ? 'Signer sur la plateforme' : 'Lire et valider le document' }}">
                                 <i class="fa-solid {{ $row['actionType'] === 'signature' ? 'fa-pen-to-square' : 'fa-circle-check' }} text-sm wf-btn-icon"></i>
                             </button>
                             {{-- Formulaire de repli (local) si API non configurée --}}
@@ -140,6 +144,65 @@
     </div>
     @endif
 </section>
+
+<div id="workflow-validation-modal" class="hidden fixed inset-0 z-[70] bg-black/60 flex items-center justify-center p-4">
+    <div class="w-full max-w-6xl h-[92vh] bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col">
+        <div class="px-6 py-4 border-b border-gray-100 flex items-start justify-between gap-4">
+            <div class="min-w-0">
+                <h3 class="text-lg font-bold text-gray-800">Lecture du document avant validation</h3>
+                <p id="workflow-validation-title" class="text-sm text-gray-500 truncate mt-1"></p>
+            </div>
+            <button type="button" onclick="closeWorkflowValidationModal()" class="h-9 w-9 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 transition">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <div class="flex-1 bg-gray-100">
+            <iframe id="workflow-validation-frame" class="w-full h-full bg-white" src="about:blank" title="Lecture du document"></iframe>
+        </div>
+
+        <div class="px-6 py-4 border-t border-gray-100 bg-white flex items-center justify-between gap-3">
+            <p class="text-xs text-gray-500">Lisez le document puis choisissez Valider ou Refuser.</p>
+            <div class="flex items-center gap-3">
+                <button type="button" onclick="openWorkflowRejectReasonModal()" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition">
+                    <i class="fa-solid fa-ban"></i>
+                    Refuser
+                </button>
+                <button type="button" onclick="submitWorkflowValidationDecision('approve')" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-green-500 hover:bg-green-600 text-white text-sm font-semibold transition">
+                    <i class="fa-solid fa-circle-check"></i>
+                    Valider
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="workflow-reject-reason-modal" class="hidden fixed inset-0 z-[80] bg-black/60 flex items-center justify-center p-4">
+    <div class="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
+        <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between gap-4">
+            <h3 class="text-lg font-bold text-gray-800">Motif du refus</h3>
+            <button type="button" onclick="closeWorkflowRejectReasonModal()" class="h-9 w-9 flex items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 transition">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <div class="px-6 py-5 space-y-3">
+            <p class="text-sm text-gray-600">Ce motif sera envoyé en notification à l'initiateur du workflow.</p>
+            <textarea id="workflow-reject-reason" rows="5" class="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-red-300" placeholder="Expliquez pourquoi vous refusez ce document..."></textarea>
+        </div>
+        <div class="px-6 py-4 border-t border-gray-100 flex items-center justify-end gap-3 bg-gray-50">
+            <button type="button" onclick="closeWorkflowRejectReasonModal()" class="px-4 py-2 rounded-xl bg-white border border-gray-300 text-gray-700 text-sm font-semibold hover:bg-gray-100 transition">Annuler</button>
+            <button type="button" onclick="submitWorkflowValidationDecision('reject')" class="px-4 py-2 rounded-xl bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition">Confirmer le refus</button>
+        </div>
+    </div>
+</div>
+
+<form id="workflow-validation-form" method="POST" action="{{ route('signatures.workflow-action') }}" class="hidden">
+    @csrf
+    <div id="workflow-validation-execution-ids"></div>
+    <input type="hidden" name="action_type" value="validation">
+    <input type="hidden" name="action_decision" id="workflow-validation-decision" value="approve">
+    <input type="hidden" name="reject_reason" id="workflow-validation-reason-input" value="">
+</form>
 
 {{-- section-sign et section-request supprimées --}}
 <div class="hidden">
@@ -465,6 +528,21 @@ if (flash) setTimeout(() => { flash.style.transition='opacity .5s'; flash.style.
 const workflowCreateModal = document.getElementById('modal-create-wf');
 const workflowCreateFrame = document.getElementById('workflow-create-frame');
 const workflowCreateUrl = @json(route('workflows.index', ['create' => 'workflow', 'embedded' => '1']));
+const workflowValidationModal = document.getElementById('workflow-validation-modal');
+const workflowValidationFrame = document.getElementById('workflow-validation-frame');
+const workflowValidationTitle = document.getElementById('workflow-validation-title');
+const workflowValidationExecutionIds = document.getElementById('workflow-validation-execution-ids');
+const workflowValidationDecision = document.getElementById('workflow-validation-decision');
+const workflowValidationReasonInput = document.getElementById('workflow-validation-reason-input');
+const workflowRejectReasonModal = document.getElementById('workflow-reject-reason-modal');
+const workflowRejectReasonField = document.getElementById('workflow-reject-reason');
+
+const workflowValidationState = {
+    executionIds: [],
+    documentUrl: '',
+    workflowName: '',
+    documentTitle: '',
+};
 
 function openWorkflowCreateModal() {
     if (workflowCreateFrame && workflowCreateFrame.dataset.loaded !== '1') {
@@ -481,6 +559,65 @@ function closeWorkflowCreateModal() {
     document.body.style.overflow = '';
 }
 
+function openWorkflowValidationModal(button) {
+    const executionIds = JSON.parse(button.dataset.executionIds || '[]');
+    const documentUrl = button.dataset.documentUrl || '';
+
+    if (!documentUrl) {
+        showNotification('Document indisponible', 'Impossible d\'ouvrir le lecteur PDF pour cette étape.', 'error');
+        return false;
+    }
+
+    workflowValidationState.executionIds = Array.isArray(executionIds) ? executionIds : [];
+    workflowValidationState.documentUrl = documentUrl;
+    workflowValidationState.workflowName = button.dataset.workflowName || 'Workflow';
+    workflowValidationState.documentTitle = button.dataset.documentTitle || 'Document';
+
+    workflowValidationTitle.textContent = `${workflowValidationState.workflowName} - ${workflowValidationState.documentTitle}`;
+    workflowValidationFrame.src = documentUrl;
+    workflowValidationModal.classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    return true;
+}
+
+function closeWorkflowValidationModal() {
+    workflowValidationModal.classList.add('hidden');
+    workflowValidationFrame.src = 'about:blank';
+    closeWorkflowRejectReasonModal();
+    document.body.style.overflow = '';
+}
+
+function openWorkflowRejectReasonModal() {
+    workflowRejectReasonModal.classList.remove('hidden');
+    workflowRejectReasonField.focus();
+}
+
+function closeWorkflowRejectReasonModal() {
+    workflowRejectReasonModal.classList.add('hidden');
+}
+
+function submitWorkflowValidationDecision(decision) {
+    if (!Array.isArray(workflowValidationState.executionIds) || workflowValidationState.executionIds.length === 0) {
+        showNotification('Action impossible', 'Aucune exécution à traiter.', 'error');
+        return;
+    }
+
+    const reason = (workflowRejectReasonField.value || '').trim();
+    if (decision === 'reject' && !reason) {
+        showNotification('Motif requis', 'Veuillez saisir le motif du refus.', 'error');
+        workflowRejectReasonField.focus();
+        return;
+    }
+
+    workflowValidationExecutionIds.innerHTML = workflowValidationState.executionIds
+        .map((executionId) => `<input type="hidden" name="execution_ids[]" value="${String(executionId)}">`)
+        .join('');
+    workflowValidationDecision.value = decision;
+    workflowValidationReasonInput.value = decision === 'reject' ? reason : '';
+
+    document.getElementById('workflow-validation-form').submit();
+}
+
 workflowCreateModal.addEventListener('click', function (e) {
     if (e.target === workflowCreateModal) {
         closeWorkflowCreateModal();
@@ -490,6 +627,15 @@ workflowCreateModal.addEventListener('click', function (e) {
 document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape' && !workflowCreateModal.classList.contains('hidden')) {
         closeWorkflowCreateModal();
+        return;
+    }
+
+    if (e.key === 'Escape' && !workflowValidationModal.classList.contains('hidden')) {
+        if (!workflowRejectReasonModal.classList.contains('hidden')) {
+            closeWorkflowRejectReasonModal();
+        } else {
+            closeWorkflowValidationModal();
+        }
     }
 });
 
@@ -787,11 +933,12 @@ async function wfInboxAction(btn, executionId, actionType) {
     }
     btn.disabled = true;
 
-    // La validation est une action locale : on ne doit pas créer un workflow de signature plateforme.
+    // La validation se fait après lecture du PDF dans un lecteur intégré.
     if (actionType === 'validation') {
-        const localForm = document.getElementById(`wf-local-${executionId}`);
-        if (localForm) {
-            localForm.submit();
+        const opened = openWorkflowValidationModal(btn);
+        if (icon) icon.className = originalClass;
+        btn.disabled = false;
+        if (opened) {
             return;
         }
     }
