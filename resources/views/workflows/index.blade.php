@@ -2550,8 +2550,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (modalMain) {
             const root = modalMain.parentElement;
             if (root) {
+                const keepVisibleIds = new Set(['modal-main', 'zone-modal']);
                 Array.from(root.children).forEach(function (child) {
-                    if (child !== modalMain && child.tagName !== 'SCRIPT') {
+                    if (!keepVisibleIds.has(child.id) && child.tagName !== 'SCRIPT') {
                         child.style.display = 'none';
                     }
                 });

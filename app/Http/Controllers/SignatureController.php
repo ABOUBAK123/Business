@@ -1845,6 +1845,14 @@ class SignatureController extends Controller
             'action_type'  => 'required|in:signature,validation',
         ]);
 
+        // La plateforme de signature ne doit être appelée que pour les étapes de signature.
+        if ($request->input('action_type') !== 'signature') {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Action de validation locale: aucun lien de signature requis.',
+            ], 422);
+        }
+
         $executionId = $request->input('execution_id');
         Log::info('SunnyStamp: getSignatureInviteUrl début', [
             'execution_id' => $executionId,
@@ -1902,6 +1910,13 @@ class SignatureController extends Controller
         $stepObj = $steps->firstWhere('order', (int) ($execution->current_step ?? 1));
         if ($stepObj?->assignee_id && $stepObj->assignee_id !== $userId) {
             return response()->json(['ok' => false, 'message' => 'Ce n\'est pas votre tour.'], 403);
+        }
+
+        if (!$stepObj || !(bool) ($stepObj->requires_signature ?? false)) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Cette étape est une validation, pas une signature.',
+            ], 422);
         }
 
         $document = $execution->document;

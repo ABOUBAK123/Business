@@ -787,6 +787,15 @@ async function wfInboxAction(btn, executionId, actionType) {
     }
     btn.disabled = true;
 
+    // La validation est une action locale : on ne doit pas créer un workflow de signature plateforme.
+    if (actionType === 'validation') {
+        const localForm = document.getElementById(`wf-local-${executionId}`);
+        if (localForm) {
+            localForm.submit();
+            return;
+        }
+    }
+
     try {
         const resp = await fetch(__wfInviteUrl, {
             method: 'POST',
