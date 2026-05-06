@@ -1640,6 +1640,13 @@ class SignatureController extends Controller
             'action_type'  => 'required|in:signature,validation',
         ]);
 
+        $executionId = $request->input('execution_id');
+        Log::info('SunnyStamp: getSignatureInviteUrl début', [
+            'execution_id' => $executionId,
+            'action_type' => $request->input('action_type'),
+            'user_id' => Auth::id(),
+        ]);
+
         $cfg = $this->resolveSignatureConfig();
         if (!$cfg) {
             Log::warning('SunnyStamp: aucune configuration API active pour utilisateur', [
@@ -1717,20 +1724,29 @@ class SignatureController extends Controller
         }
 
         // Stocker le platform_workflow_id dans l'exécution pour le suivi de statut.
+        Log::info('SunnyStamp: avant enregistrement platform_workflow_id', [
+            'execution_id' => $execution->id,
+            'lastPlatformWorkflowId' => $this->lastPlatformWorkflowId,
+            'inviteUrl' => substr($inviteUrl ?? '', 0, 50),
+            'condition' => $this->lastPlatformWorkflowId ? 'TRUE' : 'FALSE',
+        ]);
+
         if ($this->lastPlatformWorkflowId) {
             $execution->update([
                 'platform_workflow_id' => $this->lastPlatformWorkflowId,
                 'platform_status'      => 'started',
             ]);
-            Log::info('SunnyStamp: platform_workflow_id enregistré', [
+            Log::info('SunnyStamp: platform_workflow_id enregistré ✅', [
                 'execution_id' => $execution->id,
                 'platform_workflow_id' => $this->lastPlatformWorkflowId,
+                'updated_at' => now()->toIso8601String(),
             ]);
         } else {
-            Log::warning('SunnyStamp: platform_workflow_id est NULL/vide, pas enregistré', [
+            Log::error('SunnyStamp: platform_workflow_id est NULL/vide ❌, pas enregistré', [
                 'execution_id' => $execution->id,
                 'lastPlatformWorkflowId' => $this->lastPlatformWorkflowId,
                 'action_type' => $request->input('action_type'),
+                'inviteUrl_exists' => is_string($inviteUrl) && $inviteUrl !== '',
             ]);
         }
 
