@@ -1885,7 +1885,16 @@ class SignatureController extends Controller
         }
 
         $endpoint  = rtrim((string) $cfg->endpoint, '/');
-        $apiToken  = (string) $cfg->api_token;
+        $apiToken  = (string) ($cfg->api_key ?? $cfg->api_token ?? '');
+        if ($apiToken === '') {
+            Log::warning('SunnyStamp: getPlatformWorkflowStatus sans token API');
+            return response()->json([
+                'ok'              => true,
+                'local_status'    => $execution->status,
+                'platform_status' => $execution->platform_status,
+                'phase'           => self::mapExecutionPhase($execution->status, $execution->platform_status),
+            ]);
+        }
         $client    = Http::withToken($apiToken)->timeout(10)->acceptJson();
 
         $platformStatus = null;
@@ -2259,7 +2268,7 @@ class SignatureController extends Controller
                 $this->downloadSignedDocumentFromPlatform(
                     $execution->fresh(),
                     rtrim((string) $cfg->endpoint, '/'),
-                    (string) $cfg->api_token,
+                    (string) ($cfg->api_key ?? $cfg->api_token ?? ''),
                     (bool) ($cfg->verify_ssl ?? true)
                 );
             }
