@@ -11,7 +11,7 @@ class Document extends Model
     use HasUuids, SoftDeletes;
 
     protected $fillable = [
-        'title', 'description', 'file_path', 'file_size', 'mime_type',
+        'title', 'description', 'file_path', 'signed_file_path', 'file_size', 'mime_type',
         'status', 'owner_id', 'created_by', 'issuing_administration_id',
         'recipient_administration_id', 'document_number', 'sub_entity_code', 'qr_token', 'signed_at',
     ];

@@ -101,7 +101,16 @@
                     </td>
                     <td class="px-4 py-3 text-gray-500 text-xs">{{ $row['nextActorLabel'] }}</td>
                     <td class="px-4 py-3 text-right">
-                        @if($row['status'] !== 'completed' && count($row['actionableIds']) > 0)
+                        @if($row['status'] === 'completed' && !empty($row['signedFilePath']) && !empty($row['firstExecutionId']))
+                            {{-- Document signé disponible : bouton télécharger --}}
+                            <a href="{{ route('signatures.signed-document', $row['firstExecutionId']) }}"
+                               target="_blank"
+                               class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-green-300 text-green-700 bg-green-50 hover:bg-green-100 text-xs font-semibold transition"
+                               title="Télécharger le document signé">
+                                <i class="fa-solid fa-file-pdf text-sm"></i>
+                                Voir signé
+                            </a>
+                        @elseif($row['status'] !== 'completed' && count($row['actionableIds']) > 0)
                             @php $firstExecId = $row['actionableIds'][0]; @endphp
                             <button
                                 type="button"
@@ -682,9 +691,11 @@ function startPlatformStatusPolling(executionId) {
                 if (phase === 'signing') {
                     showNotification('Signature commencée', 'La page de signature est maintenant active.', 'info');
                 } else if (phase === 'completed') {
-                    showNotification('Workflow terminé', 'Le workflow a été complété avec succès.', 'success');
+                    showNotification('Workflow terminé', 'Le document signé est disponible. Actualisation…', 'success');
                     clearInterval(pollInterval);
                     delete __wfStatusPolls[executionId];
+                    // Recharger la page après 2s pour afficher le bouton "Voir signé"
+                    setTimeout(() => window.location.reload(), 2000);
                 } else if (phase === 'rejected') {
                     showNotification('Workflow refusé', 'Le workflow a été refusé par un signataire.', 'error');
                     clearInterval(pollInterval);

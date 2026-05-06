@@ -307,7 +307,10 @@ class SignatureController extends Controller
 
                 $grouped[$key]['items'][] = [
                     'executionId'   => $exec->id,
+                    'documentId'    => $exec->document_id,
                     'documentTitle' => $exec->document?->title ?? 'Document',
+                    'signedFilePath'=> $exec->document?->signed_file_path ?? null,
+                    'docStatus'     => $exec->document?->status ?? null,
                     'status'        => $status,
                     'progress'      => $progress,
                     'nextActorLabel'=> $nextActorLabel,
@@ -344,6 +347,9 @@ class SignatureController extends Controller
                     'creatorLabel'       => $row['creatorLabel'],
                     'actionType'         => $row['actionType'],
                     'documentTitle'      => count($row['items']) === 1 ? ($representative['documentTitle'] ?? 'Document') : count($row['items']) . ' documents',
+                    'documentId'         => $representative['documentId'] ?? null,
+                    'signedFilePath'     => $representative['signedFilePath'] ?? null,
+                    'firstExecutionId'   => $representative['executionId'] ?? null,
                     'status'             => $rowStatus,
                     'statusLabel'        => $statusLabel,
                     'progress'           => $avgProgress,
@@ -1962,7 +1968,8 @@ class SignatureController extends Controller
                 $updates = ['platform_status' => $platformStatus];
 
                 $doneStatuses = ['finished', 'completed', 'done', 'FINISHED', 'COMPLETED', 'DONE'];
-                if (in_array($platformStatus, $doneStatuses, true) && $execution->status !== 'completed') {
+                $isNowDone = in_array($platformStatus, $doneStatuses, true);
+                if ($isNowDone && $execution->status !== 'completed') {
                     $updates['status']       = 'completed';
                     $updates['completed_at'] = now();
                     if ($execution->document_id) {
@@ -1976,6 +1983,29 @@ class SignatureController extends Controller
 
                 $execution->update($updates);
                 $execution->refresh();
+
+                // Télécharger le document signé depuis la plateforme.
+                if ($isNowDone) {
+                    $this->downloadSignedDocumentFromPlatform(
+                        $execution->fresh(),
+                        $endpoint,
+                        $apiToken,
+                        (bool) ($cfg->verify_ssl ?? true)
+                    );
+                }
+            }
+
+            // Vérifier aussi si déjà completed mais signed_file_path absent (rattrapage).
+            if ($execution->status === 'completed' && $execution->document_id) {
+                $doc = Document::find($execution->document_id);
+                if ($doc && empty($doc->signed_file_path)) {
+                    $this->downloadSignedDocumentFromPlatform(
+                        $execution,
+                        $endpoint,
+                        $apiToken,
+                        (bool) ($cfg->verify_ssl ?? true)
+                    );
+                }
             }
 
             $platformPhase = $platformPhase ?? self::mapExecutionPhase($execution->status, is_string($platformStatus) ? $platformStatus : null);
@@ -1993,6 +2023,120 @@ class SignatureController extends Controller
             'platform_status'     => $platformStatus ?? $execution->platform_status,
             'platform_workflow_id' => $execution->platform_workflow_id,
             'phase'               => $platformPhase ?? self::mapExecutionPhase($execution->status, $execution->platform_status),
+        ]);
+    }
+
+    /**
+     * Télécharge le document signé depuis la plateforme ARTCI-Sign et le sauvegarde localement.
+     * Appelé automatiquement quand le workflow passe à l'état "finished".
+     * GET /api/workflows/{wflId}/downloadDocuments
+     */
+    private function downloadSignedDocumentFromPlatform(WorkflowExecution $execution, string $endpoint, string $token, bool $verifySSL = true): void
+    {
+        $platformWorkflowId = $execution->platform_workflow_id;
+        if (!$platformWorkflowId || !$execution->document_id) {
+            return;
+        }
+
+        $document = Document::find($execution->document_id);
+        if (!$document) {
+            return;
+        }
+
+        // Éviter de re-télécharger si déjà récupéré.
+        if (!empty($document->signed_file_path)) {
+            Log::info('SunnyStamp: document signé déjà téléchargé', [
+                'execution_id' => $execution->id,
+                'signed_file_path' => $document->signed_file_path,
+            ]);
+            return;
+        }
+
+        try {
+            $downloadResp = Http::withToken($token)
+                ->timeout(60)
+                ->when(!$verifySSL, fn($h) => $h->withoutVerifying())
+                ->get("{$endpoint}/api/workflows/{$platformWorkflowId}/downloadDocuments");
+
+            Log::info('SunnyStamp: téléchargement document signé', [
+                'execution_id'       => $execution->id,
+                'platform_workflow_id' => $platformWorkflowId,
+                'http_status'        => $downloadResp->status(),
+                'content_type'       => $downloadResp->header('Content-Type'),
+                'content_length'     => $downloadResp->header('Content-Length'),
+            ]);
+
+            if (!$downloadResp->successful()) {
+                Log::error('SunnyStamp: échec téléchargement document signé', [
+                    'execution_id' => $execution->id,
+                    'status'       => $downloadResp->status(),
+                    'body_excerpt' => substr($downloadResp->body(), 0, 300),
+                ]);
+                return;
+            }
+
+            $pdfContent = $downloadResp->body();
+            if (empty($pdfContent) || strlen($pdfContent) < 100) {
+                Log::warning('SunnyStamp: document signé vide ou trop petit', [
+                    'execution_id' => $execution->id,
+                    'size' => strlen($pdfContent),
+                ]);
+                return;
+            }
+
+            // Sauvegarder dans storage/app/public/signed_documents/
+            $originalName = pathinfo($document->file_path ?? 'document.pdf', PATHINFO_FILENAME);
+            $filename     = 'signed_' . $originalName . '_' . now()->format('Ymd_His') . '.pdf';
+            $storagePath  = 'signed_documents/' . $filename;
+
+            Storage::disk('public')->makeDirectory('signed_documents');
+            Storage::disk('public')->put($storagePath, $pdfContent);
+
+            // Mettre à jour le document en base.
+            $document->update([
+                'signed_file_path' => $storagePath,
+                'status'           => 'signed',
+                'signed_at'        => now(),
+            ]);
+
+            Log::info('SunnyStamp: document signé sauvegardé ✅', [
+                'execution_id'     => $execution->id,
+                'document_id'      => $document->id,
+                'signed_file_path' => $storagePath,
+                'file_size'        => strlen($pdfContent),
+            ]);
+
+        } catch (\Throwable $e) {
+            Log::error('SunnyStamp: exception téléchargement document signé', [
+                'execution_id' => $execution->id,
+                'error'        => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Sert le document signé téléchargé depuis la plateforme.
+     * GET /signatures/signed-document/{executionId}
+     */
+    public function serveSignedDocument(string $executionId): \Symfony\Component\HttpFoundation\Response
+    {
+        $execution = WorkflowExecution::find($executionId);
+        if (!$execution) {
+            abort(404, 'Exécution introuvable.');
+        }
+
+        $document = $execution->document_id ? Document::find($execution->document_id) : null;
+        if (!$document || empty($document->signed_file_path)) {
+            abort(404, 'Document signé non disponible.');
+        }
+
+        if (!Storage::disk('public')->exists($document->signed_file_path)) {
+            abort(404, 'Fichier introuvable sur le serveur.');
+        }
+
+        $filename = 'signed_' . Str::slug($document->title ?? 'document') . '.pdf';
+        return Storage::disk('public')->download($document->signed_file_path, $filename, [
+            'Content-Type' => 'application/pdf',
         ]);
     }
 
@@ -2105,6 +2249,20 @@ class SignatureController extends Controller
 
         if (!empty($updates)) {
             $execution->update($updates);
+        }
+
+        // Télécharger le document signé si le workflow vient de se terminer.
+        $justCompleted = !empty($updates['status']) && $updates['status'] === 'completed';
+        if ($justCompleted) {
+            $cfg = $this->resolveSignatureConfig();
+            if ($cfg) {
+                $this->downloadSignedDocumentFromPlatform(
+                    $execution->fresh(),
+                    rtrim((string) $cfg->endpoint, '/'),
+                    (string) $cfg->api_token,
+                    (bool) ($cfg->verify_ssl ?? true)
+                );
+            }
         }
 
         Log::info('SunnyStamp: webhook traité', [
