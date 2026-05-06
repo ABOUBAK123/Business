@@ -14,5 +14,5 @@ class WorkflowExecution extends Model
     protected $casts = ['step_data' => 'array', 'started_at' => 'datetime', 'completed_at' => 'datetime'];
 
     public function workflow() { return $this->belongsTo(Workflow::class); }
-    public function document() { return $this->belongsTo(Document::class); }
+    public function document() { return $this->belongsTo(Document::class)->withTrashed(); }
 }
