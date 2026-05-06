@@ -12,6 +12,7 @@ return new class extends Migration
         Schema::create('personnel_employees', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('user_id')->nullable()->index();
+            $table->uuid('linked_user_id')->nullable()->index();
             $table->char('sub_entity_id', 36)->nullable()->index();
             $table->string('administration_type', 20)->default('emitter');
             $table->string('administration_id', 36)->nullable();

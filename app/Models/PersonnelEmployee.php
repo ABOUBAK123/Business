@@ -17,6 +17,7 @@ class PersonnelEmployee extends Model
 
     protected $fillable = [
         'user_id',
+        'linked_user_id',
         'sub_entity_id',
         'administration_type',
         'administration_id',
@@ -51,6 +52,11 @@ class PersonnelEmployee extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function linkedUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'linked_user_id');
     }
 
     public function subEntity(): BelongsTo

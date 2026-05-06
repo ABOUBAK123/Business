@@ -779,15 +779,15 @@ class AdminController extends Controller
                 )->get();
 
                 $connectedPersonnelEmployee = $this->applyPersonnelScope(
-                    PersonnelEmployee::with(['documents', 'user', 'subEntity'])
-                        ->where('user_id', $connectedUser?->id),
+                    PersonnelEmployee::with(['documents', 'user', 'linkedUser', 'subEntity'])
+                        ->where('linked_user_id', $connectedUser?->id),
                     $adminScope
                 )->first();
 
                 if ($agentSpaceCanSearchAll) {
                     $selectedPersonnelEmployee = request('selected_employee')
                         ? $this->applyPersonnelScope(
-                            PersonnelEmployee::with(['documents', 'user', 'subEntity'])->whereKey(request('selected_employee')),
+                            PersonnelEmployee::with(['documents', 'user', 'linkedUser', 'subEntity'])->whereKey(request('selected_employee')),
                             $adminScope
                         )->first()
                         : null;
@@ -1006,7 +1006,8 @@ class AdminController extends Controller
             'administration_type' => ['required', 'in:emitter,recipient'],
             'administration_id' => ['required', 'string'],
             'sub_entity_id' => ['nullable', 'string'],
-            'user_id' => ['nullable', 'string'],
+            'user_id' => ['nullable', 'string', 'exists:users,id'],
+            'linked_user_id' => ['nullable', 'string', 'exists:users,id'],
             'employee_number' => ['nullable', 'string', 'max:100'],
             'first_name' => ['required', 'string', 'max:150'],
             'last_name' => ['required', 'string', 'max:150'],
@@ -1057,7 +1058,8 @@ class AdminController extends Controller
             'administration_type' => ['required', 'in:emitter,recipient'],
             'administration_id' => ['required', 'string'],
             'sub_entity_id' => ['nullable', 'string'],
-            'user_id' => ['nullable', 'string'],
+            'user_id' => ['nullable', 'string', 'exists:users,id'],
+            'linked_user_id' => ['nullable', 'string', 'exists:users,id'],
             'employee_number' => ['nullable', 'string', 'max:100'],
             'first_name' => ['required', 'string', 'max:150'],
             'last_name' => ['required', 'string', 'max:150'],
@@ -1099,6 +1101,91 @@ class AdminController extends Controller
             'personnel_tab' => $request->input('personnel_tab', 'employees'),
             'selected_employee' => $employee->id,
         ])->with('success', 'Fiche employé mise à jour.');
+    }
+
+    public function createUserFromPersonnelEmployee(Request $request, PersonnelEmployee $employee)
+    {
+        $this->abortIfPersonnelEmployeeOutsideScope($employee);
+
+        if ($employee->linked_user_id) {
+            return redirect()->route('admin.index', [
+                'tab' => 'personnel',
+                'personnel_tab' => $request->input('personnel_tab', 'employees'),
+                'selected_employee' => $employee->id,
+            ])->with('error', 'Cette fiche employé est déjà liée à un compte utilisateur.');
+        }
+
+        $email = trim((string) ($employee->email ?? ''));
+        if ($email === '') {
+            return redirect()->route('admin.index', [
+                'tab' => 'personnel',
+                'personnel_tab' => $request->input('personnel_tab', 'employees'),
+                'selected_employee' => $employee->id,
+            ])->with('error', 'Impossible de créer le compte utilisateur sans adresse e-mail sur la fiche employé.');
+        }
+
+        $existingUser = User::query()->where('email', $email)->first();
+        if ($existingUser) {
+            $employee->update(['linked_user_id' => $existingUser->id]);
+
+            return redirect()->route('admin.index', [
+                'tab' => 'personnel',
+                'personnel_tab' => $request->input('personnel_tab', 'employees'),
+                'selected_employee' => $employee->id,
+            ])->with('success', 'Un compte utilisateur existant a été retrouvé via l\'e-mail et lié à la fiche employé.');
+        }
+
+        $selectedProfileId = AdministrationProfile::query()
+            ->where('administration_id', $employee->administration_id)
+            ->where('administration_type', $employee->administration_type)
+            ->orderBy('name')
+            ->value('id');
+
+        $temporaryPassword = Str::random(12);
+        $userPayload = [
+            'name' => $employee->full_name !== '' ? $employee->full_name : trim(($employee->first_name ?? '') . ' ' . ($employee->last_name ?? '')),
+            'full_name' => $employee->full_name !== '' ? $employee->full_name : trim(($employee->first_name ?? '') . ' ' . ($employee->last_name ?? '')),
+            'email' => $email,
+            'password' => Hash::make($temporaryPassword),
+            'role' => 'user',
+            'profile_id' => $selectedProfileId,
+            'status' => 'active',
+            'quota' => null,
+            'locale' => 'fr',
+        ];
+
+        try {
+            $user = User::create($userPayload);
+        } catch (QueryException $e) {
+            $msg = strtolower($e->getMessage());
+            if (str_contains($msg, 'unknown column') && str_contains($msg, 'locale')) {
+                unset($userPayload['locale']);
+                $user = User::create($userPayload);
+            } else {
+                throw $e;
+            }
+        }
+
+        $subEntity = $employee->sub_entity_id ? SubEntity::find($employee->sub_entity_id) : null;
+        $admin = $employee->administration_type === 'emitter'
+            ? IssuingAdministration::find($employee->administration_id)
+            : RecipientAdministration::find($employee->administration_id);
+
+        UserDirectionAssignment::create([
+            'user_id' => $user->id,
+            'direction_scope_type' => $employee->administration_type,
+            'direction_scope_id' => $employee->administration_id,
+            'sub_entity_code' => $subEntity?->code ?? null,
+            'direction_label' => $subEntity?->name ?? $admin?->name ?? '',
+        ]);
+
+        $employee->update(['linked_user_id' => $user->id]);
+
+        return redirect()->route('admin.index', [
+            'tab' => 'personnel',
+            'personnel_tab' => $request->input('personnel_tab', 'employees'),
+            'selected_employee' => $employee->id,
+        ])->with('success', 'Compte utilisateur créé et lié à la fiche employé. Mot de passe temporaire : ' . $temporaryPassword);
     }
 
     public function downloadPersonnelEmployeesTemplate()
@@ -1579,7 +1666,7 @@ class AdminController extends Controller
         $employee = PersonnelEmployee::findOrFail($validated['employee_id']);
         $leaveType = PersonnelLeaveType::findOrFail($validated['leave_type_id']);
 
-        if (!$this->canSearchAgentSpaceForUser(auth()->user()) && (string) $employee->user_id !== (string) auth()->id()) {
+        if (!$this->canSearchAgentSpaceForUser(auth()->user()) && (string) $employee->linked_user_id !== (string) auth()->id()) {
             throw ValidationException::withMessages([
                 'employee_id' => 'Vous ne pouvez soumettre que vos propres demandes depuis l\'espace agent.',
             ]);

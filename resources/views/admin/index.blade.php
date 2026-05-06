@@ -368,6 +368,12 @@ $_oc = [
     </div>
 
     @php $empMeta = $editingPersonnel?->metadata ?? []; @endphp
+    @if($editingPersonnel)
+    <form id="create-linked-user-form" method="POST" action="{{ route('admin.personnel.employees.create-user', $editingPersonnel) }}" class="hidden">
+      @csrf
+      <input type="hidden" name="personnel_tab" value="employees">
+    </form>
+    @endif
     <form method="POST" action="{{ $editingPersonnel ? route('admin.personnel.employees.update', $editingPersonnel) : route('admin.personnel.employees.store') }}" class="space-y-6">
       @csrf
       @if($editingPersonnel)
@@ -500,13 +506,18 @@ $_oc = [
             <select id="select_sous_direction" name="meta_sous_direction" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
               <option value="">Sélectionner</option>
             </select>
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Service</label>
+            <select id="select_service" name="meta_service" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+              <option value="">Sélectionner</option>
+            </select>
             <script>
             (function () {
               var allEntities = {!! $allSubEntitiesJson !!};
               var currentVal  = @json($currentSousDir);
               var selDC  = document.getElementById('select_direction_centrale');
               var selSD  = document.getElementById('select_sous_direction');
-
               var selSVC = document.getElementById('select_service');
               var currentSVC = @json(old('meta_service', $empMeta['service'] ?? ''));
 
@@ -540,12 +551,10 @@ $_oc = [
                     selSD.appendChild(opt);
                   }
                 });
-                // populate service based on restored sous-direction
                 var selSDOpt = selSD.options[selSD.selectedIndex];
                 populateService(selSDOpt ? (selSDOpt.dataset.code || '') : '');
               }
 
-              // Init on page load
               var initOpt = selDC.options[selDC.selectedIndex];
               populateSousDirection(initOpt ? (initOpt.dataset.code || '') : '');
 
@@ -560,12 +569,6 @@ $_oc = [
               });
             })();
             </script>
-          </div>
-          <div>
-            <label class="block text-sm font-semibold text-gray-700 mb-1">Service</label>
-            <select id="select_service" name="meta_service" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
-              <option value="">Sélectionner</option>
-            </select>
           </div>
           <div>
             <label class="block text-sm font-semibold text-gray-700 mb-1">Catégorie</label>
@@ -618,6 +621,30 @@ $_oc = [
               <option value="{{ $u->id }}" {{ old('user_id', $editingPersonnel->user_id ?? '') === $u->id ? 'selected' : '' }}>{{ $u->name }} - {{ $u->email }}</option>
               @endforeach
             </select>
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Compte utilisateur</label>
+            <select name="linked_user_id" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+              <option value="">Aucun compte lié</option>
+              @foreach($allUsers as $u)
+              <option value="{{ $u->id }}" {{ old('linked_user_id', $editingPersonnel->linked_user_id ?? '') === $u->id ? 'selected' : '' }}>{{ $u->name }} - {{ $u->email }}</option>
+              @endforeach
+            </select>
+            @if($editingPersonnel)
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+              @if($editingPersonnel->linked_user_id)
+              <span class="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100 px-3 py-1 text-xs font-semibold">Compte utilisateur déjà lié</span>
+              @elseif(!empty($editingPersonnel->email))
+              <button type="submit" form="create-linked-user-form" class="inline-flex items-center gap-2 px-3 py-2 rounded-xl bg-[#2453d6] text-white text-xs font-semibold hover:bg-[#1d43ad]">
+                <i class="fas fa-user-plus"></i>
+                Créer le compte utilisateur
+              </button>
+              <span class="text-xs text-gray-500">Le compte sera créé à partir du nom, de l'e-mail et de l'administration de l'employé.</span>
+              @else
+              <span class="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2">Renseignez d'abord l'e-mail de l'employé pour créer son compte utilisateur.</span>
+              @endif
+            </div>
+            @endif
           </div>
           <div class="md:col-span-2">
             <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.employees.form_sub_entity') }}</label>

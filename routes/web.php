@@ -309,6 +309,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/personnel/employees/template', [AdminController::class, 'downloadPersonnelEmployeesTemplate'])->name('personnel.employees.template');
         Route::post('/personnel/employees/import', [AdminController::class, 'importPersonnelEmployees'])->name('personnel.employees.import');
         Route::put('/personnel/employees/{employee}', [AdminController::class, 'updatePersonnelEmployee'])->name('personnel.employees.update');
+        Route::post('/personnel/employees/{employee}/create-user', [AdminController::class, 'createUserFromPersonnelEmployee'])->name('personnel.employees.create-user');
         Route::post('/personnel/employees/{employee}/documents', [AdminController::class, 'uploadPersonnelEmployeeDocument'])->name('personnel.employees.documents.store');
         Route::post('/personnel/employee-skills', [AdminController::class, 'storePersonnelEmployeeSkill'])->name('personnel.employees.skills.store');
         Route::get('/personnel/documents/{document}/download', [AdminController::class, 'downloadPersonnelEmployeeDocument'])->name('personnel.documents.download');

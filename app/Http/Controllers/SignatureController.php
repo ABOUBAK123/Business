@@ -271,7 +271,7 @@ class SignatureController extends Controller
      */
     private static function resolveRecipientPhone(User $user): ?string
     {
-        $employee = PersonnelEmployee::where('user_id', $user->id)->first();
+        $employee = PersonnelEmployee::where('linked_user_id', $user->id)->first();
 
         $candidate = (string) (
             $employee?->phone
