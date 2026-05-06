@@ -1049,8 +1049,24 @@ class SignatureController extends Controller
             ]);
             return null;
         }
-        $workflowId = $wflResp->json('id');
-        $this->lastPlatformWorkflowId = is_string($workflowId) ? $workflowId : null;
+
+        // Extraire l'ID du workflow depuis la réponse (clés variées selon le tenant)
+        $wflRespJson = $wflResp->json();
+        $workflowId = $wflRespJson['id']
+            ?? $wflRespJson['workflowId']
+            ?? $wflRespJson['workflow_id']
+            ?? ($wflRespJson['workflow']['id'] ?? null)
+            ?? null;
+
+        if (!is_string($workflowId) || $workflowId === '') {
+            $this->lastPlatformError = 'create_workflow: ID du workflow non trouvé dans la réponse API - ' . self::formatApiErrorDetail($wflResp);
+            Log::error('SunnyStamp: ID workflow absent', [
+                'response' => $wflResp->json(),
+            ]);
+            return null;
+        }
+
+        $this->lastPlatformWorkflowId = $workflowId;
 
         // 2. Uploader le document PDF
         $filePath = trim((string) ($document->file_path ?? ''));
@@ -1706,6 +1722,16 @@ class SignatureController extends Controller
                 'platform_workflow_id' => $this->lastPlatformWorkflowId,
                 'platform_status'      => 'started',
             ]);
+            Log::info('SunnyStamp: platform_workflow_id enregistré', [
+                'execution_id' => $execution->id,
+                'platform_workflow_id' => $this->lastPlatformWorkflowId,
+            ]);
+        } else {
+            Log::warning('SunnyStamp: platform_workflow_id est NULL/vide, pas enregistré', [
+                'execution_id' => $execution->id,
+                'lastPlatformWorkflowId' => $this->lastPlatformWorkflowId,
+                'action_type' => $request->input('action_type'),
+            ]);
         }
 
         return response()->json([
@@ -1926,7 +1952,33 @@ class SignatureController extends Controller
     }
 
     /**
-     * Mappe le statut local + plateforme vers une phase lisible côté frontend.
+     * Endpoint de diagnostic — check colonne platform_workflow_id dans DB
+     * GET /api/signature/diag/{executionId}
+     */
+    public function diagExecution(string $executionId): JsonResponse
+    {
+        $execution = WorkflowExecution::find($executionId);
+        if (!$execution) {
+            return response()->json(['ok' => false, 'message' => 'Execution introuvable']);
+        }
+
+        return response()->json([
+            'ok'                  => true,
+            'execution_id'        => $execution->id,
+            'workflow_id'         => $execution->workflow_id,
+            'document_id'         => $execution->document_id,
+            'current_step'        => $execution->current_step,
+            'status'              => $execution->status,
+            'platform_workflow_id' => $execution->platform_workflow_id,
+            'platform_status'     => $execution->platform_status,
+            'step_data'           => $execution->step_data,
+            'started_at'          => $execution->started_at?->toIso8601String(),
+            'completed_at'        => $execution->completed_at?->toIso8601String(),
+        ]);
+    }
+
+    /**
+     * Endpoint de diagnostic — test webhook manuellement
      */
     private static function mapExecutionPhase(string $localStatus, ?string $platformStatus): string
     {

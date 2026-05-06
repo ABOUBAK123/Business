@@ -24,6 +24,9 @@ return Application::configure(basePath: dirname(__DIR__))
             'e-administration_laravel/api/oo-callback/*',
             'e-administration_laravel/public/api/oo-callback/*',
             'api/signature/platform-webhook',
+            'e-administration_laravel/api/signature/platform-webhook',
+            'e-administration_laravel/public/api/signature/platform-webhook',
+            'public/api/signature/platform-webhook',
         ]);
         $middleware->alias([
             'admin' => \App\Http\Middleware\EnsureAdmin::class,

@@ -653,7 +653,9 @@ function startPlatformStatusPolling(executionId) {
                 headers: {
                     'Accept': 'application/json',
                     'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]')?.content || '',
                 },
+                credentials: 'same-origin',
             });
 
             if (!resp.ok) {

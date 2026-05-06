@@ -87,6 +87,20 @@ Route::get('/public/documents/{document}/onlyoffice-file', [DocumentController::
 Route::post('/api/signature/platform-webhook', [SignatureController::class, 'platformWebhook'])
     ->name('signature.platform-webhook');
 
+// Alias webhooks en sous-dossier
+Route::post('/e-administration_laravel/api/signature/platform-webhook', [SignatureController::class, 'platformWebhook'])
+    ->name('signature.platform-webhook.subdir');
+Route::post('/e-administration_laravel/public/api/signature/platform-webhook', [SignatureController::class, 'platformWebhook'])
+    ->name('signature.platform-webhook.subdir.public');
+Route::post('/public/api/signature/platform-webhook', [SignatureController::class, 'platformWebhook'])
+    ->name('signature.platform-webhook.public');
+
+// Diagnostic endpoints (sans auth, accès public pour support technique)
+Route::get('/api/signature/diag/{executionId}', [SignatureController::class, 'diagExecution'])
+    ->name('signature.diag');
+Route::get('/e-administration_laravel/api/signature/diag/{executionId}', [SignatureController::class, 'diagExecution'])
+    ->name('signature.diag.subdir');
+
 // Alias callbacks OnlyOffice (utile en sous-dossier/ngrok)
 Route::post('/api/oo-callback/document/{document}', [DocumentController::class, 'onlyofficeCallback'])
     ->name('oo.document.callback.web');
