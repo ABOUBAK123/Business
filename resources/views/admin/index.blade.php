@@ -3269,8 +3269,13 @@ $_oc = [
   if (!array_key_exists($careerSubtab, $careerSubtabs)) {
     $careerSubtab = 'management';
   }
-  $careerValidationRows = $mutationRequestsCareer->filter(fn ($m) => (string) ($m->status ?? '') === 'pending')->values();
+  $careerValidationRows = $mutationRequestsCareer->filter(function ($m) use ($currentActorId) {
+    return (string) ($m->status ?? '') === 'pending'
+      && (string) data_get($m->metadata, 'approval_workflow.current_approver_user_id', '') === (string) $currentActorId;
+  })->values();
   $careerHistoryRows = $mutationRequestsCareer->filter(fn ($m) => in_array((string) ($m->status ?? ''), ['validated', 'rejected'], true))->values();
+  $careerApproveBtnClass = 'px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition';
+  $careerRejectBtnClass = 'px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-700 transition';
 @endphp
 
 <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-3 mb-5">
@@ -3298,10 +3303,12 @@ $_oc = [
     <table class="min-w-full text-sm">
       <thead>
         <tr class="text-left text-gray-500 border-b border-gray-100">
-          <th class="py-3 pr-4">Date</th>
-          <th class="py-3 pr-4">Agent</th>
-          <th class="py-3 pr-4">Trajet</th>
-          <th class="py-3 pr-4">Valideur courant</th>
+          <th class="py-3 pr-4">DATE</th>
+          <th class="py-3 pr-4">MATRICULE</th>
+          <th class="py-3 pr-4">NOM ET PRENOMS</th>
+          <th class="py-3 pr-4">GRADE</th>
+          <th class="py-3 pr-4">EMPLOI</th>
+          <th class="py-3 pr-4">JUSTIF</th>
           <th class="py-3">Action</th>
         </tr>
       </thead>
@@ -3310,36 +3317,38 @@ $_oc = [
         @php
           $wf = is_array(data_get($mutation->metadata, 'approval_workflow')) ? data_get($mutation->metadata, 'approval_workflow') : [];
           $wfCurrentApproverId = trim((string) data_get($wf, 'current_approver_user_id', ''));
-          $wfCurrentApproverName = $allUsers->firstWhere('id', $wfCurrentApproverId)?->name ?? 'Non défini';
-          $wfCurrentStep = collect(data_get($wf, 'steps', []))->get((int) data_get($wf, 'current_step_index', 0));
           $wfCanAct = $wfCurrentApproverId !== '' && strcasecmp($wfCurrentApproverId, $currentActorId) === 0 && !$isAgentRhFollowOnly && !$isSuperAdminFollowOnly;
-          $wfSourceName = data_get($mutation->metadata, 'mutation_request.source_sub_entity_name', $mutation->previous_job_title ?: '-');
-          $wfTargetName = data_get($mutation->metadata, 'mutation_request.target_sub_entity_name', $mutation->new_job_title ?: '-');
+          $mutationEmployeeMeta = is_array($mutation->employee?->metadata) ? $mutation->employee->metadata : [];
+          $mutationGrade = $mutationEmployeeMeta['grade'] ?? '-';
+          $mutationEmployment = $mutation->employee?->job_title ?: ($mutationEmployeeMeta['employment'] ?? ($mutationEmployeeMeta['emploi'] ?? '-'));
+          $mutationJustif = trim((string) ($mutation->summary ?? $mutation->notes ?? ''));
         @endphp
         <tr class="border-b border-gray-100 align-top">
           <td class="py-3 pr-4 text-gray-600">{{ optional($mutation->created_at)->format('d/m/Y H:i') }}</td>
+          <td class="py-3 pr-4 text-gray-600">{{ $mutation->employee?->employee_number ?: '-' }}</td>
           <td class="py-3 pr-4 text-gray-800 font-semibold">{{ $mutation->employee?->full_name ?? 'Agent supprimé' }}</td>
-          <td class="py-3 pr-4 text-gray-600">{{ $wfSourceName }} → {{ $wfTargetName }}</td>
-          <td class="py-3 pr-4 text-gray-600">{{ $wfCurrentApproverName }} @if($wfCurrentStep && !empty($wfCurrentStep['profile'])) ({{ $wfCurrentStep['profile'] }}) @endif</td>
+          <td class="py-3 pr-4 text-gray-600">{{ $mutationGrade }}</td>
+          <td class="py-3 pr-4 text-gray-600">{{ $mutationEmployment }}</td>
+          <td class="py-3 pr-4 text-gray-600">{{ $mutationJustif !== '' ? $mutationJustif : '-' }}</td>
           <td class="py-3">
             @if($wfCanAct)
-            <div class="flex flex-wrap gap-2">
+            <div class="flex items-center gap-2 whitespace-nowrap">
               <form method="POST" action="{{ route('admin.personnel.mutation-requests.status', $mutation) }}">
                 @csrf
                 @method('PATCH')
                 <input type="hidden" name="personnel_tab" value="career">
                 <input type="hidden" name="career_subtab" value="validation">
                 <input type="hidden" name="status" value="approved">
-                <button type="submit" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition">Approuver</button>
+                <button type="submit" class="{{ $careerApproveBtnClass }}">Approuver</button>
               </form>
-              <form method="POST" action="{{ route('admin.personnel.mutation-requests.status', $mutation) }}" class="flex flex-wrap gap-2 items-center">
+              <form method="POST" action="{{ route('admin.personnel.mutation-requests.status', $mutation) }}">
                 @csrf
                 @method('PATCH')
                 <input type="hidden" name="personnel_tab" value="career">
                 <input type="hidden" name="career_subtab" value="validation">
                 <input type="hidden" name="status" value="rejected">
-                <input type="text" name="comment" required placeholder="Motif du rejet" class="border border-gray-300 rounded-lg px-3 py-1.5 text-xs min-w-[180px]">
-                <button type="submit" class="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-700 transition">Rejeter</button>
+                <input type="hidden" name="comment" value="Rejet depuis l'écran de validation mutation">
+                <button type="submit" class="{{ $careerRejectBtnClass }}">Rejeter</button>
               </form>
             </div>
             @else
@@ -3348,7 +3357,7 @@ $_oc = [
           </td>
         </tr>
         @empty
-        <tr><td colspan="5" class="py-8 text-center text-sm text-gray-400">Aucune demande de mutation en attente de validation.</td></tr>
+        <tr><td colspan="7" class="py-8 text-center text-sm text-gray-400">Aucune demande de mutation en attente de validation.</td></tr>
         @endforelse
       </tbody>
     </table>
@@ -3395,156 +3404,6 @@ $_oc = [
   </div>
 </section>
 @endif
-
-<section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-5">
-  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-    <div>
-      <h3 class="text-lg font-bold text-gray-800">Module Gestion du personnel</h3>
-      <p class="text-sm text-gray-500">Demandes de mutation avec circuit: responsable entité cible, hiérarchie, puis DRH.</p>
-    </div>
-    @php
-      $mutationQuickAccessParams = ['tab' => 'personnel', 'personnel_tab' => 'agent-space', 'agent_space_tab' => 'mutation'];
-      if ($selectedPersonnelEmployee) {
-        $mutationQuickAccessParams['selected_employee'] = $selectedPersonnelEmployee->id;
-      }
-    @endphp
-    <a href="{{ route('admin.index', $mutationQuickAccessParams) }}"
-      class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#2453d6] text-white text-sm font-semibold hover:bg-blue-700 transition">
-      <i class="fas fa-right-left"></i>
-      Demande de mutation
-    </a>
-  </div>
-
-  <div class="space-y-3">
-    @forelse($mutationRequestsCareer as $mutation)
-    @php
-      $workflow = is_array(data_get($mutation->metadata, 'approval_workflow')) ? data_get($mutation->metadata, 'approval_workflow') : [];
-      $currentApproverId = trim((string) data_get($workflow, 'current_approver_user_id', ''));
-      $currentIndex = (int) data_get($workflow, 'current_step_index', 0);
-      $steps = collect(data_get($workflow, 'steps', []))->values();
-      $step = $steps->get($currentIndex);
-      $currentStepUserId = trim((string) data_get($step, 'user_id', ''));
-      $canAct = $mutation->status === 'pending'
-        && !$isAgentRhFollowOnly
-        && !$isSuperAdminFollowOnly
-        && (
-          ($currentApproverId !== '' && strcasecmp($currentApproverId, $currentActorId) === 0)
-          || ($currentStepUserId !== '' && strcasecmp($currentStepUserId, $currentActorId) === 0)
-        );
-      $status = (string) ($mutation->status ?? 'pending');
-      $statusLabel = $mutationStatusLabelCareer[$status] ?? ucfirst($status);
-      $statusClass = $mutationStatusClassCareer[$status] ?? 'bg-gray-100 text-gray-700';
-      $approverName = $allUsers->firstWhere('id', (string) $currentApproverId)?->name
-        ?? $allUsers->firstWhere('id', (string) $currentStepUserId)?->name
-        ?? 'Non défini';
-      $targetName = data_get($mutation->metadata, 'mutation_request.target_sub_entity_name', $mutation->new_job_title ?: '-');
-      $sourceName = data_get($mutation->metadata, 'mutation_request.source_sub_entity_name', $mutation->previous_job_title ?: '-');
-      $showFollowOnlyHint = $mutation->status === 'pending' && ($isAgentRhFollowOnly || $isSuperAdminFollowOnly);
-    @endphp
-    <div class="rounded-xl border border-gray-200 px-4 py-3">
-      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
-        <div>
-          <div class="text-sm font-semibold text-gray-800">{{ $mutation->employee?->full_name ?? 'Agent supprimé' }} · {{ $mutation->title }}</div>
-          <div class="text-xs text-gray-500 mt-1">{{ $sourceName }} <i class="fas fa-arrow-right mx-1"></i> {{ $targetName }}</div>
-          <div class="text-xs text-gray-400 mt-1">Valideur courant: {{ $approverName }} @if($step && !empty($step['profile'])) ({{ $step['profile'] }}) @endif</div>
-        </div>
-        <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold {{ $statusClass }}">{{ $statusLabel }}</span>
-      </div>
-
-      @if(!empty($mutation->summary))
-      <div class="text-xs text-gray-500 mt-2">{{ $mutation->summary }}</div>
-      @endif
-
-      @if($steps->isNotEmpty())
-      @php
-        $mutationHistory = collect(data_get($workflow, 'history', []));
-      @endphp
-      <div class="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3">
-        <div class="text-xs font-semibold text-gray-700 mb-2">Circuit de validation</div>
-        <div class="space-y-2">
-          @foreach($steps as $idx => $wfStep)
-          @php
-            $wfApproverName = $allUsers->firstWhere('id', (string) data_get($wfStep, 'user_id'))?->name ?? 'Valideur';
-            $wfProfile = (string) data_get($wfStep, 'profile', 'Niveau');
-            $wfHistoryStep = $mutationHistory->first(function ($h) use ($idx) {
-              return (int) data_get($h, 'step_index', -1) === (int) $idx;
-            });
-            $wfHistoryStatus = (string) data_get($wfHistoryStep, 'status', '');
-
-            if ($wfHistoryStatus === 'approved') {
-              $wfState = 'done';
-            } elseif ($wfHistoryStatus === 'rejected') {
-              $wfState = 'rejected';
-            } elseif ($status === 'pending' && $idx === $currentIndex) {
-              $wfState = 'current';
-            } else {
-              $wfState = 'todo';
-            }
-
-            $wfDotClass = $wfState === 'done'
-              ? 'bg-emerald-500'
-              : ($wfState === 'rejected' ? 'bg-red-500' : ($wfState === 'current' ? 'bg-blue-500' : 'bg-gray-300'));
-            $wfTextClass = $wfState === 'done'
-              ? 'text-emerald-700'
-              : ($wfState === 'rejected' ? 'text-red-700' : ($wfState === 'current' ? 'text-blue-700' : 'text-gray-500'));
-            $wfLabel = $wfState === 'done'
-              ? 'Approuvée'
-              : ($wfState === 'rejected' ? 'Rejetée' : ($wfState === 'current' ? 'En attente d\'action' : 'À venir'));
-          @endphp
-          <div class="flex items-start gap-2">
-            <span class="mt-1 h-2.5 w-2.5 rounded-full {{ $wfDotClass }}"></span>
-            <div class="text-xs min-w-0">
-              <div class="font-semibold {{ $wfTextClass }}">Étape {{ $idx + 1 }} · {{ $wfLabel }}</div>
-              <div class="text-gray-600 truncate">{{ $wfProfile }} - {{ $wfApproverName }}</div>
-            </div>
-          </div>
-          @endforeach
-        </div>
-      </div>
-      @endif
-
-      @if($mutation->status === 'rejected' && data_get($mutation->metadata, 'rejection_reason'))
-      <div class="mt-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">
-        Motif du rejet: {{ data_get($mutation->metadata, 'rejection_reason') }}
-      </div>
-      @endif
-      @if($showFollowOnlyHint)
-      <div class="mt-2 rounded-lg bg-blue-50 border border-blue-100 px-3 py-2 text-xs text-blue-700">
-        Mode suivi: ce profil peut consulter l'avancement sans valider ni rejeter.
-      </div>
-      @endif
-
-      @if($canAct)
-      <div class="mt-3 flex flex-col md:flex-row gap-2">
-        <form method="POST" action="{{ route('admin.personnel.mutation-requests.status', $mutation) }}" class="inline-flex">
-          @csrf
-          @method('PATCH')
-          <input type="hidden" name="personnel_tab" value="career">
-          <input type="hidden" name="status" value="approved">
-          <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700">
-            Approuver
-          </button>
-        </form>
-
-        <form method="POST" action="{{ route('admin.personnel.mutation-requests.status', $mutation) }}" class="flex-1 grid grid-cols-1 md:grid-cols-3 gap-2">
-          @csrf
-          @method('PATCH')
-          <input type="hidden" name="personnel_tab" value="career">
-          <input type="hidden" name="status" value="rejected">
-          <input type="text" name="comment" required placeholder="Motif du rejet"
-            class="md:col-span-2 border border-gray-300 rounded-lg px-3 py-2 text-xs">
-          <button type="submit" class="px-4 py-2 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-700">
-            Rejeter
-          </button>
-        </form>
-      </div>
-      @endif
-    </div>
-    @empty
-    <div class="rounded-xl bg-gray-50 border border-gray-200 px-4 py-4 text-sm text-gray-500">Aucune demande de mutation en cours.</div>
-    @endforelse
-  </div>
-</section>
 
 <div class="grid grid-cols-1 xl:grid-cols-6 gap-5 mb-5">
   <section class="xl:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
