@@ -328,6 +328,13 @@ Route::middleware('auth')->group(function () {
         Route::post('/personnel/goals', [AdminController::class, 'storePersonnelGoal'])->name('personnel.goals.store');
         Route::post('/personnel/performance-reviews', [AdminController::class, 'storePersonnelPerformanceReview'])->name('personnel.performance-reviews.store');
         Route::post('/personnel/career-events', [AdminController::class, 'storePersonnelCareerEvent'])->name('personnel.career-events.store');
+        Route::get('/personnel/mutation-requests', function () {
+            return redirect()->route('admin.index', [
+                'tab' => 'personnel',
+                'personnel_tab' => 'agent-space',
+                'agent_space_tab' => 'mutation',
+            ]);
+        })->name('personnel.mutation-requests.index');
         Route::post('/personnel/mutation-requests', [AdminController::class, 'storePersonnelMutationRequest'])->name('personnel.mutation-requests.store');
         Route::patch('/personnel/mutation-requests/{event}/status', [AdminController::class, 'updatePersonnelMutationRequestStatus'])->name('personnel.mutation-requests.status');
         Route::post('/templates/upload-file', [AdminController::class, 'uploadTemplateFile'])->name('admin.templates.uploadFile');
