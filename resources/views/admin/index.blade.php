@@ -1989,7 +1989,7 @@ $_oc = [
           <div class="mt-3 space-y-2">
             @foreach($steps as $idx => $step)
             @php
-              $stepApproverName = $allUsers->firstWhere('id', (int) data_get($step, 'user_id'))?->name ?? 'Valideur';
+              $stepApproverName = $allUsers->firstWhere('id', (string) data_get($step, 'user_id'))?->name ?? 'Valideur';
               $stepProfile = (string) data_get($step, 'profile', 'Niveau');
               if ($status === 'validated') {
                 $stepState = 'done';
@@ -2918,7 +2918,7 @@ $_oc = [
           $_enrCurrentStepIndex = (int) data_get($_enrWorkflow, 'current_step_index', 0);
           $_enrSteps = collect(data_get($_enrWorkflow, 'steps', []))->values();
           $_enrCurrentStep = $_enrSteps->get($_enrCurrentStepIndex);
-          $_enrCurrentApproverName = $allUsers->firstWhere('id', (int) $_enrCurrentApproverId)?->name ?? 'Non défini';
+          $_enrCurrentApproverName = $allUsers->firstWhere('id', (string) $_enrCurrentApproverId)?->name ?? 'Non défini';
           $_enrHistory = collect(data_get($_enrWorkflow, 'history', []))
             ->sortByDesc(function ($_item) {
               return (string) ($_item['acted_at'] ?? '');
@@ -2973,7 +2973,7 @@ $_oc = [
               @forelse($_enrHistory as $_h)
               @php
                 $_hStatus = (string) ($_h['status'] ?? 'approved');
-                $_hName = $allUsers->firstWhere('id', (int) ($_h['acted_by_user_id'] ?? 0))?->name ?? 'Utilisateur';
+                $_hName = $allUsers->firstWhere('id', (string) ($_h['acted_by_user_id'] ?? ''))?->name ?? 'Utilisateur';
                 $_hLabel = $_hStatus === 'rejected' ? 'Rejetée' : 'Approuvée';
                 $_hDot = $_hStatus === 'rejected' ? 'bg-red-500' : 'bg-emerald-500';
                 $_hText = $_hStatus === 'rejected' ? 'text-red-700' : 'text-emerald-700';
@@ -3144,19 +3144,24 @@ $_oc = [
     @forelse($mutationRequestsCareer as $mutation)
     @php
       $workflow = is_array(data_get($mutation->metadata, 'approval_workflow')) ? data_get($mutation->metadata, 'approval_workflow') : [];
-      $currentApproverId = (string) data_get($workflow, 'current_approver_user_id', '');
+      $currentApproverId = trim((string) data_get($workflow, 'current_approver_user_id', ''));
       $currentIndex = (int) data_get($workflow, 'current_step_index', 0);
       $steps = collect(data_get($workflow, 'steps', []))->values();
       $step = $steps->get($currentIndex);
+      $currentStepUserId = trim((string) data_get($step, 'user_id', ''));
       $canAct = $mutation->status === 'pending'
         && !$isAgentRhFollowOnly
         && !$isSuperAdminFollowOnly
-        && $currentApproverId !== ''
-        && $currentApproverId === $currentActorId;
+        && (
+          ($currentApproverId !== '' && strcasecmp($currentApproverId, $currentActorId) === 0)
+          || ($currentStepUserId !== '' && strcasecmp($currentStepUserId, $currentActorId) === 0)
+        );
       $status = (string) ($mutation->status ?? 'pending');
       $statusLabel = $mutationStatusLabelCareer[$status] ?? ucfirst($status);
       $statusClass = $mutationStatusClassCareer[$status] ?? 'bg-gray-100 text-gray-700';
-      $approverName = $allUsers->firstWhere('id', (int) $currentApproverId)?->name ?? 'Non défini';
+      $approverName = $allUsers->firstWhere('id', (string) $currentApproverId)?->name
+        ?? $allUsers->firstWhere('id', (string) $currentStepUserId)?->name
+        ?? 'Non défini';
       $targetName = data_get($mutation->metadata, 'mutation_request.target_sub_entity_name', $mutation->new_job_title ?: '-');
       $sourceName = data_get($mutation->metadata, 'mutation_request.source_sub_entity_name', $mutation->previous_job_title ?: '-');
       $showFollowOnlyHint = $mutation->status === 'pending' && ($isAgentRhFollowOnly || $isSuperAdminFollowOnly);
@@ -3184,7 +3189,7 @@ $_oc = [
         <div class="space-y-2">
           @foreach($steps as $idx => $wfStep)
           @php
-            $wfApproverName = $allUsers->firstWhere('id', (int) data_get($wfStep, 'user_id'))?->name ?? 'Valideur';
+            $wfApproverName = $allUsers->firstWhere('id', (string) data_get($wfStep, 'user_id'))?->name ?? 'Valideur';
             $wfProfile = (string) data_get($wfStep, 'profile', 'Niveau');
             $wfHistoryStep = $mutationHistory->first(function ($h) use ($idx) {
               return (int) data_get($h, 'step_index', -1) === (int) $idx;
