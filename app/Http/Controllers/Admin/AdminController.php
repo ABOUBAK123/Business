@@ -1046,7 +1046,7 @@ class AdminController extends Controller
         $assignmentUsers = UserDirectionAssignment::query()
             ->where('direction_scope_type', $employee->administration_type)
             ->where('direction_scope_id', $employee->administration_id)
-            ->whereRaw('UPPER(COALESCE(sub_entity_code, \"\")) = ?', [$code])
+            ->whereRaw('UPPER(COALESCE(sub_entity_code, \'\')) = ?', [$code])
             ->with('user.profile')
             ->get()
             ->map(fn ($assignment) => $assignment->user)
@@ -1066,7 +1066,7 @@ class AdminController extends Controller
         $subEntity = SubEntity::query()
             ->where('scope_type', $employee->administration_type)
             ->where('scope_id', $employee->administration_id)
-            ->whereRaw('UPPER(COALESCE(code, \"\")) = ?', [$code])
+            ->whereRaw('UPPER(COALESCE(code, \'\')) = ?', [$code])
             ->first();
 
         if (!$subEntity || empty($subEntity->manager_email)) {
