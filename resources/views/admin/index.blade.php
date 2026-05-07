@@ -56,7 +56,12 @@ if ($tab !== 'personnel' && !array_key_exists($tab, $tabs)) {
 @endphp
 
 {{-- Bandeau d'information pour les admins d'administration (scope restreint) --}}
-@if(isset($adminScope) && $adminScope)
+@php
+  $currentProfileName = auth()->user()?->profile?->name ?? '';
+  $normalizedProfileName = mb_strtoupper(trim(str_replace(['_', '-'], ' ', $currentProfileName)), 'UTF-8');
+  $isAgentRhProfile = str_contains($normalizedProfileName, 'AGENT RH');
+@endphp
+@if(isset($adminScope) && $adminScope && $tab === 'personnel' && $isAgentRhProfile)
 @php
     $scopedAdminLabel = null;
     if ($adminScope['type'] === 'emitter') {
@@ -222,7 +227,26 @@ $_oc = [
       <h2 class="text-xl font-bold text-gray-800">{{ __('personnel.ui.module.title') }}</h2>
       <p class="text-sm text-gray-500 mt-1">{{ __('personnel.ui.module.description') }}</p>
     </div>
-    @if($personnelTab === 'dashboard')
+    @if($personnelTab === 'training')
+    @php
+      $_tpCurrentUser = auth()->user();
+      $_tpProfile = $_tpCurrentUser?->profile_id ? \App\Models\AdministrationProfile::find($_tpCurrentUser->profile_id) : null;
+      $_tpProfileName = mb_strtoupper(trim(str_replace(['_','-'],' ',$_tpProfile?->name ?? '')), 'UTF-8');
+      $_tpIsAgentRh = str_contains($_tpProfileName, 'AGENT RH');
+      $_tpIsSuperAdmin = $_tpCurrentUser?->role === 'admin';
+      // Supérieur hiérarchique : a des collaborateurs dont il est user_id
+      $_tpIsSuperior = \App\Models\PersonnelEmployee::where('user_id', $_tpCurrentUser?->id)->exists();
+      $_tpCanSeeRequests = $_tpIsAgentRh || $_tpIsSuperAdmin || $_tpIsSuperior;
+    @endphp
+    @if($_tpCanSeeRequests)
+    <button type="button"
+      onclick="document.getElementById('modal-training-requests').classList.remove('hidden')"
+      class="ml-auto flex-shrink-0 inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold shadow transition">
+      <i class="fas fa-graduation-cap text-xs"></i>
+      Voir demandes de formations
+    </button>
+    @endif
+    @elseif($personnelTab === 'dashboard')
     <div class="grid grid-cols-2 md:grid-cols-4 gap-3 min-w-0">
       <div class="rounded-xl bg-teal-50 border border-teal-100 px-4 py-3">
         <div class="text-xs uppercase tracking-wide text-teal-700">{{ __('personnel.ui.stats.employees') }}</div>
@@ -1034,8 +1058,11 @@ $_oc = [
     ->where('is_active', true)
     ->values();
 
-  // Annual leave type (code = ANNUAL)
-  $annualLeaveType = $empLeaveTypes->first(fn($t) => strtoupper((string) ($t->code ?? '')) === 'ANNUAL');
+  // Annual leave type (code = ANNUAL or ANNUEL)
+  $annualLeaveType = $empLeaveTypes->first(function ($t) {
+    $code = strtoupper(trim((string) ($t->code ?? '')));
+    return in_array($code, ['ANNUAL', 'ANNUEL'], true);
+  });
 
   // Employee leave requests
   $myLeaveRequests = $agentSpaceLeaveRequests;
@@ -1069,8 +1096,11 @@ $_oc = [
     'cancelled' => 'annulée',
   ];
 
-  // Other leave types (not ANNUAL)
-  $otherLeaveTypes = $empLeaveTypes->reject(fn($t) => strtoupper((string) ($t->code ?? '')) === 'ANNUAL')->values();
+  // Other leave types (not ANNUAL/ANNUEL)
+  $otherLeaveTypes = $empLeaveTypes->reject(function ($t) {
+    $code = strtoupper(trim((string) ($t->code ?? '')));
+    return in_array($code, ['ANNUAL', 'ANNUEL'], true);
+  })->values();
 @endphp
 
 {{-- ── Header + Action Buttons ── --}}
@@ -1592,40 +1622,41 @@ $_oc = [
 @else
 <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
   <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-    <h4 class="text-base font-bold text-gray-800 mb-3">{{ __('personnel.ui.agent_space.job_description_title') }}</h4>
+    <h4 class="text-base font-bold text-gray-800 mb-3">CV Agent</h4>
     <form method="POST" enctype="multipart/form-data" action="{{ route('admin.personnel.employees.documents.store', $agentSpaceEmployee) }}" class="space-y-3">
       @csrf
       <input type="hidden" name="personnel_tab" value="agent-space">
       <input type="hidden" name="agent_space_tab" value="documents">
-      <input type="hidden" name="category" value="job_description">
+      <input type="hidden" name="category" value="cv">
       <div>
         <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.agent_space.label_label') }}</label>
-        <input type="text" name="label" value="{{ old('label', 'Fiche de poste') }}" class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm">
+        <input type="text" name="label" value="{{ old('label', 'CV Agent') }}" class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm">
       </div>
       <div>
         <label class="block text-sm font-semibold text-gray-700 mb-1">{{ __('personnel.ui.agent_space.document_label') }}</label>
         <input type="file" name="document" class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm" required>
       </div>
-      <button type="submit" class="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold">{{ __('personnel.ui.agent_space.btn_submit_job_desc') }}</button>
+      <button type="submit" class="px-4 py-2 bg-emerald-600 text-white rounded-xl text-sm font-semibold">Uploader mon CV</button>
     </form>
   </section>
 
   <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-    <h4 class="text-base font-bold text-gray-800 mb-3">{{ __('personnel.ui.agent_space.subtab_documents') }}</h4>
+    <h4 class="text-base font-bold text-gray-800 mb-3">CV Agent</h4>
     <div class="space-y-2">
-      @forelse($agentSpaceEmployee->documents->where('category', 'job_description')->sortByDesc('created_at')->take(8) as $doc)
+      @forelse($agentSpaceEmployee->documents->where('category', 'cv')->sortByDesc('created_at')->take(8) as $doc)
       <a href="{{ route('admin.personnel.documents.download', $doc) }}" class="flex items-center justify-between rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
         <span>{{ $doc->label }}</span>
         <i class="fas fa-download text-gray-400"></i>
       </a>
       @empty
-      <div class="rounded-xl bg-gray-50 border border-gray-200 px-3 py-3 text-sm text-gray-500">{{ __('personnel.ui.agent_space.no_job_desc') }}</div>
+      <div class="rounded-xl bg-gray-50 border border-gray-200 px-3 py-3 text-sm text-gray-500">Aucun CV disponible.</div>
       @endforelse
     </div>
   </section>
 </div>
 @endif
 @endif
+
 @elseif($personnelTab === 'leave')
 @php
   $leaveSubtab = request('leave_subtab', 'validation');
@@ -2336,6 +2367,158 @@ $_oc = [
     </div>
   </section>
 </div>
+
+{{-- ══ MODAL : Demandes de formations ══ --}}
+@php
+  $_mrUser = auth()->user();
+  $_mrProfile = $_mrUser?->profile_id ? \App\Models\AdministrationProfile::find($_mrUser->profile_id) : null;
+  $_mrProfileName = mb_strtoupper(trim(str_replace(['_','-'],' ',$_mrProfile?->name ?? '')), 'UTF-8');
+  $_mrIsAgentRh = str_contains($_mrProfileName, 'AGENT RH');
+  $_mrIsSuperAdmin = $_mrUser?->role === 'admin';
+  $_mrIsFullAccess = $_mrIsAgentRh || $_mrIsSuperAdmin;
+
+  // Toutes les demandes dans le périmètre (déjà chargées avec relations)
+  $_mrAllEnrollments = $personnelTrainingEnrollments ?? collect();
+
+  if ($_mrIsFullAccess) {
+    $_mrEnrollments = $_mrAllEnrollments;
+  } else {
+    // Supérieur hiérarchique : seulement ses collaborateurs (user_id = auth id)
+    $subordinateIds = \App\Models\PersonnelEmployee::where('user_id', $_mrUser?->id)
+      ->pluck('id')
+      ->map(fn($id) => (string)$id)
+      ->toArray();
+    $_mrEnrollments = $_mrAllEnrollments->filter(function ($e) use ($subordinateIds) {
+      return in_array((string)($e->employee_id ?? ''), $subordinateIds, true);
+    });
+  }
+@endphp
+<div id="modal-training-requests" class="hidden fixed inset-0 z-50 flex items-start justify-center p-4 pt-16 bg-black/40 backdrop-blur-sm">
+  <div class="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-4xl max-h-[80vh] flex flex-col overflow-hidden">
+    {{-- Header modal --}}
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <div class="flex items-center gap-3">
+        <div class="h-9 w-9 rounded-xl bg-violet-100 flex items-center justify-center">
+          <i class="fas fa-graduation-cap text-violet-600 text-sm"></i>
+        </div>
+        <div>
+          <h2 class="text-base font-bold text-gray-800">Demandes de formations</h2>
+          <p class="text-xs text-gray-500">
+            @if($_mrIsFullAccess)
+              Toutes les demandes — suivi du processus de validation
+            @else
+              Demandes de vos collaborateurs directs
+            @endif
+          </p>
+        </div>
+      </div>
+      <button type="button"
+        onclick="document.getElementById('modal-training-requests').classList.add('hidden')"
+        class="p-2 rounded-xl hover:bg-gray-100 text-gray-500 transition">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+
+    {{-- Statut legend (AGENT RH / SUPER ADMIN) --}}
+    @if($_mrIsFullAccess)
+    <div class="px-6 py-3 border-b border-gray-100 bg-gray-50 flex flex-wrap gap-2 text-xs">
+      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100"><span class="w-2 h-2 rounded-full bg-blue-400 inline-block"></span>Planifiée</span>
+      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100"><span class="w-2 h-2 rounded-full bg-amber-400 inline-block"></span>En cours</span>
+      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100"><span class="w-2 h-2 rounded-full bg-emerald-400 inline-block"></span>Terminée</span>
+      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-100"><span class="w-2 h-2 rounded-full bg-red-400 inline-block"></span>Annulée</span>
+    </div>
+    @endif
+
+    {{-- Contenu --}}
+    <div class="flex-1 overflow-y-auto px-6 py-4">
+      @if($_mrEnrollments->isEmpty())
+      <div class="rounded-xl bg-gray-50 border border-gray-200 px-4 py-8 text-center text-sm text-gray-500">
+        <i class="fas fa-inbox text-gray-300 text-3xl mb-3 block"></i>
+        @if($_mrIsFullAccess)
+          Aucune demande de formation enregistrée.
+        @else
+          Aucune demande de formation de vos collaborateurs.
+        @endif
+      </div>
+      @else
+      <div class="space-y-3">
+        @foreach($_mrEnrollments as $enrollment)
+        @php
+          $_enrStatus = $enrollment->status ?? 'planned';
+          $_enrStatusColors = [
+            'planned'     => 'bg-blue-50 text-blue-700 border-blue-100',
+            'in_progress' => 'bg-amber-50 text-amber-700 border-amber-100',
+            'completed'   => 'bg-emerald-50 text-emerald-700 border-emerald-100',
+            'cancelled'   => 'bg-red-50 text-red-700 border-red-100',
+          ];
+          $_enrStatusColor = $_enrStatusColors[$_enrStatus] ?? 'bg-gray-50 text-gray-700 border-gray-100';
+          $_enrStatusLabel = [
+            'planned'     => 'Planifiée',
+            'in_progress' => 'En cours',
+            'completed'   => 'Terminée',
+            'cancelled'   => 'Annulée',
+          ][$_enrStatus] ?? ucfirst($_enrStatus);
+        @endphp
+        <div class="rounded-xl border border-gray-200 p-4 bg-white hover:shadow-sm transition">
+          <div class="flex items-start justify-between gap-3 flex-wrap">
+            <div class="min-w-0">
+              <div class="font-semibold text-gray-800 truncate">{{ $enrollment->employee?->full_name ?? '—' }}</div>
+              <div class="text-sm text-gray-600 mt-0.5">{{ $enrollment->training?->title ?? 'Formation supprimée' }}</div>
+              @if($enrollment->training?->category)
+              <div class="text-xs text-gray-400 mt-0.5">{{ $enrollment->training->category }}</div>
+              @endif
+            </div>
+            <span class="flex-shrink-0 text-xs rounded-full border px-3 py-1 font-medium {{ $_enrStatusColor }}">{{ $_enrStatusLabel }}</span>
+          </div>
+          <div class="flex flex-wrap gap-4 mt-3 text-xs text-gray-500">
+            @if($enrollment->planned_start_date)
+            <span><i class="fas fa-calendar-day mr-1 text-gray-300"></i>Début : {{ $enrollment->planned_start_date->format('d/m/Y') }}</span>
+            @endif
+            @if($enrollment->planned_end_date)
+            <span><i class="fas fa-calendar-check mr-1 text-gray-300"></i>Fin : {{ $enrollment->planned_end_date->format('d/m/Y') }}</span>
+            @endif
+            @if($enrollment->attendance_rate !== null)
+            <span><i class="fas fa-user-check mr-1 text-gray-300"></i>Présence : {{ $enrollment->attendance_rate }}%</span>
+            @endif
+            @if($enrollment->score !== null)
+            <span><i class="fas fa-star mr-1 text-gray-300"></i>Score : {{ $enrollment->score }}/100</span>
+            @endif
+          </div>
+          @if($enrollment->notes)
+          <div class="mt-2 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2 italic">{{ $enrollment->notes }}</div>
+          @endif
+          @if($_mrIsFullAccess)
+          {{-- AGENT RH / SUPER ADMIN : peut changer le statut --}}
+          <form method="POST" action="{{ route('admin.personnel.training-enrollments.update-status', $enrollment->id) }}" class="mt-3 flex items-center gap-2 flex-wrap">
+            @csrf
+            @method('PATCH')
+            <input type="hidden" name="personnel_tab" value="training">
+            <select name="status" class="border border-gray-300 rounded-lg px-3 py-1.5 text-xs bg-white">
+              @foreach(['planned' => 'Planifiée', 'in_progress' => 'En cours', 'completed' => 'Terminée', 'cancelled' => 'Annulée'] as $sv => $sl)
+              <option value="{{ $sv }}" {{ $_enrStatus === $sv ? 'selected' : '' }}>{{ $sl }}</option>
+              @endforeach
+            </select>
+            <button type="submit" class="px-3 py-1.5 bg-violet-600 text-white rounded-lg text-xs font-semibold hover:bg-violet-700 transition">Mettre à jour</button>
+          </form>
+          @endif
+        </div>
+        @endforeach
+      </div>
+      @endif
+    </div>
+
+    {{-- Footer --}}
+    <div class="px-6 py-3 border-t border-gray-100 bg-gray-50 flex items-center justify-between text-xs text-gray-500">
+      <span>{{ $_mrEnrollments->count() }} demande(s) affichée(s)</span>
+      <button type="button"
+        onclick="document.getElementById('modal-training-requests').classList.add('hidden')"
+        class="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg text-sm font-medium text-gray-700 transition">
+        Fermer
+      </button>
+    </div>
+  </div>
+</div>
+
 @elseif($personnelTab === 'career')
 <div class="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-5">
   <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">

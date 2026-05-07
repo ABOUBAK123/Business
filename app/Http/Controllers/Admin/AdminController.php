@@ -257,6 +257,12 @@ class AdminController extends Controller
         return preg_replace('/\s+/', ' ', $normalized) ?? $normalized;
     }
 
+    private function isAnnualLeaveCode(?string $code): bool
+    {
+        $normalized = strtoupper(trim((string) $code));
+        return in_array($normalized, ['ANNUAL', 'ANNUEL'], true);
+    }
+
     private function isDirectorOrGeneralProfile(?string $profileName): bool
     {
         $n = $this->normalizeProfileName($profileName);
@@ -1135,11 +1141,23 @@ class AdminController extends Controller
             ])->with('success', 'Un compte utilisateur existant a été retrouvé via l\'e-mail et lié à la fiche employé.');
         }
 
-        $selectedProfileId = AdministrationProfile::query()
+        $profilesForScope = AdministrationProfile::query()
             ->where('administration_id', $employee->administration_id)
             ->where('administration_type', $employee->administration_type)
             ->orderBy('name')
-            ->value('id');
+            ->get(['id', 'name']);
+
+        $selectedProfile = $profilesForScope->first(function ($profile) {
+            return $this->normalizeProfileName($profile->name) === 'AGENT';
+        });
+
+        if (!$selectedProfile) {
+            $selectedProfile = $profilesForScope->first(function ($profile) {
+                return str_contains($this->normalizeProfileName($profile->name), 'AGENT');
+            });
+        }
+
+        $selectedProfileId = $selectedProfile?->id ?? $profilesForScope->first()?->id;
 
         $temporaryPassword = Str::random(12);
         $userPayload = [
@@ -1353,6 +1371,26 @@ class AdminController extends Controller
         ]);
 
         $this->abortIfPersonnelEmployeeOutsideScope($employee);
+
+        $actor = auth()->user();
+        $actorProfile = $actor?->profile_id ? AdministrationProfile::find($actor->profile_id) : null;
+        $isAgentRh = $this->isAgentRhProfile($actorProfile);
+        $isSelfAgent = (string) ($employee->linked_user_id ?? '') === (string) ($actor?->id ?? '');
+
+        if (!$isAgentRh && !$isSelfAgent) {
+            throw ValidationException::withMessages([
+                'employee_id' => 'Vous ne pouvez ajouter des documents que sur votre propre fiche depuis l\'espace agent.',
+            ]);
+        }
+
+        if (($validated['personnel_tab'] ?? '') === 'agent-space' && !$isAgentRh) {
+            $category = strtolower(trim((string) ($validated['category'] ?? '')));
+            if ($category !== 'cv') {
+                throw ValidationException::withMessages([
+                    'category' => 'Depuis l\'espace agent, seul le document CV est autorisé.',
+                ]);
+            }
+        }
 
         $file = $request->file('document');
         $storedName = Str::uuid() . '_' . preg_replace('/[^A-Za-z0-9._-]/', '_', $file->getClientOriginalName());
@@ -1697,7 +1735,7 @@ class AdminController extends Controller
         $requestedDays = $validated['requested_days'] ?? (Carbon::parse($validated['start_date'])->diffInDays(Carbon::parse($validated['end_date'])) + 1);
         $metadata = [];
 
-        $isAnnualLeave = strtoupper((string) ($leaveType->code ?? '')) === 'ANNUAL';
+        $isAnnualLeave = $this->isAnnualLeaveCode($leaveType->code);
         if ($isAnnualLeave) {
             $segments = $this->parseAnnualSegmentsFromRequest($request);
             if (!empty($segments)) {
@@ -1804,7 +1842,7 @@ class AdminController extends Controller
         );
 
         $leaveRequest->loadMissing(['leaveType', 'employee']);
-        $isAnnualLeave = strtoupper((string) ($leaveRequest->leaveType?->code ?? '')) === 'ANNUAL';
+        $isAnnualLeave = $this->isAnnualLeaveCode($leaveRequest->leaveType?->code);
 
         if ($isAnnualLeave) {
             $metadata = is_array($leaveRequest->metadata) ? $leaveRequest->metadata : [];
@@ -2054,6 +2092,32 @@ class AdminController extends Controller
         ])->with('success', 'Formation affectée à l’employé.');
     }
 
+
+    public function updatePersonnelTrainingEnrollmentStatus(Request $request, string $enrollmentId)
+    {
+        $validated = $request->validate([
+            'status' => ['required', 'in:planned,in_progress,completed,cancelled'],
+            'personnel_tab' => ['nullable', 'string'],
+        ]);
+
+        $enrollment = PersonnelTrainingEnrollment::with('employee')->findOrFail($enrollmentId);
+        $this->abortIfPersonnelEmployeeOutsideScope($enrollment->employee);
+
+        // Seul l'AGENT RH ou le SUPER ADMIN peut changer le statut
+        $actor = auth()->user();
+        $actorProfile = $actor?->profile_id ? AdministrationProfile::find($actor->profile_id) : null;
+        $isSuperAdmin = $actor?->role === 'admin';
+        if (!$this->isAgentRhProfile($actorProfile) && !$isSuperAdmin) {
+            abort(403, 'Seul un AGENT RH ou un SUPER ADMIN peut modifier le statut d\'une demande de formation.');
+        }
+
+        $enrollment->update(['status' => $validated['status']]);
+
+        return redirect()->route('admin.index', [
+            'tab' => 'personnel',
+            'personnel_tab' => $validated['personnel_tab'] ?? 'training',
+        ])->with('success', 'Statut de la demande de formation mis a jour.');
+    }
     public function storePersonnelEmployeeSkill(Request $request)
     {
         $validated = $request->validate([

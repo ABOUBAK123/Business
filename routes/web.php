@@ -323,6 +323,7 @@ Route::middleware('auth')->group(function () {
         Route::post('/personnel/job-references', [AdminController::class, 'storePersonnelJobReference'])->name('personnel.job-references.store');
         Route::post('/personnel/trainings', [AdminController::class, 'storePersonnelTraining'])->name('personnel.trainings.store');
         Route::post('/personnel/training-enrollments', [AdminController::class, 'storePersonnelTrainingEnrollment'])->name('personnel.training-enrollments.store');
+        Route::patch('/personnel/training-enrollments/{enrollment}/status', [AdminController::class, 'updatePersonnelTrainingEnrollmentStatus'])->name('personnel.training-enrollments.update-status');
         Route::post('/personnel/goals', [AdminController::class, 'storePersonnelGoal'])->name('personnel.goals.store');
         Route::post('/personnel/performance-reviews', [AdminController::class, 'storePersonnelPerformanceReview'])->name('personnel.performance-reviews.store');
         Route::post('/personnel/career-events', [AdminController::class, 'storePersonnelCareerEvent'])->name('personnel.career-events.store');
