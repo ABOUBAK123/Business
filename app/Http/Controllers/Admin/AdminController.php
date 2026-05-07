@@ -1349,7 +1349,8 @@ class AdminController extends Controller
 
         $actor = auth()->user();
         $actorProfile = $actor?->profile_id ? AdministrationProfile::find($actor->profile_id) : null;
-        $isSuperAdmin = $actor && $actor->role === 'admin';
+        $isSuperAdmin = $this->isSuperAdminProfile($actorProfile)
+            || ($actor && $actor->role === 'admin' && !$actor->profile_id);
         if ($isSuperAdmin || $this->isAgentRhProfile($actorProfile)) {
             throw ValidationException::withMessages([
                 'status' => 'Profil de suivi uniquement: vous ne pouvez pas valider ni rejeter cette demande de mutation.',

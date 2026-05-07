@@ -3106,7 +3106,8 @@ $_oc = [
   $currentActor = auth()->user();
   $currentActorProfileName = mb_strtoupper(trim(str_replace(['_', '-'], ' ', $currentActor?->profile?->name ?? '')), 'UTF-8');
   $isAgentRhFollowOnly = str_contains($currentActorProfileName, 'AGENT RH');
-  $isSuperAdminFollowOnly = ($currentActor?->role ?? '') === 'admin';
+  $isSuperAdminFollowOnly = str_contains($currentActorProfileName, 'SUPER ADMIN')
+    || (($currentActor?->role ?? '') === 'admin' && empty($currentActor?->profile_id));
   $mutationRequestsCareer = ($personnelMutationRequests ?? collect())->sortByDesc('created_at')->values();
   $mutationStatusLabelCareer = [
     'pending' => 'En attente',
