@@ -1332,6 +1332,7 @@ class AdminController extends Controller
         $validated = $request->validate([
             'personnel_tab' => ['nullable', 'string'],
             'leave_subtab' => ['nullable', 'string'],
+            'career_subtab' => ['nullable', 'string'],
             'status' => ['required', 'in:approved,rejected'],
             'comment' => ['nullable', 'string'],
         ]);
@@ -1403,6 +1404,7 @@ class AdminController extends Controller
                     'tab' => 'personnel',
                     'personnel_tab' => $validated['personnel_tab'] ?? 'career',
                     'leave_subtab' => $validated['leave_subtab'] ?? null,
+                    'career_subtab' => $validated['career_subtab'] ?? null,
                 ])->with('success', 'Validation enregistrée et demande transmise au niveau suivant.');
             }
 
@@ -1430,6 +1432,7 @@ class AdminController extends Controller
                 'tab' => 'personnel',
                 'personnel_tab' => $validated['personnel_tab'] ?? 'career',
                 'leave_subtab' => $validated['leave_subtab'] ?? null,
+                'career_subtab' => $validated['career_subtab'] ?? null,
             ])->with('success', 'Demande de mutation validée définitivement.');
         }
 
@@ -1444,6 +1447,7 @@ class AdminController extends Controller
             'tab' => 'personnel',
             'personnel_tab' => $validated['personnel_tab'] ?? 'career',
             'leave_subtab' => $validated['leave_subtab'] ?? null,
+            'career_subtab' => $validated['career_subtab'] ?? null,
         ])->with('success', 'Demande de mutation rejetée.');
     }
 
@@ -2746,6 +2750,7 @@ class AdminController extends Controller
                 'comment' => ['nullable', 'string'],
                 'personnel_tab' => ['nullable', 'string'],
                 'leave_subtab' => ['nullable', 'string'],
+                'training_subtab' => ['nullable', 'string'],
             ]);
 
             $steps = collect($workflow['steps'] ?? [])->filter(fn ($step) => !empty($step['user_id']))->values()->all();
@@ -2796,6 +2801,7 @@ class AdminController extends Controller
                         'tab' => 'personnel',
                         'personnel_tab' => $validated['personnel_tab'] ?? 'training',
                         'leave_subtab' => $validated['leave_subtab'] ?? null,
+                        'training_subtab' => $validated['training_subtab'] ?? null,
                     ])->with('success', 'Validation enregistrée et demande transmise au niveau suivant.');
                 }
 
@@ -2810,6 +2816,7 @@ class AdminController extends Controller
                     'tab' => 'personnel',
                     'personnel_tab' => $validated['personnel_tab'] ?? 'training',
                     'leave_subtab' => $validated['leave_subtab'] ?? null,
+                    'training_subtab' => $validated['training_subtab'] ?? null,
                 ])->with('success', 'Demande de formation validée définitivement.');
             }
 
@@ -2824,6 +2831,7 @@ class AdminController extends Controller
                 'tab' => 'personnel',
                 'personnel_tab' => $validated['personnel_tab'] ?? 'training',
                 'leave_subtab' => $validated['leave_subtab'] ?? null,
+                'training_subtab' => $validated['training_subtab'] ?? null,
             ])->with('success', 'Demande de formation rejetée.');
         }
 

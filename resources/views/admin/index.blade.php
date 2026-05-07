@@ -2107,7 +2107,7 @@ $_oc = [
   $leaveSubtabsAll = [
     'validation' => ['fas fa-user-check', 'Validation'],
     'parameters' => ['fas fa-sliders', 'Paramètres'],
-    'recent' => ['fas fa-clock-rotate-left', 'Demandes récentes'],
+    'recent' => ['fas fa-clock-rotate-left', 'Historique'],
   ];
   $_leaveParentPerm = 'personnel.leave';
   $_leaveSubPermPrefix = 'personnel.leave.';
@@ -2442,21 +2442,6 @@ $_oc = [
 @else
 @php
   $validationRows = collect($personnelLeaveRequests)->where('status', 'pending')->values();
-  $validationCurrentUser = auth()->user();
-  $validationCurrentUserId = (string) ($validationCurrentUser?->id ?? '');
-  $validationTrainingRows = collect($personnelTrainingEnrollments ?? collect())
-    ->filter(function ($enrollment) use ($validationCurrentUserId) {
-      return (string) ($enrollment->status ?? '') === 'pending'
-        && (string) data_get($enrollment->metadata, 'approval_workflow.type', '') === 'training_hierarchical'
-        && (string) data_get($enrollment->metadata, 'approval_workflow.current_approver_user_id', '') === $validationCurrentUserId;
-    })
-    ->values();
-  $validationMutationRows = collect($personnelMutationRequests ?? collect())
-    ->filter(function ($mutation) use ($validationCurrentUserId) {
-      return (string) ($mutation->status ?? '') === 'pending'
-        && (string) data_get($mutation->metadata, 'approval_workflow.current_approver_user_id', '') === $validationCurrentUserId;
-    })
-    ->values();
   $validationApproveBtnClass = 'px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition';
   $validationRejectBtnClass = 'px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-700 transition';
 @endphp
@@ -2542,173 +2527,146 @@ $_oc = [
     </table>
   </div>
 </div>
+@endif
+@elseif($personnelTab === 'training')
+@php
+  $trainingSubtab = request('training_subtab', 'management');
+  $trainingSubtabs = [
+    'management' => ['fas fa-sliders', 'Gestion'],
+    'validation' => ['fas fa-user-check', 'Validation'],
+    'history' => ['fas fa-clock-rotate-left', 'Historique'],
+  ];
+  if (!array_key_exists($trainingSubtab, $trainingSubtabs)) {
+    $trainingSubtab = 'management';
+  }
+  $trainingCurrentUserId = (string) (auth()->id() ?? '');
+  $trainingValidationRows = collect($personnelTrainingEnrollments ?? collect())
+    ->filter(function ($enrollment) use ($trainingCurrentUserId) {
+      return (string) ($enrollment->status ?? '') === 'pending'
+        && (string) data_get($enrollment->metadata, 'approval_workflow.type', '') === 'training_hierarchical'
+        && (string) data_get($enrollment->metadata, 'approval_workflow.current_approver_user_id', '') === $trainingCurrentUserId;
+    })
+    ->values();
+  $trainingHistoryRows = collect($personnelTrainingEnrollments ?? collect())
+    ->filter(function ($enrollment) {
+      return (string) data_get($enrollment->metadata, 'approval_workflow.type', '') === 'training_hierarchical'
+        && (string) ($enrollment->status ?? '') !== 'pending';
+    })
+    ->sortByDesc('updated_at')
+    ->values();
+  $trainingApproveBtnClass = 'px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition';
+  $trainingRejectBtnClass = 'px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-700 transition';
+@endphp
 
+<div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-3 mb-5">
+  <div class="flex flex-wrap items-center gap-2">
+    @foreach($trainingSubtabs as $key => [$icon, $label])
+    <a href="{{ route('admin.index', ['tab' => 'personnel', 'personnel_tab' => 'training', 'training_subtab' => $key]) }}"
+       class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition {{ $trainingSubtab === $key ? 'bg-[#2453d6] text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200' }}">
+      <i class="{{ $icon }} text-xs"></i>
+      <span>{{ $label }}</span>
+    </a>
+    @endforeach
+  </div>
+</div>
+
+@if($trainingSubtab === 'validation')
 <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-5">
   <div class="flex items-center justify-between gap-3 mb-4">
     <div>
-      <h3 class="text-lg font-bold text-gray-800">Validation hiérarchique des formations</h3>
-      <p class="text-sm text-gray-500">Les demandes de formation en attente d'action du valideur courant.</p>
+      <h3 class="text-lg font-bold text-gray-800">Validation des demandes de formation</h3>
+      <p class="text-sm text-gray-500">Demandes en attente d'action du valideur courant.</p>
     </div>
-    <span class="text-xs rounded-full bg-violet-50 text-violet-700 border border-violet-100 px-3 py-1">{{ $validationTrainingRows->count() }} en attente</span>
+    <span class="text-xs rounded-full bg-violet-50 text-violet-700 border border-violet-100 px-3 py-1">{{ $trainingValidationRows->count() }} en attente</span>
   </div>
-
   <div class="overflow-x-auto">
     <table class="min-w-full text-sm">
       <thead>
         <tr class="text-left text-gray-500 border-b border-gray-100">
           <th class="py-3 pr-4">Matricule</th>
           <th class="py-3 pr-4">Nom & prénoms</th>
-          <th class="py-3 pr-4">Grade</th>
-          <th class="py-3 pr-4">Emploi / Fonction</th>
-          <th class="py-3 pr-4">Formation demandée</th>
-          <th class="py-3 pr-4">Supérieur valideur</th>
+          <th class="py-3 pr-4">Formation</th>
+          <th class="py-3 pr-4">Valideur courant</th>
           <th class="py-3">Action</th>
         </tr>
       </thead>
       <tbody>
-        @forelse($validationTrainingRows as $enrollment)
+        @forelse($trainingValidationRows as $enrollment)
         @php
-          $trainingEmployeeMeta = is_array($enrollment->employee?->metadata) ? $enrollment->employee->metadata : [];
-          $trainingGrade = $trainingEmployeeMeta['grade'] ?? '-';
-          $trainingEmployment = $trainingEmployeeMeta['employment'] ?? ($trainingEmployeeMeta['emploi'] ?? '-');
-          $trainingFunction = $enrollment->employee?->job_title ?: ($trainingEmployeeMeta['function'] ?? '-');
           $trainingCurrentApproverId = (string) data_get($enrollment->metadata, 'approval_workflow.current_approver_user_id', '');
           $trainingCurrentApproverName = $allUsers->firstWhere('id', $trainingCurrentApproverId)?->name ?? 'Non défini';
-          $trainingCanAct = $trainingCurrentApproverId !== '' && $trainingCurrentApproverId === $validationCurrentUserId;
         @endphp
         <tr class="border-b border-gray-100 align-top">
-          <td class="py-3 pr-4 text-gray-600">{{ $enrollment->employee?->employee_number ?: __('personnel.ui.leave.table_no_employee_number') }}</td>
-          <td class="py-3 pr-4 text-gray-800 font-semibold">{{ $enrollment->employee?->full_name ?? __('personnel.ui.leave.table_deleted_employee') }}</td>
-          <td class="py-3 pr-4 text-gray-600">{{ $trainingGrade }}</td>
-          <td class="py-3 pr-4 text-gray-600">{{ $trainingEmployment }} / {{ $trainingFunction }}</td>
-          <td class="py-3 pr-4 text-gray-600">
-            <div class="font-medium text-gray-800">{{ $enrollment->training?->title ?? 'Formation supprimée' }}</div>
-            <div class="text-xs text-gray-500 mt-1">
-              Début: {{ optional($enrollment->planned_start_date)->format('d/m/Y') ?: '-' }}
-              · Fin: {{ optional($enrollment->planned_end_date)->format('d/m/Y') ?: '-' }}
-            </div>
-          </td>
+          <td class="py-3 pr-4 text-gray-600">{{ $enrollment->employee?->employee_number ?: '-' }}</td>
+          <td class="py-3 pr-4 text-gray-800 font-semibold">{{ $enrollment->employee?->full_name ?? 'Agent supprimé' }}</td>
+          <td class="py-3 pr-4 text-gray-600">{{ $enrollment->training?->title ?? 'Formation supprimée' }}</td>
           <td class="py-3 pr-4 text-gray-600">{{ $trainingCurrentApproverName }}</td>
           <td class="py-3">
             <div class="flex flex-wrap gap-2">
-              @foreach(['approved' => __('personnel.ui.leave.btn_approve'), 'rejected' => __('personnel.ui.leave.btn_reject')] as $status => $label)
-              @if(!$trainingCanAct)
-                @continue
-              @endif
               <form method="POST" action="{{ route('admin.personnel.training-enrollments.update-status', $enrollment->id) }}">
                 @csrf
                 @method('PATCH')
-                <input type="hidden" name="personnel_tab" value="leave">
-                <input type="hidden" name="leave_subtab" value="validation">
-                <input type="hidden" name="status" value="{{ $status }}">
-                @if($status === 'rejected')
-                <input type="hidden" name="comment" value="Rejet depuis l'écran de validation">
-                @endif
-                <button type="submit" class="{{ $status === 'approved' ? $validationApproveBtnClass : $validationRejectBtnClass }}">{{ $label }}</button>
+                <input type="hidden" name="personnel_tab" value="training">
+                <input type="hidden" name="training_subtab" value="validation">
+                <input type="hidden" name="status" value="approved">
+                <button type="submit" class="{{ $trainingApproveBtnClass }}">Approuver</button>
               </form>
-              @endforeach
+              <form method="POST" action="{{ route('admin.personnel.training-enrollments.update-status', $enrollment->id) }}" class="flex flex-wrap gap-2 items-center">
+                @csrf
+                @method('PATCH')
+                <input type="hidden" name="personnel_tab" value="training">
+                <input type="hidden" name="training_subtab" value="validation">
+                <input type="hidden" name="status" value="rejected">
+                <input type="text" name="comment" required placeholder="Motif du rejet" class="border border-gray-300 rounded-lg px-3 py-1.5 text-xs min-w-[180px]">
+                <button type="submit" class="{{ $trainingRejectBtnClass }}">Rejeter</button>
+              </form>
             </div>
-            @if(!$trainingCanAct)
-            <div class="mt-2 text-[11px] text-gray-500">Action réservée au valideur courant.</div>
-            @endif
           </td>
         </tr>
         @empty
-        <tr>
-          <td colspan="7" class="py-8 text-center text-sm text-gray-400">Aucune demande de formation en attente de validation.</td>
-        </tr>
+        <tr><td colspan="5" class="py-8 text-center text-sm text-gray-400">Aucune demande de formation en attente de validation.</td></tr>
         @endforelse
       </tbody>
     </table>
   </div>
 </div>
-
+@elseif($trainingSubtab === 'history')
 <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-5">
   <div class="flex items-center justify-between gap-3 mb-4">
     <div>
-      <h3 class="text-lg font-bold text-gray-800">Validation hiérarchique des mutations</h3>
-      <p class="text-sm text-gray-500">Les demandes de mutation en attente d'action du valideur courant.</p>
+      <h3 class="text-lg font-bold text-gray-800">Historique des demandes de formation</h3>
+      <p class="text-sm text-gray-500">Demandes finalisées (validées/rejetées).</p>
     </div>
-    <span class="text-xs rounded-full bg-sky-50 text-sky-700 border border-sky-100 px-3 py-1">{{ $validationMutationRows->count() }} en attente</span>
+    <span class="text-xs rounded-full bg-gray-100 text-gray-700 border border-gray-200 px-3 py-1">{{ $trainingHistoryRows->count() }} élément(s)</span>
   </div>
-
   <div class="overflow-x-auto">
     <table class="min-w-full text-sm">
       <thead>
         <tr class="text-left text-gray-500 border-b border-gray-100">
+          <th class="py-3 pr-4">Date</th>
           <th class="py-3 pr-4">Matricule</th>
           <th class="py-3 pr-4">Nom & prénoms</th>
-          <th class="py-3 pr-4">Grade</th>
-          <th class="py-3 pr-4">Emploi / Fonction</th>
-          <th class="py-3 pr-4">Mutation demandée</th>
-          <th class="py-3 pr-4">Supérieur valideur</th>
-          <th class="py-3">Action</th>
+          <th class="py-3 pr-4">Formation</th>
+          <th class="py-3">Statut</th>
         </tr>
       </thead>
       <tbody>
-        @forelse($validationMutationRows as $mutation)
-        @php
-          $mutationEmployeeMeta = is_array($mutation->employee?->metadata) ? $mutation->employee->metadata : [];
-          $mutationGrade = $mutationEmployeeMeta['grade'] ?? '-';
-          $mutationEmployment = $mutationEmployeeMeta['employment'] ?? ($mutationEmployeeMeta['emploi'] ?? '-');
-          $mutationFunction = $mutation->employee?->job_title ?: ($mutationEmployeeMeta['function'] ?? '-');
-          $mutationCurrentApproverId = (string) data_get($mutation->metadata, 'approval_workflow.current_approver_user_id', '');
-          $mutationCurrentApproverName = $allUsers->firstWhere('id', $mutationCurrentApproverId)?->name ?? 'Non défini';
-          $mutationCanAct = $mutationCurrentApproverId !== '' && $mutationCurrentApproverId === $validationCurrentUserId;
-          $mutationTargetName = data_get($mutation->metadata, 'mutation_request.target_sub_entity_name', $mutation->new_job_title ?: '-');
-          $mutationSourceName = data_get($mutation->metadata, 'mutation_request.source_sub_entity_name', $mutation->previous_job_title ?: '-');
-        @endphp
-        <tr class="border-b border-gray-100 align-top">
-          <td class="py-3 pr-4 text-gray-600">{{ $mutation->employee?->employee_number ?: __('personnel.ui.leave.table_no_employee_number') }}</td>
-          <td class="py-3 pr-4 text-gray-800 font-semibold">{{ $mutation->employee?->full_name ?? __('personnel.ui.leave.table_deleted_employee') }}</td>
-          <td class="py-3 pr-4 text-gray-600">{{ $mutationGrade }}</td>
-          <td class="py-3 pr-4 text-gray-600">{{ $mutationEmployment }} / {{ $mutationFunction }}</td>
-          <td class="py-3 pr-4 text-gray-600">
-            <div class="font-medium text-gray-800">{{ $mutationSourceName }} → {{ $mutationTargetName }}</div>
-            @if(!empty($mutation->summary))
-            <div class="text-xs text-gray-500 mt-1">{{ $mutation->summary }}</div>
-            @endif
-          </td>
-          <td class="py-3 pr-4 text-gray-600">{{ $mutationCurrentApproverName }}</td>
-          <td class="py-3">
-            <div class="flex flex-wrap gap-2">
-              @if($mutationCanAct)
-              <form method="POST" action="{{ route('admin.personnel.mutation-requests.status', $mutation) }}">
-                @csrf
-                @method('PATCH')
-                <input type="hidden" name="personnel_tab" value="leave">
-                <input type="hidden" name="leave_subtab" value="validation">
-                <input type="hidden" name="status" value="approved">
-                <button type="submit" class="{{ $validationApproveBtnClass }}">{{ __('personnel.ui.leave.btn_approve') }}</button>
-              </form>
-
-              <form method="POST" action="{{ route('admin.personnel.mutation-requests.status', $mutation) }}" class="flex flex-wrap gap-2 items-center">
-                @csrf
-                @method('PATCH')
-                <input type="hidden" name="personnel_tab" value="leave">
-                <input type="hidden" name="leave_subtab" value="validation">
-                <input type="hidden" name="status" value="rejected">
-                <input type="text" name="comment" required placeholder="Motif du rejet" class="border border-gray-300 rounded-lg px-3 py-1.5 text-xs min-w-[180px]">
-                <button type="submit" class="{{ $validationRejectBtnClass }}">{{ __('personnel.ui.leave.btn_reject') }}</button>
-              </form>
-              @endif
-            </div>
-            @if(!$mutationCanAct)
-            <div class="mt-2 text-[11px] text-gray-500">Action réservée au valideur courant.</div>
-            @endif
-          </td>
+        @forelse($trainingHistoryRows as $enrollment)
+        <tr class="border-b border-gray-100">
+          <td class="py-3 pr-4 text-gray-600">{{ optional($enrollment->updated_at)->format('d/m/Y H:i') }}</td>
+          <td class="py-3 pr-4 text-gray-600">{{ $enrollment->employee?->employee_number ?: '-' }}</td>
+          <td class="py-3 pr-4 text-gray-800 font-semibold">{{ $enrollment->employee?->full_name ?? 'Agent supprimé' }}</td>
+          <td class="py-3 pr-4 text-gray-600">{{ $enrollment->training?->title ?? 'Formation supprimée' }}</td>
+          <td class="py-3"><span class="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold {{ $enrollment->status === 'rejected' ? 'bg-red-50 text-red-700' : 'bg-emerald-50 text-emerald-700' }}">{{ ucfirst(str_replace('_', ' ', $enrollment->status)) }}</span></td>
         </tr>
         @empty
-        <tr>
-          <td colspan="7" class="py-8 text-center text-sm text-gray-400">Aucune demande de mutation en attente de validation.</td>
-        </tr>
+        <tr><td colspan="5" class="py-8 text-center text-sm text-gray-400">Aucun historique disponible.</td></tr>
         @endforelse
       </tbody>
     </table>
   </div>
 </div>
-@endif
-@elseif($personnelTab === 'training')
+@else
 <div class="grid grid-cols-1 xl:grid-cols-6 gap-5 mb-5">
   <section class="xl:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
     <div class="flex items-center justify-between gap-3 mb-4">
@@ -3264,6 +3222,7 @@ $_oc = [
   </div>
 </div>
 
+@endif
 @elseif($personnelTab === 'career')
 <div class="grid grid-cols-1 xl:grid-cols-3 gap-5 mb-5">
   <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
@@ -3301,7 +3260,141 @@ $_oc = [
     'validated' => 'bg-emerald-100 text-emerald-700',
     'rejected' => 'bg-red-100 text-red-700',
   ];
+  $careerSubtab = request('career_subtab', 'management');
+  $careerSubtabs = [
+    'management' => ['fas fa-sliders', 'Gestion'],
+    'validation' => ['fas fa-user-check', 'Validation'],
+    'history' => ['fas fa-clock-rotate-left', 'Historique'],
+  ];
+  if (!array_key_exists($careerSubtab, $careerSubtabs)) {
+    $careerSubtab = 'management';
+  }
+  $careerValidationRows = $mutationRequestsCareer->filter(fn ($m) => (string) ($m->status ?? '') === 'pending')->values();
+  $careerHistoryRows = $mutationRequestsCareer->filter(fn ($m) => in_array((string) ($m->status ?? ''), ['validated', 'rejected'], true))->values();
 @endphp
+
+<div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-3 mb-5">
+  <div class="flex flex-wrap items-center gap-2">
+    @foreach($careerSubtabs as $key => [$icon, $label])
+    <a href="{{ route('admin.index', ['tab' => 'personnel', 'personnel_tab' => 'career', 'career_subtab' => $key]) }}"
+       class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition {{ $careerSubtab === $key ? 'bg-[#2453d6] text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200' }}">
+      <i class="{{ $icon }} text-xs"></i>
+      <span>{{ $label }}</span>
+    </a>
+    @endforeach
+  </div>
+</div>
+
+@if($careerSubtab === 'validation')
+<section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-5">
+  <div class="flex items-center justify-between gap-3 mb-4">
+    <div>
+      <h3 class="text-lg font-bold text-gray-800">Validation des demandes de mutation</h3>
+      <p class="text-sm text-gray-500">Demandes en attente d'action du valideur courant.</p>
+    </div>
+    <span class="text-xs rounded-full bg-amber-50 text-amber-700 border border-amber-100 px-3 py-1">{{ $careerValidationRows->count() }} en attente</span>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="min-w-full text-sm">
+      <thead>
+        <tr class="text-left text-gray-500 border-b border-gray-100">
+          <th class="py-3 pr-4">Date</th>
+          <th class="py-3 pr-4">Agent</th>
+          <th class="py-3 pr-4">Trajet</th>
+          <th class="py-3 pr-4">Valideur courant</th>
+          <th class="py-3">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        @forelse($careerValidationRows as $mutation)
+        @php
+          $wf = is_array(data_get($mutation->metadata, 'approval_workflow')) ? data_get($mutation->metadata, 'approval_workflow') : [];
+          $wfCurrentApproverId = trim((string) data_get($wf, 'current_approver_user_id', ''));
+          $wfCurrentApproverName = $allUsers->firstWhere('id', $wfCurrentApproverId)?->name ?? 'Non défini';
+          $wfCurrentStep = collect(data_get($wf, 'steps', []))->get((int) data_get($wf, 'current_step_index', 0));
+          $wfCanAct = $wfCurrentApproverId !== '' && strcasecmp($wfCurrentApproverId, $currentActorId) === 0 && !$isAgentRhFollowOnly && !$isSuperAdminFollowOnly;
+          $wfSourceName = data_get($mutation->metadata, 'mutation_request.source_sub_entity_name', $mutation->previous_job_title ?: '-');
+          $wfTargetName = data_get($mutation->metadata, 'mutation_request.target_sub_entity_name', $mutation->new_job_title ?: '-');
+        @endphp
+        <tr class="border-b border-gray-100 align-top">
+          <td class="py-3 pr-4 text-gray-600">{{ optional($mutation->created_at)->format('d/m/Y H:i') }}</td>
+          <td class="py-3 pr-4 text-gray-800 font-semibold">{{ $mutation->employee?->full_name ?? 'Agent supprimé' }}</td>
+          <td class="py-3 pr-4 text-gray-600">{{ $wfSourceName }} → {{ $wfTargetName }}</td>
+          <td class="py-3 pr-4 text-gray-600">{{ $wfCurrentApproverName }} @if($wfCurrentStep && !empty($wfCurrentStep['profile'])) ({{ $wfCurrentStep['profile'] }}) @endif</td>
+          <td class="py-3">
+            @if($wfCanAct)
+            <div class="flex flex-wrap gap-2">
+              <form method="POST" action="{{ route('admin.personnel.mutation-requests.status', $mutation) }}">
+                @csrf
+                @method('PATCH')
+                <input type="hidden" name="personnel_tab" value="career">
+                <input type="hidden" name="career_subtab" value="validation">
+                <input type="hidden" name="status" value="approved">
+                <button type="submit" class="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700 transition">Approuver</button>
+              </form>
+              <form method="POST" action="{{ route('admin.personnel.mutation-requests.status', $mutation) }}" class="flex flex-wrap gap-2 items-center">
+                @csrf
+                @method('PATCH')
+                <input type="hidden" name="personnel_tab" value="career">
+                <input type="hidden" name="career_subtab" value="validation">
+                <input type="hidden" name="status" value="rejected">
+                <input type="text" name="comment" required placeholder="Motif du rejet" class="border border-gray-300 rounded-lg px-3 py-1.5 text-xs min-w-[180px]">
+                <button type="submit" class="px-3 py-1.5 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-700 transition">Rejeter</button>
+              </form>
+            </div>
+            @else
+            <div class="text-[11px] text-gray-500">Action réservée au valideur courant.</div>
+            @endif
+          </td>
+        </tr>
+        @empty
+        <tr><td colspan="5" class="py-8 text-center text-sm text-gray-400">Aucune demande de mutation en attente de validation.</td></tr>
+        @endforelse
+      </tbody>
+    </table>
+  </div>
+</section>
+@elseif($careerSubtab === 'history')
+<section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-5">
+  <div class="flex items-center justify-between gap-3 mb-4">
+    <div>
+      <h3 class="text-lg font-bold text-gray-800">Historique des demandes de mutation</h3>
+      <p class="text-sm text-gray-500">Demandes validées ou rejetées.</p>
+    </div>
+    <span class="text-xs rounded-full bg-gray-100 text-gray-700 border border-gray-200 px-3 py-1">{{ $careerHistoryRows->count() }} élément(s)</span>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="min-w-full text-sm">
+      <thead>
+        <tr class="text-left text-gray-500 border-b border-gray-100">
+          <th class="py-3 pr-4">Date</th>
+          <th class="py-3 pr-4">Agent</th>
+          <th class="py-3 pr-4">Trajet</th>
+          <th class="py-3">Statut</th>
+        </tr>
+      </thead>
+      <tbody>
+        @forelse($careerHistoryRows as $mutation)
+        @php
+          $historyTargetName = data_get($mutation->metadata, 'mutation_request.target_sub_entity_name', $mutation->new_job_title ?: '-');
+          $historySourceName = data_get($mutation->metadata, 'mutation_request.source_sub_entity_name', $mutation->previous_job_title ?: '-');
+        @endphp
+        <tr class="border-b border-gray-100">
+          <td class="py-3 pr-4 text-gray-600">{{ optional($mutation->updated_at)->format('d/m/Y H:i') }}</td>
+          <td class="py-3 pr-4 text-gray-800 font-semibold">{{ $mutation->employee?->full_name ?? 'Agent supprimé' }}</td>
+          <td class="py-3 pr-4 text-gray-600">{{ $historySourceName }} → {{ $historyTargetName }}</td>
+          <td class="py-3">
+            <span class="inline-flex px-2.5 py-1 rounded-full text-xs font-semibold {{ $mutation->status === 'validated' ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700' }}">{{ $mutation->status === 'validated' ? 'Validée' : 'Rejetée' }}</span>
+          </td>
+        </tr>
+        @empty
+        <tr><td colspan="4" class="py-8 text-center text-sm text-gray-400">Aucun historique disponible.</td></tr>
+        @endforelse
+      </tbody>
+    </table>
+  </div>
+</section>
+@endif
 
 <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-5">
   <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
