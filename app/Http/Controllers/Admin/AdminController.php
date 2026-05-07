@@ -886,7 +886,14 @@ class AdminController extends Controller
             if (Schema::hasTable('personnel_training_enrollments')) {
                 $trainingEnrollmentQuery = PersonnelTrainingEnrollment::with(['employee', 'training'])->latest();
                 $this->applyPersonnelScope($trainingEnrollmentQuery, $adminScope);
-                $personnelTrainingEnrollments = $trainingEnrollmentQuery->limit(12)->get();
+                $currentUserId = (string) (auth()->id() ?? '');
+                if ($currentUserId !== '') {
+                    $trainingEnrollmentQuery->orWhere(function ($query) use ($currentUserId) {
+                        $query->where('status', 'pending')
+                            ->where('metadata->approval_workflow->current_approver_user_id', $currentUserId);
+                    });
+                }
+                $personnelTrainingEnrollments = $trainingEnrollmentQuery->limit(50)->get();
                 $personnelStats['enrollments'] = (clone $this->applyPersonnelScope(PersonnelTrainingEnrollment::query(), $adminScope))->count();
             }
 
@@ -1324,6 +1331,7 @@ class AdminController extends Controller
     {
         $validated = $request->validate([
             'personnel_tab' => ['nullable', 'string'],
+            'leave_subtab' => ['nullable', 'string'],
             'status' => ['required', 'in:approved,rejected'],
             'comment' => ['nullable', 'string'],
         ]);
@@ -1394,6 +1402,7 @@ class AdminController extends Controller
                 return redirect()->route('admin.index', [
                     'tab' => 'personnel',
                     'personnel_tab' => $validated['personnel_tab'] ?? 'career',
+                    'leave_subtab' => $validated['leave_subtab'] ?? null,
                 ])->with('success', 'Validation enregistrée et demande transmise au niveau suivant.');
             }
 
@@ -1420,6 +1429,7 @@ class AdminController extends Controller
             return redirect()->route('admin.index', [
                 'tab' => 'personnel',
                 'personnel_tab' => $validated['personnel_tab'] ?? 'career',
+                'leave_subtab' => $validated['leave_subtab'] ?? null,
             ])->with('success', 'Demande de mutation validée définitivement.');
         }
 
@@ -1433,6 +1443,7 @@ class AdminController extends Controller
         return redirect()->route('admin.index', [
             'tab' => 'personnel',
             'personnel_tab' => $validated['personnel_tab'] ?? 'career',
+            'leave_subtab' => $validated['leave_subtab'] ?? null,
         ])->with('success', 'Demande de mutation rejetée.');
     }
 
@@ -2734,6 +2745,7 @@ class AdminController extends Controller
                 'status' => ['required', 'in:approved,rejected'],
                 'comment' => ['nullable', 'string'],
                 'personnel_tab' => ['nullable', 'string'],
+                'leave_subtab' => ['nullable', 'string'],
             ]);
 
             $steps = collect($workflow['steps'] ?? [])->filter(fn ($step) => !empty($step['user_id']))->values()->all();
@@ -2783,6 +2795,7 @@ class AdminController extends Controller
                     return redirect()->route('admin.index', [
                         'tab' => 'personnel',
                         'personnel_tab' => $validated['personnel_tab'] ?? 'training',
+                        'leave_subtab' => $validated['leave_subtab'] ?? null,
                     ])->with('success', 'Validation enregistrée et demande transmise au niveau suivant.');
                 }
 
@@ -2796,6 +2809,7 @@ class AdminController extends Controller
                 return redirect()->route('admin.index', [
                     'tab' => 'personnel',
                     'personnel_tab' => $validated['personnel_tab'] ?? 'training',
+                    'leave_subtab' => $validated['leave_subtab'] ?? null,
                 ])->with('success', 'Demande de formation validée définitivement.');
             }
 
@@ -2809,6 +2823,7 @@ class AdminController extends Controller
             return redirect()->route('admin.index', [
                 'tab' => 'personnel',
                 'personnel_tab' => $validated['personnel_tab'] ?? 'training',
+                'leave_subtab' => $validated['leave_subtab'] ?? null,
             ])->with('success', 'Demande de formation rejetée.');
         }
 
