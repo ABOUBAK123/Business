@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Document;
 use App\Models\DocumentTemplate;
 use App\Models\PersonnelEmployee;
+use App\Models\PersonnelEmployeeDocument;
 use App\Models\Signature;
 use App\Models\SignatureProviderConfig;
 use App\Models\SignatureRequest;
@@ -27,6 +28,76 @@ class SignatureController extends Controller
 {
     private ?string $lastPlatformError = null;
     private ?string $lastPlatformWorkflowId = null;
+
+    private function syncCompletedVirtualCardToAgentDocuments(WorkflowExecution $execution): void
+    {
+        $workflow = $execution->workflow;
+        $document = $execution->document;
+        if (!$workflow || !$document) {
+            return;
+        }
+
+        $stepData = is_array($execution->step_data) ? $execution->step_data : [];
+        $workflowType = strtolower(trim((string) ($stepData['workflow_type'] ?? '')));
+        $workflowName = strtolower(trim((string) ($workflow->name ?? '')));
+
+        if ($workflowType !== 'virtual_card_signature' && !str_contains($workflowName, 'carte pour signature')) {
+            return;
+        }
+
+        $employeeId = (string) ($stepData['employee_id'] ?? '');
+        if ($employeeId === '') {
+            return;
+        }
+
+        $employee = PersonnelEmployee::find($employeeId);
+        if (!$employee) {
+            return;
+        }
+
+        $sourcePath = (string) ($document->signed_file_path ?: $document->file_path ?: '');
+        if ($sourcePath === '') {
+            return;
+        }
+
+        $normalized = ltrim($sourcePath, '/');
+        $disk = 'local';
+        $path = $normalized;
+
+        if (str_starts_with($normalized, 'storage/')) {
+            $disk = 'public';
+            $path = ltrim(substr($normalized, strlen('storage/')), '/');
+        }
+
+        if (!Storage::disk($disk)->exists($path)) {
+            $altDisk = $disk === 'public' ? 'local' : 'public';
+            if (Storage::disk($altDisk)->exists($path)) {
+                $disk = $altDisk;
+            } else {
+                return;
+            }
+        }
+
+        $alreadyLinked = PersonnelEmployeeDocument::query()
+            ->where('employee_id', $employee->id)
+            ->where('category', 'virtual_card_signed')
+            ->where('path', $path)
+            ->exists();
+
+        if ($alreadyLinked) {
+            return;
+        }
+
+        $employee->documents()->create([
+            'category' => 'virtual_card_signed',
+            'label' => 'Carte virtuelle signée',
+            'disk' => $disk,
+            'path' => $path,
+            'original_name' => basename($path),
+            'mime_type' => $document->mime_type ?: null,
+            'size' => Storage::disk($disk)->exists($path) ? Storage::disk($disk)->size($path) : null,
+        ]);
+    }
 
     private function appendWorkflowRejectionHistory(WorkflowExecution $execution, array $entry): void
     {
@@ -78,6 +149,10 @@ class SignatureController extends Controller
                 'completed_at' => now(),
                 'platform_status' => $platformStatus,
             ]);
+
+            $execution->refresh();
+            $execution->loadMissing(['workflow', 'document']);
+            $this->syncCompletedVirtualCardToAgentDocuments($execution);
 
             $isSignatureStep = (bool) ($currentStepObj?->requires_signature ?? false);
             if ($execution->document_id && $isSignatureStep) {
@@ -862,6 +937,10 @@ class SignatureController extends Controller
             if ($nextStep > $totalSteps) {
                 // Dernière étape : terminer le workflow
                 $execution->update(['status' => 'completed', 'current_step' => $totalSteps, 'completed_at' => now()]);
+
+                $execution->refresh();
+                $execution->loadMissing(['workflow', 'document']);
+                $this->syncCompletedVirtualCardToAgentDocuments($execution);
 
                 if ($execution->document_id && $isSignatureStep) {
                     Document::find($execution->document_id)?->update(['status' => 'signed', 'signed_at' => now()]);

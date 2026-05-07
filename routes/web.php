@@ -309,6 +309,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/personnel/employees/template', [AdminController::class, 'downloadPersonnelEmployeesTemplate'])->name('personnel.employees.template');
         Route::post('/personnel/employees/import', [AdminController::class, 'importPersonnelEmployees'])->name('personnel.employees.import');
         Route::put('/personnel/employees/{employee}', [AdminController::class, 'updatePersonnelEmployee'])->name('personnel.employees.update');
+        Route::post('/personnel/employees/{employee}/virtual-card/transmit', [AdminController::class, 'transmitVirtualCardForSignature'])->name('personnel.employees.virtual-card.transmit');
         Route::post('/personnel/employees/{employee}/create-user', [AdminController::class, 'createUserFromPersonnelEmployee'])->name('personnel.employees.create-user');
         Route::post('/personnel/employees/{employee}/documents', [AdminController::class, 'uploadPersonnelEmployeeDocument'])->name('personnel.employees.documents.store');
         Route::post('/personnel/employee-skills', [AdminController::class, 'storePersonnelEmployeeSkill'])->name('personnel.employees.skills.store');
@@ -327,6 +328,8 @@ Route::middleware('auth')->group(function () {
         Route::post('/personnel/goals', [AdminController::class, 'storePersonnelGoal'])->name('personnel.goals.store');
         Route::post('/personnel/performance-reviews', [AdminController::class, 'storePersonnelPerformanceReview'])->name('personnel.performance-reviews.store');
         Route::post('/personnel/career-events', [AdminController::class, 'storePersonnelCareerEvent'])->name('personnel.career-events.store');
+        Route::post('/personnel/mutation-requests', [AdminController::class, 'storePersonnelMutationRequest'])->name('personnel.mutation-requests.store');
+        Route::patch('/personnel/mutation-requests/{event}/status', [AdminController::class, 'updatePersonnelMutationRequestStatus'])->name('personnel.mutation-requests.status');
         Route::post('/templates/upload-file', [AdminController::class, 'uploadTemplateFile'])->name('admin.templates.uploadFile');
         Route::post('/templates/{template}/detect-vars', [AdminController::class, 'detectTemplateVars'])->name('admin.templates.detectVars');
             Route::post('/templates/{template}/ai-enrich',   [AdminController::class, 'aiEnrichTemplateVars'])->name('admin.templates.aiEnrich');

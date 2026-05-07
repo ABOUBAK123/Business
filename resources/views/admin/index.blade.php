@@ -398,7 +398,7 @@ $_oc = [
       <input type="hidden" name="personnel_tab" value="employees">
     </form>
     @endif
-    <form method="POST" action="{{ $editingPersonnel ? route('admin.personnel.employees.update', $editingPersonnel) : route('admin.personnel.employees.store') }}" class="space-y-6">
+    <form id="employee-registration-form" method="POST" enctype="multipart/form-data" action="{{ $editingPersonnel ? route('admin.personnel.employees.update', $editingPersonnel) : route('admin.personnel.employees.store') }}" class="space-y-6">
       @csrf
       @if($editingPersonnel)
         @method('PUT')
@@ -424,6 +424,10 @@ $_oc = [
           <div>
             <label class="block text-sm font-semibold text-gray-700 mb-1">Lieu de naissance</label>
             <input type="text" name="birth_place" value="{{ old('birth_place', $editingPersonnel->birth_place ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+          </div>
+          <div>
+            <label class="block text-sm font-semibold text-gray-700 mb-1">NNI</label>
+            <input type="text" name="meta_nni" value="{{ old('meta_nni', $empMeta['nni'] ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400" placeholder="Numéro National d'Identité">
           </div>
           <div>
             <label class="block text-sm font-semibold text-gray-700 mb-1">Téléphone</label>
@@ -456,6 +460,13 @@ $_oc = [
           <div>
             <label class="block text-sm font-semibold text-gray-700 mb-1">Téléphone urgence</label>
             <input type="text" name="emergency_contact_phone" value="{{ old('emergency_contact_phone', $editingPersonnel->emergency_contact_phone ?? '') }}" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-400">
+          </div>
+          <div class="md:col-span-2">
+            <label class="block text-sm font-semibold text-gray-700 mb-1">Photo de l'agent (carte virtuelle)</label>
+            <input type="file" id="employee-photo-input" name="employee_photo" accept="image/*" class="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-orange-100 file:px-3 file:py-1.5 file:text-orange-700 hover:file:bg-orange-200 focus:outline-none focus:ring-2 focus:ring-teal-400">
+            @if(!empty($empMeta['photo_path']))
+            <p class="mt-1 text-xs text-gray-500">Photo actuelle enregistrée: {{ basename($empMeta['photo_path']) }}</p>
+            @endif
           </div>
         </div>
       </div>
@@ -686,10 +697,226 @@ $_oc = [
         </div>
       </div>
 
-      <div class="pt-2 flex gap-3">
+      <div class="pt-2 flex flex-wrap gap-3">
+        <button type="button" id="btn-open-virtual-card" class="px-6 py-2.5 bg-[#2453d6] hover:bg-[#1d43ad] text-white font-semibold rounded-xl text-sm inline-flex items-center gap-2">
+          <i class="fas fa-id-badge"></i>
+          Éditer la carte virtuelle de l'Agent
+        </button>
         <button type="submit" class="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white font-semibold rounded-xl text-sm">{{ $editingPersonnel ? __('personnel.ui.employees.form_btn_update') : __('personnel.ui.employees.form_btn_create') }}</button>
       </div>
     </form>
+
+    <div id="virtual-agent-card-modal" class="hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm p-4 sm:p-6 lg:p-8">
+      <div class="w-full max-w-[88vw] min-w-[320px] mx-auto bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+          <h4 class="text-base font-bold text-gray-800">Carte virtuelle de l'Agent</h4>
+          <button type="button" id="btn-close-virtual-card" class="px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm">Fermer</button>
+        </div>
+
+        <div class="p-5 bg-gray-50">
+          @php
+            $_armoiriePath = public_path('images/armoirie_ci.png');
+            $_armoirieSrc = file_exists($_armoiriePath)
+              ? 'data:image/png;base64,' . base64_encode(file_get_contents($_armoiriePath))
+              : asset('images/armoirie_ci.png');
+          @endphp
+          <div id="virtual-agent-card-preview" style="background-color:#f0fff4;border:3px solid #f97316;border-radius:16px;padding:16px;width:100%;max-width:450px;min-height:320px;margin:0 auto;box-shadow:0 2px 8px rgba(0,0,0,0.08);position:relative;overflow:hidden;">
+            <div aria-hidden="true" style="position:absolute;inset:0;background-image:url('{{ $_armoirieSrc }}');background-repeat:no-repeat;background-position:center;background-size:72% auto;opacity:0.08;pointer-events:none;"></div>
+            <div style="position:relative;z-index:1;">
+
+            {{-- En-tête : République + Armoirie + Devise --}}
+            <div style="text-align:center;margin-bottom:10px;">
+              <div style="font-size:15px;font-weight:900;letter-spacing:0.05em;color:#111;">REPUBLIQUE DE CÔTE D'IVOIRE</div>
+              <div style="margin-top:8px;display:flex;justify-content:center;">
+                <img src="{{ $_armoirieSrc }}" alt="Armoirie de la Côte d'Ivoire" style="height:70px;width:auto;display:block;margin:0 auto;">
+              </div>
+              <div style="font-size:12px;font-weight:700;color:#c2410c;margin-top:6px;">Union - Discipline - Travail</div>
+            </div>
+
+            {{-- Administration encadrée --}}
+            <div style="border:2px solid #f97316;border-radius:8px;padding:6px 12px;text-align:center;margin-bottom:10px;">
+              <div id="vac-admin-name" style="font-size:15px;font-weight:800;color:#111;">ADMINISTRATION</div>
+            </div>
+
+            {{-- Corps compact : grille infos + colonne photo/signature pour réduire la hauteur --}}
+            <div style="display:flex;gap:14px;align-items:stretch;">
+              <div style="flex:1;display:grid;grid-template-columns:minmax(0,1fr);row-gap:5px;font-size:13px;color:#1f2937;line-height:1.45;">
+                <div><strong>Nom :</strong> <span id="vac-last-name">-</span></div>
+                <div><strong>Prénoms :</strong> <span id="vac-first-name">-</span></div>
+                <div><strong>Né(e) le :</strong> <span id="vac-birth-date">-</span></div>
+                <div><strong>Lieu de naissance :</strong> <span id="vac-birth-place">-</span></div>
+                <div><strong>Matricule :</strong> <span id="vac-employee-number">-</span></div>
+                <div><strong>Emploi :</strong> <span id="vac-job-title">-</span></div>
+                <div><strong>Date de prise de service :</strong> <span id="vac-hire-date">-</span></div>
+                <div><strong>NNI :</strong> <span id="vac-nni">-</span></div>
+                <div><strong>Situation familiale :</strong> <span id="vac-marital-status">-</span></div>
+              </div>
+
+              <div style="width:150px;display:flex;flex-direction:column;justify-content:space-between;gap:8px;">
+                <div style="width:150px;height:160px;border:2px solid #f97316;border-radius:8px;background:#fff;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+                  <div id="vac-photo-container" style="width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+                    <img id="vac-photo-preview" src="" alt="" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:6px;">
+                    <span id="vac-photo-placeholder" style="font-size:10px;color:#9ca3af;text-align:center;padding:4px;line-height:1.35;">
+                      <svg width="28" height="28" fill="none" stroke="#f97316" stroke-width="1.5" viewBox="0 0 24 24" style="display:block;margin:0 auto 4px;"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+                      Photo depuis<br>le formulaire
+                    </span>
+                  </div>
+                </div>
+
+                <div style="text-align:center;">
+                  <div style="font-size:10px;color:#6b7280;">Signé par :</div>
+                  <div style="margin-top:10px;border-top:1px solid #9ca3af;padding-top:4px;font-size:9px;font-weight:800;color:#111;text-transform:uppercase;letter-spacing:0.04em;">Le Directeur des Ressources Humaines</div>
+                </div>
+              </div>
+            </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="px-5 py-4 border-t border-gray-100 bg-white flex items-center justify-end gap-2">
+          @if($editingPersonnel)
+          <form id="virtual-card-transmit-form" method="POST" action="{{ route('admin.personnel.employees.virtual-card.transmit', $editingPersonnel) }}" class="hidden">
+            @csrf
+            <input type="hidden" name="personnel_tab" value="employees">
+            <input type="hidden" name="card_html" id="virtual-card-html-input" value="">
+            <input type="hidden" name="signature_zone_page" value="1">
+            <input type="hidden" name="signature_zone_x" value="70">
+            <input type="hidden" name="signature_zone_y" value="84">
+            <input type="hidden" name="signature_zone_width" value="26">
+            <input type="hidden" name="signature_zone_height" value="10">
+          </form>
+          <button type="button" id="btn-transmit-virtual-card" class="px-4 py-2 rounded-lg bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold">Transmettre pour signature</button>
+          @endif
+          <button type="button" id="btn-print-virtual-card" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold">Imprimer</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+    (function () {
+      var form = document.getElementById('employee-registration-form');
+      var openBtn = document.getElementById('btn-open-virtual-card');
+      var closeBtn = document.getElementById('btn-close-virtual-card');
+      var printBtn = document.getElementById('btn-print-virtual-card');
+      var transmitBtn = document.getElementById('btn-transmit-virtual-card');
+      var transmitForm = document.getElementById('virtual-card-transmit-form');
+      var transmitCardHtmlInput = document.getElementById('virtual-card-html-input');
+      var modal = document.getElementById('virtual-agent-card-modal');
+      var card = document.getElementById('virtual-agent-card-preview');
+      if (!form || !openBtn || !closeBtn || !modal || !card) return;
+
+      function textByName(name) {
+        var el = form.querySelector('[name="' + name + '"]');
+        return el ? String(el.value || '').trim() : '';
+      }
+
+      function selectedTextByName(name) {
+        var el = form.querySelector('[name="' + name + '"]');
+        if (!el) return '';
+        var idx = el.selectedIndex;
+        if (idx < 0 || !el.options[idx]) return '';
+        return String(el.options[idx].text || '').trim();
+      }
+
+      function formatDate(isoDate) {
+        if (!isoDate) return '-';
+        var parts = isoDate.split('-');
+        if (parts.length !== 3) return isoDate;
+        return parts[2] + '/' + parts[1] + '/' + parts[0];
+      }
+
+      function setText(id, value, fallback) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.textContent = value && value !== '' ? value : (fallback || '-');
+      }
+
+      function cleanAdminName(text) {
+        // Supprime les suffixes entre crochets ajoutés dans les options du select (ex: [Émetteur], [Destinataire])
+        return text.replace(/\s*\[.*?\]\s*$/, '').trim();
+      }
+
+      function refreshCard() {
+        var adminText = cleanAdminName(selectedTextByName('administration_id'));
+        var maritalStatus = selectedTextByName('marital_status');
+        var jobTitle = selectedTextByName('job_title');
+        var nniValue = textByName('meta_nni') || textByName('nni');
+        setText('vac-last-name', textByName('last_name').toUpperCase(), '-');
+        setText('vac-first-name', textByName('first_name'), '-');
+        setText('vac-birth-date', formatDate(textByName('birth_date')), '-');
+        setText('vac-birth-place', textByName('birth_place'), '-');
+        setText('vac-employee-number', textByName('employee_number'), '-');
+        setText('vac-job-title', jobTitle, '-');
+        setText('vac-hire-date', formatDate(textByName('hire_date')), '-');
+        setText('vac-nni', nniValue, '-');
+        setText('vac-marital-status', maritalStatus, '-');
+        setText('vac-admin-name', adminText && adminText !== '{{ __('personnel.ui.employees.form_select_admin') }}' ? adminText : 'ADMINISTRATION');
+      }
+
+      function openModal() {
+        refreshCard();
+        modal.classList.remove('hidden');
+      }
+
+      function closeModal() {
+        modal.classList.add('hidden');
+      }
+
+      openBtn.addEventListener('click', openModal);
+      closeBtn.addEventListener('click', closeModal);
+      modal.addEventListener('click', function (e) {
+        if (e.target === modal) closeModal();
+      });
+
+      // Photo upload preview from registration form field
+      var photoInput = document.getElementById('employee-photo-input');
+      var photoPreview = document.getElementById('vac-photo-preview');
+      var photoPlaceholder = document.getElementById('vac-photo-placeholder');
+      var existingPhotoUrl = @json(!empty($empMeta['photo_path']) ? asset('storage/' . $empMeta['photo_path']) : '');
+
+      function applyPhotoPreview(src) {
+        if (!photoPreview || !src) return;
+        photoPreview.src = src;
+        photoPreview.style.display = 'block';
+        if (photoPlaceholder) photoPlaceholder.style.display = 'none';
+      }
+
+      if (existingPhotoUrl) {
+        applyPhotoPreview(existingPhotoUrl);
+      }
+
+      if (photoInput && photoPreview) {
+        photoInput.addEventListener('change', function () {
+          var file = photoInput.files && photoInput.files[0];
+          if (!file) return;
+          var reader = new FileReader();
+          reader.onload = function (e) {
+            applyPhotoPreview(e.target.result);
+          };
+          reader.readAsDataURL(file);
+        });
+      }
+
+      if (transmitBtn && transmitForm && transmitCardHtmlInput) {
+        transmitBtn.addEventListener('click', function () {
+          refreshCard();
+          transmitCardHtmlInput.value = card.outerHTML;
+          transmitForm.submit();
+        });
+      }
+
+      if (printBtn) {
+        printBtn.addEventListener('click', function () {
+          var w = window.open('', '_blank', 'width=900,height=700');
+          if (!w) return;
+          w.document.write('<html><head><title>Carte virtuelle agent</title><style>body{font-family:Arial,sans-serif;padding:30px;background:#fff;}input[type=file]{display:none!important;}</style></head><body>' + card.outerHTML + '</body></html>');
+          w.document.close();
+          w.focus();
+          w.print();
+        });
+      }
+    })();
+    </script>
   </section>
 
   <section class="xl:col-span-3 space-y-5">
@@ -844,6 +1071,8 @@ $_oc = [
   $agentSpaceLeaveRequests = collect();
   $agentSpaceTrainingEnrollments = collect();
   $agentSpaceCareerHistory = collect();
+  $agentSpaceMutationRequests = collect();
+  $agentSpaceMutationTargets = collect();
   if ($agentSpaceEmployee) {
     $agentSpaceLeaveRequests = $personnelLeaveRequests
       ->where('employee_id', $agentSpaceEmployee->id)
@@ -861,12 +1090,27 @@ $_oc = [
       ->sortByDesc('effective_date')
       ->take(12)
       ->values();
+
+    $agentSpaceMutationRequests = ($personnelMutationRequests ?? collect())
+      ->where('employee_id', $agentSpaceEmployee->id)
+      ->sortByDesc('created_at')
+      ->values();
+
+    $agentSpaceMutationTargets = $subEntities
+      ->where('scope_type', $agentSpaceEmployee->administration_type)
+      ->where('scope_id', $agentSpaceEmployee->administration_id)
+      ->filter(function ($entity) use ($agentSpaceEmployee) {
+        return !empty($entity->code) && (string) $entity->code !== (string) ($agentSpaceEmployee->subEntity?->code ?? '');
+      })
+      ->sortBy('name')
+      ->values();
   }
   $agentSpaceTab = request('agent_space_tab', 'profile');
   $agentSpaceTabs = [
     'profile' => ['fas fa-user', __('personnel.ui.agent_space.subtab_profile')],
     'leave' => ['fas fa-calendar-check', __('personnel.ui.agent_space.subtab_leave')],
     'training' => ['fas fa-graduation-cap', __('personnel.ui.agent_space.subtab_training')],
+    'mutation' => ['fas fa-right-left', 'Mutation'],
     'documents' => ['fas fa-folder-open', __('personnel.ui.agent_space.subtab_documents')],
   ];
   if (!array_key_exists($agentSpaceTab, $agentSpaceTabs)) {
@@ -948,6 +1192,7 @@ $_oc = [
         ['Prénom', $agentSpaceEmployee->first_name ?: '-'],
         ['Date de naissance', optional($agentSpaceEmployee->birth_date)->format('d/m/Y') ?: '-'],
         ['Lieu de naissance', $agentSpaceEmployee->birth_place ?: '-'],
+        ['NNI', $agentMeta['nni'] ?? '-'],
         ['Téléphone', $agentSpaceEmployee->phone ?: '-'],
         ['Email', $agentSpaceEmployee->email ?: '-'],
       ];
@@ -1619,6 +1864,101 @@ $_oc = [
     </div>
   </section>
 </div>
+@elseif($agentSpaceTab === 'mutation')
+@php
+  $mutationStatusBadge = [
+    'pending' => 'bg-amber-100 text-amber-800',
+    'validated' => 'bg-emerald-100 text-emerald-700',
+    'rejected' => 'bg-red-100 text-red-700',
+  ];
+  $mutationStatusLabel = [
+    'pending' => 'En attente',
+    'validated' => 'Validée',
+    'rejected' => 'Rejetée',
+  ];
+@endphp
+<div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
+  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <div class="flex items-center justify-between mb-3">
+      <h4 class="text-base font-bold text-gray-800">Nouvelle demande de mutation</h4>
+      <span class="text-xs rounded-full bg-blue-50 text-blue-700 px-3 py-1 border border-blue-100">Circuit hiérarchique automatique</span>
+    </div>
+
+    @if($agentSpaceMutationTargets->isEmpty())
+    <div class="rounded-xl bg-amber-50 border border-amber-100 px-4 py-4 text-sm text-amber-800">
+      Aucune entité de destination disponible pour votre administration.
+    </div>
+    @else
+    <form method="POST" action="{{ route('admin.personnel.mutation-requests.store') }}" class="space-y-3">
+      @csrf
+      <input type="hidden" name="personnel_tab" value="agent-space">
+      <input type="hidden" name="agent_space_tab" value="mutation">
+      <input type="hidden" name="employee_id" value="{{ $agentSpaceEmployee->id }}">
+
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">Entité de destination</label>
+        <select name="target_sub_entity_code" class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm" required>
+          <option value="">Sélectionner une entité</option>
+          @foreach($agentSpaceMutationTargets as $target)
+          <option value="{{ $target->code }}" {{ old('target_sub_entity_code') === $target->code ? 'selected' : '' }}>
+            {{ $target->name }} ({{ $target->code }})
+          </option>
+          @endforeach
+        </select>
+      </div>
+
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">Objet de la demande</label>
+        <input type="text" name="summary" value="{{ old('summary') }}" placeholder="Ex: Mutation pour rapprochement de service"
+          class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm">
+      </div>
+
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">Justification</label>
+        <textarea name="notes" rows="4" placeholder="Précisez les raisons de votre demande..."
+          class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm">{{ old('notes') }}</textarea>
+      </div>
+
+      <button type="submit" class="px-4 py-2 bg-[#2453d6] text-white rounded-xl text-sm font-semibold">
+        <i class="fas fa-paper-plane mr-1"></i> Envoyer la demande
+      </button>
+    </form>
+    @endif
+  </section>
+
+  <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
+    <h4 class="text-base font-bold text-gray-800 mb-3">Mes demandes de mutation</h4>
+    <div class="space-y-3">
+      @forelse($agentSpaceMutationRequests as $request)
+      @php
+        $status = (string) ($request->status ?? 'pending');
+        $badgeClass = $mutationStatusBadge[$status] ?? 'bg-gray-100 text-gray-700';
+        $label = $mutationStatusLabel[$status] ?? ucfirst($status);
+        $targetName = data_get($request->metadata, 'mutation_request.target_sub_entity_name', $request->new_job_title ?: '-');
+        $sourceName = data_get($request->metadata, 'mutation_request.source_sub_entity_name', $request->previous_job_title ?: '-');
+      @endphp
+      <div class="rounded-xl border border-gray-200 px-4 py-3">
+        <div class="flex items-center justify-between gap-3">
+          <div class="text-sm font-semibold text-gray-800">{{ $request->title }}</div>
+          <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold {{ $badgeClass }}">{{ $label }}</span>
+        </div>
+        <div class="text-xs text-gray-500 mt-1">{{ $sourceName }} <i class="fas fa-arrow-right mx-1"></i> {{ $targetName }}</div>
+        <div class="text-xs text-gray-400 mt-1">Soumise le {{ optional($request->created_at)->format('d/m/Y H:i') ?: '-' }}</div>
+        @if(!empty($request->summary))
+        <div class="text-xs text-gray-500 mt-2">{{ $request->summary }}</div>
+        @endif
+        @if($status === 'rejected' && data_get($request->metadata, 'rejection_reason'))
+        <div class="mt-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">
+          Motif du rejet: {{ data_get($request->metadata, 'rejection_reason') }}
+        </div>
+        @endif
+      </div>
+      @empty
+      <div class="rounded-xl bg-gray-50 border border-gray-200 px-3 py-3 text-sm text-gray-500">Aucune demande de mutation pour le moment.</div>
+      @endforelse
+    </div>
+  </section>
+</div>
 @else
 <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
   <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
@@ -1641,8 +1981,25 @@ $_oc = [
   </section>
 
   <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
-    <h4 class="text-base font-bold text-gray-800 mb-3">CV Agent</h4>
-    <div class="space-y-2">
+    <h4 class="text-base font-bold text-gray-800 mb-3">Mes Documents</h4>
+
+    <div class="mb-4">
+      <h5 class="text-sm font-semibold text-gray-700 mb-2">Cartes virtuelles signées</h5>
+      <div class="space-y-2">
+        @forelse($agentSpaceEmployee->documents->where('category', 'virtual_card_signed')->sortByDesc('created_at')->take(8) as $doc)
+        <a href="{{ route('admin.personnel.documents.download', $doc) }}" class="flex items-center justify-between rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+          <span>{{ $doc->label }}</span>
+          <i class="fas fa-download text-gray-400"></i>
+        </a>
+        @empty
+        <div class="rounded-xl bg-gray-50 border border-gray-200 px-3 py-3 text-sm text-gray-500">Aucune carte signée disponible.</div>
+        @endforelse
+      </div>
+    </div>
+
+    <div class="pt-3 border-t border-gray-100">
+      <h5 class="text-sm font-semibold text-gray-700 mb-2">CV Agent</h5>
+      <div class="space-y-2">
       @forelse($agentSpaceEmployee->documents->where('category', 'cv')->sortByDesc('created_at')->take(8) as $doc)
       <a href="{{ route('admin.personnel.documents.download', $doc) }}" class="flex items-center justify-between rounded-xl border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
         <span>{{ $doc->label }}</span>
@@ -1651,6 +2008,7 @@ $_oc = [
       @empty
       <div class="rounded-xl bg-gray-50 border border-gray-200 px-3 py-3 text-sm text-gray-500">Aucun CV disponible.</div>
       @endforelse
+      </div>
     </div>
   </section>
 </div>
@@ -2376,6 +2734,7 @@ $_oc = [
   $_mrIsAgentRh = str_contains($_mrProfileName, 'AGENT RH');
   $_mrIsSuperAdmin = $_mrUser?->role === 'admin';
   $_mrIsFullAccess = $_mrIsAgentRh || $_mrIsSuperAdmin;
+  $_mrCurrentActorId = (string) ($_mrUser?->id ?? '');
 
   // Toutes les demandes dans le périmètre (déjà chargées avec relations)
   $_mrAllEnrollments = $personnelTrainingEnrollments ?? collect();
@@ -2388,8 +2747,11 @@ $_oc = [
       ->pluck('id')
       ->map(fn($id) => (string)$id)
       ->toArray();
-    $_mrEnrollments = $_mrAllEnrollments->filter(function ($e) use ($subordinateIds) {
-      return in_array((string)($e->employee_id ?? ''), $subordinateIds, true);
+    $_mrEnrollments = $_mrAllEnrollments->filter(function ($e) use ($subordinateIds, $_mrUser) {
+      $isDirectSubordinate = in_array((string)($e->employee_id ?? ''), $subordinateIds, true);
+      $workflowApproverId = (string) data_get($e->metadata, 'approval_workflow.current_approver_user_id', '');
+      $isCurrentApprover = $workflowApproverId !== '' && $workflowApproverId === (string) ($_mrUser?->id ?? '');
+      return $isDirectSubordinate || $isCurrentApprover;
     });
   }
 @endphp
@@ -2422,9 +2784,11 @@ $_oc = [
     {{-- Statut legend (AGENT RH / SUPER ADMIN) --}}
     @if($_mrIsFullAccess)
     <div class="px-6 py-3 border-b border-gray-100 bg-gray-50 flex flex-wrap gap-2 text-xs">
+      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100"><span class="w-2 h-2 rounded-full bg-amber-400 inline-block"></span>En attente de validation</span>
       <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100"><span class="w-2 h-2 rounded-full bg-blue-400 inline-block"></span>Planifiée</span>
       <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-100"><span class="w-2 h-2 rounded-full bg-amber-400 inline-block"></span>En cours</span>
       <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100"><span class="w-2 h-2 rounded-full bg-emerald-400 inline-block"></span>Terminée</span>
+      <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-100"><span class="w-2 h-2 rounded-full bg-red-400 inline-block"></span>Rejetée</span>
       <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-50 text-red-700 border border-red-100"><span class="w-2 h-2 rounded-full bg-red-400 inline-block"></span>Annulée</span>
     </div>
     @endif
@@ -2446,18 +2810,39 @@ $_oc = [
         @php
           $_enrStatus = $enrollment->status ?? 'planned';
           $_enrStatusColors = [
+            'pending'     => 'bg-amber-50 text-amber-700 border-amber-100',
             'planned'     => 'bg-blue-50 text-blue-700 border-blue-100',
             'in_progress' => 'bg-amber-50 text-amber-700 border-amber-100',
             'completed'   => 'bg-emerald-50 text-emerald-700 border-emerald-100',
+            'rejected'    => 'bg-red-50 text-red-700 border-red-100',
             'cancelled'   => 'bg-red-50 text-red-700 border-red-100',
           ];
           $_enrStatusColor = $_enrStatusColors[$_enrStatus] ?? 'bg-gray-50 text-gray-700 border-gray-100';
           $_enrStatusLabel = [
+            'pending'     => 'En attente',
             'planned'     => 'Planifiée',
             'in_progress' => 'En cours',
             'completed'   => 'Terminée',
+            'rejected'    => 'Rejetée',
             'cancelled'   => 'Annulée',
           ][$_enrStatus] ?? ucfirst($_enrStatus);
+          $_enrWorkflow = is_array(data_get($enrollment->metadata, 'approval_workflow')) ? data_get($enrollment->metadata, 'approval_workflow') : [];
+          $_enrWorkflowType = (string) ($_enrWorkflow['type'] ?? '');
+          $_enrCurrentApproverId = (string) data_get($_enrWorkflow, 'current_approver_user_id', '');
+          $_enrCurrentStepIndex = (int) data_get($_enrWorkflow, 'current_step_index', 0);
+          $_enrSteps = collect(data_get($_enrWorkflow, 'steps', []))->values();
+          $_enrCurrentStep = $_enrSteps->get($_enrCurrentStepIndex);
+          $_enrCurrentApproverName = $allUsers->firstWhere('id', (int) $_enrCurrentApproverId)?->name ?? 'Non défini';
+          $_enrHistory = collect(data_get($_enrWorkflow, 'history', []))
+            ->sortByDesc(function ($_item) {
+              return (string) ($_item['acted_at'] ?? '');
+            })
+            ->values();
+          $_enrCanAct = $_enrWorkflowType === 'training_hierarchical'
+            && $_enrStatus === 'pending'
+            && $_enrCurrentApproverId !== ''
+            && $_enrCurrentApproverId === $_mrCurrentActorId;
+          $_enrFollowOnly = $_enrWorkflowType === 'training_hierarchical' && $_enrStatus === 'pending' && !$_enrCanAct;
         @endphp
         <div class="rounded-xl border border-gray-200 p-4 bg-white hover:shadow-sm transition">
           <div class="flex items-start justify-between gap-3 flex-wrap">
@@ -2487,8 +2872,100 @@ $_oc = [
           @if($enrollment->notes)
           <div class="mt-2 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2 italic">{{ $enrollment->notes }}</div>
           @endif
-          @if($_mrIsFullAccess)
-          {{-- AGENT RH / SUPER ADMIN : peut changer le statut --}}
+
+          @if($_enrWorkflowType === 'training_hierarchical')
+          <div class="mt-2 text-xs text-gray-500">
+            Valideur courant: {{ $_enrCurrentApproverName }}
+            @if($_enrCurrentStep && !empty($_enrCurrentStep['profile']))
+              ({{ $_enrCurrentStep['profile'] }})
+            @endif
+          </div>
+
+          <div class="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3">
+            <div class="text-xs font-semibold text-gray-700 mb-2">Timeline de validation</div>
+            <div class="space-y-2">
+              @forelse($_enrHistory as $_h)
+              @php
+                $_hStatus = (string) ($_h['status'] ?? 'approved');
+                $_hName = $allUsers->firstWhere('id', (int) ($_h['acted_by_user_id'] ?? 0))?->name ?? 'Utilisateur';
+                $_hLabel = $_hStatus === 'rejected' ? 'Rejetée' : 'Approuvée';
+                $_hDot = $_hStatus === 'rejected' ? 'bg-red-500' : 'bg-emerald-500';
+                $_hText = $_hStatus === 'rejected' ? 'text-red-700' : 'text-emerald-700';
+              @endphp
+              <div class="flex items-start gap-2">
+                <span class="mt-1 h-2 w-2 rounded-full {{ $_hDot }}"></span>
+                <div class="mt-0.5 {{ $_hText }}">
+                  @if($_hStatus === 'rejected')
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4">
+                    <path fill-rule="evenodd" d="M12 2a10 10 0 100 20 10 10 0 000-20zm3.53 6.47a.75.75 0 010 1.06L13.06 12l2.47 2.47a.75.75 0 11-1.06 1.06L12 13.06l-2.47 2.47a.75.75 0 01-1.06-1.06L10.94 12 8.47 9.53a.75.75 0 111.06-1.06L12 10.94l2.47-2.47a.75.75 0 011.06 0z" clip-rule="evenodd" />
+                  </svg>
+                  @else
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4">
+                    <path fill-rule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm14.28-2.03a.75.75 0 10-1.06-1.06l-4.97 4.97-1.97-1.97a.75.75 0 10-1.06 1.06l2.5 2.5a.75.75 0 001.06 0l5.5-5.5z" clip-rule="evenodd" />
+                  </svg>
+                  @endif
+                </div>
+                <div class="text-xs">
+                  <div class="font-semibold {{ $_hText }}">{{ $_hLabel }} par {{ $_hName }}</div>
+                  <div class="text-gray-500">{{ data_get($_h, 'step_profile', 'Niveau') }} · {{ \Carbon\Carbon::parse($_h['acted_at'])->format('d/m/Y H:i') }}</div>
+                  @if(!empty($_h['comment']))
+                  <div class="mt-1 text-gray-600 italic">Motif: {{ $_h['comment'] }}</div>
+                  @endif
+                </div>
+              </div>
+              @empty
+              <div class="text-xs text-gray-500">Aucune action enregistrée pour le moment.</div>
+              @endforelse
+
+              @if($_enrStatus === 'pending')
+              <div class="flex items-start gap-2">
+                <span class="mt-1 h-2 w-2 rounded-full bg-amber-500"></span>
+                <div class="mt-0.5 text-amber-700">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="h-4 w-4">
+                    <path fill-rule="evenodd" d="M12 2.25a9.75 9.75 0 100 19.5 9.75 9.75 0 000-19.5zM12.75 7.5a.75.75 0 00-1.5 0V12a.75.75 0 00.22.53l3 3a.75.75 0 101.06-1.06l-2.78-2.78V7.5z" clip-rule="evenodd" />
+                  </svg>
+                </div>
+                <div class="text-xs">
+                  <div class="font-semibold text-amber-700">En attente de validation</div>
+                  <div class="text-gray-500">Valideur courant: {{ $_enrCurrentApproverName }}</div>
+                </div>
+              </div>
+              @endif
+            </div>
+          </div>
+
+          @if($_enrStatus === 'rejected' && data_get($enrollment->metadata, 'rejection_reason'))
+          <div class="mt-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">
+            Motif du rejet: {{ data_get($enrollment->metadata, 'rejection_reason') }}
+          </div>
+          @endif
+          @endif
+
+          @if($_enrCanAct)
+          <div class="mt-3 flex flex-col md:flex-row gap-2">
+            <form method="POST" action="{{ route('admin.personnel.training-enrollments.update-status', $enrollment->id) }}" class="inline-flex">
+              @csrf
+              @method('PATCH')
+              <input type="hidden" name="personnel_tab" value="training">
+              <input type="hidden" name="status" value="approved">
+              <button type="submit" class="px-3 py-1.5 bg-emerald-600 text-white rounded-lg text-xs font-semibold hover:bg-emerald-700 transition">Approuver</button>
+            </form>
+
+            <form method="POST" action="{{ route('admin.personnel.training-enrollments.update-status', $enrollment->id) }}" class="flex-1 grid grid-cols-1 md:grid-cols-3 gap-2">
+              @csrf
+              @method('PATCH')
+              <input type="hidden" name="personnel_tab" value="training">
+              <input type="hidden" name="status" value="rejected">
+              <input type="text" name="comment" required placeholder="Motif du rejet" class="md:col-span-2 border border-gray-300 rounded-lg px-3 py-1.5 text-xs bg-white">
+              <button type="submit" class="px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-semibold hover:bg-red-700 transition">Rejeter</button>
+            </form>
+          </div>
+          @elseif($_enrFollowOnly)
+          <div class="mt-2 rounded-lg bg-blue-50 border border-blue-100 px-3 py-2 text-xs text-blue-700">
+            Mode suivi: cette demande est en attente de validation par le valideur courant.
+          </div>
+          @elseif($_mrIsFullAccess)
+          {{-- Hors workflow hiérarchique: gestion statutaire manuelle legacy --}}
           <form method="POST" action="{{ route('admin.personnel.training-enrollments.update-status', $enrollment->id) }}" class="mt-3 flex items-center gap-2 flex-wrap">
             @csrf
             @method('PATCH')
@@ -2537,6 +3014,121 @@ $_oc = [
     <p class="text-sm text-gray-500 mt-2">{{ __('personnel.ui.career.cards.path_description') }}</p>
   </div>
 </div>
+
+@php
+  $currentActorId = (string) (auth()->id() ?? '');
+  $currentActor = auth()->user();
+  $currentActorProfileName = mb_strtoupper(trim(str_replace(['_', '-'], ' ', $currentActor?->profile?->name ?? '')), 'UTF-8');
+  $isAgentRhFollowOnly = str_contains($currentActorProfileName, 'AGENT RH');
+  $isSuperAdminFollowOnly = ($currentActor?->role ?? '') === 'admin';
+  $mutationRequestsCareer = ($personnelMutationRequests ?? collect())->sortByDesc('created_at')->values();
+  $mutationStatusLabelCareer = [
+    'pending' => 'En attente',
+    'validated' => 'Validée',
+    'rejected' => 'Rejetée',
+  ];
+  $mutationStatusClassCareer = [
+    'pending' => 'bg-amber-100 text-amber-800',
+    'validated' => 'bg-emerald-100 text-emerald-700',
+    'rejected' => 'bg-red-100 text-red-700',
+  ];
+@endphp
+
+<section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 mb-5">
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+    <div>
+      <h3 class="text-lg font-bold text-gray-800">Module Gestion du personnel</h3>
+      <p class="text-sm text-gray-500">Demandes de mutation avec circuit: responsable entité cible, hiérarchie, puis DRH.</p>
+    </div>
+    @php
+      $mutationQuickAccessParams = ['tab' => 'personnel', 'personnel_tab' => 'agent-space', 'agent_space_tab' => 'mutation'];
+      if ($selectedPersonnelEmployee) {
+        $mutationQuickAccessParams['selected_employee'] = $selectedPersonnelEmployee->id;
+      }
+    @endphp
+    <a href="{{ route('admin.index', $mutationQuickAccessParams) }}"
+      class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-[#2453d6] text-white text-sm font-semibold hover:bg-blue-700 transition">
+      <i class="fas fa-right-left"></i>
+      Demande de mutation
+    </a>
+  </div>
+
+  <div class="space-y-3">
+    @forelse($mutationRequestsCareer as $mutation)
+    @php
+      $workflow = is_array(data_get($mutation->metadata, 'approval_workflow')) ? data_get($mutation->metadata, 'approval_workflow') : [];
+      $currentApproverId = (string) data_get($workflow, 'current_approver_user_id', '');
+      $currentIndex = (int) data_get($workflow, 'current_step_index', 0);
+      $steps = collect(data_get($workflow, 'steps', []))->values();
+      $step = $steps->get($currentIndex);
+      $canAct = $mutation->status === 'pending'
+        && !$isAgentRhFollowOnly
+        && !$isSuperAdminFollowOnly
+        && $currentApproverId !== ''
+        && $currentApproverId === $currentActorId;
+      $status = (string) ($mutation->status ?? 'pending');
+      $statusLabel = $mutationStatusLabelCareer[$status] ?? ucfirst($status);
+      $statusClass = $mutationStatusClassCareer[$status] ?? 'bg-gray-100 text-gray-700';
+      $approverName = $allUsers->firstWhere('id', (int) $currentApproverId)?->name ?? 'Non défini';
+      $targetName = data_get($mutation->metadata, 'mutation_request.target_sub_entity_name', $mutation->new_job_title ?: '-');
+      $sourceName = data_get($mutation->metadata, 'mutation_request.source_sub_entity_name', $mutation->previous_job_title ?: '-');
+      $showFollowOnlyHint = $mutation->status === 'pending' && ($isAgentRhFollowOnly || $isSuperAdminFollowOnly);
+    @endphp
+    <div class="rounded-xl border border-gray-200 px-4 py-3">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+        <div>
+          <div class="text-sm font-semibold text-gray-800">{{ $mutation->employee?->full_name ?? 'Agent supprimé' }} · {{ $mutation->title }}</div>
+          <div class="text-xs text-gray-500 mt-1">{{ $sourceName }} <i class="fas fa-arrow-right mx-1"></i> {{ $targetName }}</div>
+          <div class="text-xs text-gray-400 mt-1">Valideur courant: {{ $approverName }} @if($step && !empty($step['profile'])) ({{ $step['profile'] }}) @endif</div>
+        </div>
+        <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold {{ $statusClass }}">{{ $statusLabel }}</span>
+      </div>
+
+      @if(!empty($mutation->summary))
+      <div class="text-xs text-gray-500 mt-2">{{ $mutation->summary }}</div>
+      @endif
+      @if($mutation->status === 'rejected' && data_get($mutation->metadata, 'rejection_reason'))
+      <div class="mt-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">
+        Motif du rejet: {{ data_get($mutation->metadata, 'rejection_reason') }}
+      </div>
+      @endif
+      @if($showFollowOnlyHint)
+      <div class="mt-2 rounded-lg bg-blue-50 border border-blue-100 px-3 py-2 text-xs text-blue-700">
+        Mode suivi: ce profil peut consulter l'avancement sans valider ni rejeter.
+      </div>
+      @endif
+
+      @if($canAct)
+      <div class="mt-3 flex flex-col md:flex-row gap-2">
+        <form method="POST" action="{{ route('admin.personnel.mutation-requests.status', $mutation) }}" class="inline-flex">
+          @csrf
+          @method('PATCH')
+          <input type="hidden" name="personnel_tab" value="career">
+          <input type="hidden" name="status" value="approved">
+          <button type="submit" class="px-4 py-2 rounded-lg bg-emerald-600 text-white text-xs font-semibold hover:bg-emerald-700">
+            Approuver
+          </button>
+        </form>
+
+        <form method="POST" action="{{ route('admin.personnel.mutation-requests.status', $mutation) }}" class="flex-1 grid grid-cols-1 md:grid-cols-3 gap-2">
+          @csrf
+          @method('PATCH')
+          <input type="hidden" name="personnel_tab" value="career">
+          <input type="hidden" name="status" value="rejected">
+          <input type="text" name="comment" required placeholder="Motif du rejet"
+            class="md:col-span-2 border border-gray-300 rounded-lg px-3 py-2 text-xs">
+          <button type="submit" class="px-4 py-2 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-700">
+            Rejeter
+          </button>
+        </form>
+      </div>
+      @endif
+    </div>
+    @empty
+    <div class="rounded-xl bg-gray-50 border border-gray-200 px-4 py-4 text-sm text-gray-500">Aucune demande de mutation en cours.</div>
+    @endforelse
+  </div>
+</section>
 
 <div class="grid grid-cols-1 xl:grid-cols-6 gap-5 mb-5">
   <section class="xl:col-span-2 bg-white rounded-2xl border border-gray-200 shadow-sm p-5">

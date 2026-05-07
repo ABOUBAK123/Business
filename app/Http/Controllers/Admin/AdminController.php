@@ -19,6 +19,9 @@ use App\Models\User;
 use App\Models\Document;
 use App\Models\Signature;
 use App\Models\Workflow;
+use App\Models\WorkflowStep;
+use App\Models\WorkflowExecution;
+use App\Models\SignatureRequest;
 use App\Models\DocumentTemplate;
 use App\Models\IssuingAdministration;
 use App\Models\RecipientAdministration;
@@ -622,6 +625,7 @@ class AdminController extends Controller
         $personnelGoals = collect();
         $personnelPerformanceReviews = collect();
         $personnelCareerEvents = collect();
+        $personnelMutationRequests = collect();
         $personnelRecentActivity = collect();
         $agentSpaceCanSearchAll = false;
         $personnelStats = [
@@ -911,6 +915,13 @@ class AdminController extends Controller
                 $careerEventQuery = PersonnelCareerEvent::with(['employee', 'recordedBy'])->latest();
                 $this->applyPersonnelScope($careerEventQuery, $adminScope);
                 $personnelCareerEvents = $careerEventQuery->limit(12)->get();
+
+                $mutationRequestQuery = PersonnelCareerEvent::with(['employee', 'recordedBy'])
+                    ->where('event_type', 'mutation_request')
+                    ->latest();
+                $this->applyPersonnelScope($mutationRequestQuery, $adminScope);
+                $personnelMutationRequests = $mutationRequestQuery->limit(50)->get();
+
                 $personnelStats['careerEvents'] = (clone $this->applyPersonnelScope(PersonnelCareerEvent::query(), $adminScope))->count();
             }
 
@@ -1000,9 +1011,420 @@ class AdminController extends Controller
             'sigProviders', 'courrierArchivalDays', 'adminScope',
             'personnelEmployees', 'personnelEmployeeDirectory', 'selectedPersonnelEmployee', 'personnelStats',
             'personnelLeaveTypes', 'personnelLeaveRequests', 'personnelLeaveApprovers', 'personnelJobReferences', 'leaveGlobalVisibility', 'personnelTrainings', 'personnelTrainingEnrollments',
-            'personnelEmployeeSkills', 'personnelGoals', 'personnelPerformanceReviews', 'personnelCareerEvents', 'personnelRecentActivity',
+            'personnelEmployeeSkills', 'personnelGoals', 'personnelPerformanceReviews', 'personnelCareerEvents', 'personnelMutationRequests', 'personnelRecentActivity',
             'agentSpaceCanSearchAll'
         ));
+    }
+
+    private function classifyHierarchyProfile(?string $profileName): string
+    {
+        $normalized = $this->normalizeProfileName($profileName);
+        if ($normalized === '') {
+            return 'other';
+        }
+
+        if (str_contains($normalized, 'CHEF DE SERVICE')) {
+            return 'chef_service';
+        }
+        if (str_contains($normalized, 'SOUS DIRECTEUR')) {
+            return 'sous_directeur';
+        }
+        if (str_contains($normalized, 'DIRECTEUR DE CABINET') || $this->isDirectorOrGeneralProfile($normalized)) {
+            return 'directeur';
+        }
+
+        return 'other';
+    }
+
+    private function resolveSubEntityResponsibleUserId(PersonnelEmployee $employee, string $subEntityCode): ?string
+    {
+        $code = strtoupper(trim($subEntityCode));
+        if ($code === '') {
+            return null;
+        }
+
+        $assignmentUsers = UserDirectionAssignment::query()
+            ->where('direction_scope_type', $employee->administration_type)
+            ->where('direction_scope_id', $employee->administration_id)
+            ->whereRaw('UPPER(COALESCE(sub_entity_code, \"\")) = ?', [$code])
+            ->with('user.profile')
+            ->get()
+            ->map(fn ($assignment) => $assignment->user)
+            ->filter()
+            ->unique('id')
+            ->values();
+
+        if ($assignmentUsers->isNotEmpty()) {
+            $director = $assignmentUsers->first(fn (User $user) => $this->isDirectorOrGeneralProfile($user->profile?->name));
+            if ($director) {
+                return (string) $director->id;
+            }
+
+            return (string) $assignmentUsers->first()->id;
+        }
+
+        $subEntity = SubEntity::query()
+            ->where('scope_type', $employee->administration_type)
+            ->where('scope_id', $employee->administration_id)
+            ->whereRaw('UPPER(COALESCE(code, \"\")) = ?', [$code])
+            ->first();
+
+        if (!$subEntity || empty($subEntity->manager_email)) {
+            return null;
+        }
+
+        $managerUser = User::query()->where('email', trim((string) $subEntity->manager_email))->first();
+
+        return $managerUser ? (string) $managerUser->id : null;
+    }
+
+    private function resolveDrhApproverUserId(PersonnelEmployee $employee): ?string
+    {
+        $drhSubEntity = SubEntity::query()
+            ->where('scope_type', $employee->administration_type)
+            ->where('scope_id', $employee->administration_id)
+            ->where(function ($query) {
+                $query->whereRaw('UPPER(name) LIKE ?', ['%RESSOURCES HUMAINES%'])
+                    ->orWhereRaw('UPPER(name) LIKE ?', ['%DRH%']);
+            })
+            ->orderBy('name')
+            ->first();
+
+        if ($drhSubEntity && !empty($drhSubEntity->code)) {
+            $drhUserId = $this->resolveSubEntityResponsibleUserId($employee, (string) $drhSubEntity->code);
+            if ($drhUserId) {
+                return $drhUserId;
+            }
+        }
+
+        $drhScope = $this->resolveDrhScope($employee->administration_type);
+        if (!$drhScope) {
+            return null;
+        }
+
+        $drhDirector = $this->resolveDirectorUserForScope($drhScope['type'], $drhScope['id']);
+
+        return $drhDirector ? (string) $drhDirector->id : null;
+    }
+
+    private function buildMutationApprovalWorkflow(PersonnelEmployee $employee, string $targetSubEntityCode): array
+    {
+        $steps = [];
+        $visited = [];
+
+        $targetManagerId = $this->resolveSubEntityResponsibleUserId($employee, $targetSubEntityCode);
+        if ($targetManagerId) {
+            $targetManager = User::with('profile')->find($targetManagerId);
+            if ($targetManager) {
+                $steps[] = [
+                    'user_id' => (string) $targetManager->id,
+                    'profile' => (string) ($targetManager->profile?->name ?? ''),
+                    'kind' => 'target_entity_manager',
+                ];
+                $visited[(string) $targetManager->id] = true;
+            }
+        }
+
+        $requesterUser = $employee->user_id ? User::with('profile')->find($employee->user_id) : null;
+        $current = $requesterUser ? User::with('profile')->find($this->resolveSuperiorUserId($requesterUser, $employee)) : null;
+
+        for ($i = 0; $i < 6 && $current; $i++) {
+            $currentId = (string) $current->id;
+            if (isset($visited[$currentId])) {
+                break;
+            }
+
+            $class = $this->classifyHierarchyProfile($current->profile?->name);
+            if (!in_array($class, ['chef_service', 'sous_directeur', 'directeur'], true)) {
+                break;
+            }
+
+            $steps[] = [
+                'user_id' => $currentId,
+                'profile' => (string) ($current->profile?->name ?? ''),
+                'kind' => $class,
+            ];
+            $visited[$currentId] = true;
+
+            if ($class === 'directeur') {
+                break;
+            }
+
+            $nextSuperiorId = $this->resolveSuperiorUserId($current, $employee);
+            if (!$nextSuperiorId || isset($visited[(string) $nextSuperiorId])) {
+                break;
+            }
+
+            $current = User::with('profile')->find($nextSuperiorId);
+        }
+
+        $drhApproverId = $this->resolveDrhApproverUserId($employee);
+        if ($drhApproverId && !isset($visited[(string) $drhApproverId])) {
+            $drhUser = User::with('profile')->find($drhApproverId);
+            if ($drhUser) {
+                $steps[] = [
+                    'user_id' => (string) $drhUser->id,
+                    'profile' => (string) ($drhUser->profile?->name ?? ''),
+                    'kind' => 'drh_final',
+                ];
+            }
+        }
+
+        return $steps;
+    }
+
+    private function buildTrainingApprovalWorkflow(PersonnelEmployee $employee): array
+    {
+        $steps = [];
+        $visited = [];
+
+        $requesterUser = $employee->user_id ? User::with('profile')->find($employee->user_id) : null;
+        $current = $requesterUser ? User::with('profile')->find($this->resolveSuperiorUserId($requesterUser, $employee)) : null;
+
+        for ($i = 0; $i < 6 && $current; $i++) {
+            $currentId = (string) $current->id;
+            if (isset($visited[$currentId])) {
+                break;
+            }
+
+            $class = $this->classifyHierarchyProfile($current->profile?->name);
+            if (!in_array($class, ['chef_service', 'sous_directeur', 'directeur'], true)) {
+                break;
+            }
+
+            $steps[] = [
+                'user_id' => $currentId,
+                'profile' => (string) ($current->profile?->name ?? ''),
+                'kind' => $class,
+            ];
+            $visited[$currentId] = true;
+
+            if ($class === 'directeur') {
+                break;
+            }
+
+            $nextSuperiorId = $this->resolveSuperiorUserId($current, $employee);
+            if (!$nextSuperiorId || isset($visited[(string) $nextSuperiorId])) {
+                break;
+            }
+
+            $current = User::with('profile')->find($nextSuperiorId);
+        }
+
+        $drhApproverId = $this->resolveDrhApproverUserId($employee);
+        if ($drhApproverId && !isset($visited[(string) $drhApproverId])) {
+            $drhUser = User::with('profile')->find($drhApproverId);
+            if ($drhUser) {
+                $steps[] = [
+                    'user_id' => (string) $drhUser->id,
+                    'profile' => (string) ($drhUser->profile?->name ?? ''),
+                    'kind' => 'drh_final',
+                ];
+            }
+        }
+
+        return $steps;
+    }
+
+    public function storePersonnelMutationRequest(Request $request)
+    {
+        $validated = $request->validate([
+            'personnel_tab' => ['nullable', 'string'],
+            'agent_space_tab' => ['nullable', 'string'],
+            'employee_id' => ['required', 'string'],
+            'target_sub_entity_code' => ['required', 'string', 'max:100'],
+            'summary' => ['nullable', 'string'],
+            'notes' => ['nullable', 'string'],
+        ]);
+
+        $employee = PersonnelEmployee::with('subEntity')->findOrFail($validated['employee_id']);
+        $this->abortIfPersonnelEmployeeOutsideScope($employee);
+
+        $actor = auth()->user();
+        if (!$this->canSearchAgentSpaceForUser($actor) && (string) ($employee->linked_user_id ?? '') !== (string) ($actor?->id ?? '')) {
+            throw ValidationException::withMessages([
+                'employee_id' => 'Vous ne pouvez soumettre que vos propres demandes de mutation.',
+            ]);
+        }
+
+        $targetSubEntity = SubEntity::query()
+            ->where('scope_type', $employee->administration_type)
+            ->where('scope_id', $employee->administration_id)
+            ->where('code', $validated['target_sub_entity_code'])
+            ->first();
+
+        if (!$targetSubEntity) {
+            throw ValidationException::withMessages([
+                'target_sub_entity_code' => 'Entité de destination introuvable dans votre administration.',
+            ]);
+        }
+
+        if ((string) ($employee->subEntity?->code ?? '') === (string) $targetSubEntity->code) {
+            throw ValidationException::withMessages([
+                'target_sub_entity_code' => 'L\'entité de destination doit être différente de l\'entité actuelle.',
+            ]);
+        }
+
+        $workflowSteps = $this->buildMutationApprovalWorkflow($employee, (string) $targetSubEntity->code);
+        if (empty($workflowSteps)) {
+            throw ValidationException::withMessages([
+                'target_sub_entity_code' => 'Circuit de validation introuvable. Vérifiez les responsables hiérarchiques.',
+            ]);
+        }
+
+        $sourceSubEntity = $employee->subEntity;
+        $metadata = [
+            'mutation_request' => [
+                'source_sub_entity_code' => (string) ($sourceSubEntity?->code ?? ''),
+                'source_sub_entity_name' => (string) ($sourceSubEntity?->name ?? '-'),
+                'target_sub_entity_code' => (string) $targetSubEntity->code,
+                'target_sub_entity_name' => (string) $targetSubEntity->name,
+            ],
+            'approval_workflow' => [
+                'type' => 'mutation_hierarchical',
+                'steps' => $workflowSteps,
+                'current_step_index' => 0,
+                'current_approver_user_id' => $workflowSteps[0]['user_id'] ?? null,
+                'history' => [],
+            ],
+        ];
+
+        $employee->careerEvents()->create([
+            'recorded_by_user_id' => auth()->id(),
+            'administration_type' => $employee->administration_type,
+            'administration_id' => $employee->administration_id,
+            'event_type' => 'mutation_request',
+            'effective_date' => null,
+            'title' => 'Demande de mutation vers ' . $targetSubEntity->name,
+            'previous_job_title' => (string) ($sourceSubEntity?->name ?? $employee->job_title),
+            'new_job_title' => (string) $targetSubEntity->name,
+            'status' => 'pending',
+            'summary' => $validated['summary'] ?? null,
+            'notes' => $validated['notes'] ?? null,
+            'metadata' => $metadata,
+        ]);
+
+        return redirect()->route('admin.index', [
+            'tab' => 'personnel',
+            'personnel_tab' => $validated['personnel_tab'] ?? 'agent-space',
+            'agent_space_tab' => $validated['agent_space_tab'] ?? 'mutation',
+            'selected_employee' => $employee->id,
+        ])->with('success', 'Demande de mutation envoyée pour validation.');
+    }
+
+    public function updatePersonnelMutationRequestStatus(Request $request, PersonnelCareerEvent $event)
+    {
+        $validated = $request->validate([
+            'personnel_tab' => ['nullable', 'string'],
+            'status' => ['required', 'in:approved,rejected'],
+            'comment' => ['nullable', 'string'],
+        ]);
+
+        if ($event->event_type !== 'mutation_request') {
+            abort(404);
+        }
+
+        $event->loadMissing('employee.subEntity');
+        $this->abortIfPersonnelEmployeeOutsideScope($event->employee);
+
+        $metadata = is_array($event->metadata) ? $event->metadata : [];
+        $workflow = is_array($metadata['approval_workflow'] ?? null) ? $metadata['approval_workflow'] : null;
+        if (!$workflow || empty($workflow['steps'])) {
+            throw ValidationException::withMessages([
+                'status' => 'Circuit de validation manquant pour cette demande.',
+            ]);
+        }
+
+        $steps = collect($workflow['steps'])->filter(fn ($step) => !empty($step['user_id']))->values()->all();
+        $currentIndex = (int) ($workflow['current_step_index'] ?? 0);
+        $currentApproverId = (string) ($workflow['current_approver_user_id'] ?? ($steps[$currentIndex]['user_id'] ?? ''));
+
+        $actor = auth()->user();
+        $actorProfile = $actor?->profile_id ? AdministrationProfile::find($actor->profile_id) : null;
+        $isSuperAdmin = $actor && $actor->role === 'admin';
+        if ($isSuperAdmin || $this->isAgentRhProfile($actorProfile)) {
+            throw ValidationException::withMessages([
+                'status' => 'Profil de suivi uniquement: vous ne pouvez pas valider ni rejeter cette demande de mutation.',
+            ]);
+        }
+
+        if ($currentApproverId !== '' && (string) ($actor?->id ?? '') !== $currentApproverId) {
+            throw ValidationException::withMessages([
+                'status' => 'Seul le valideur courant peut traiter cette demande de mutation.',
+            ]);
+        }
+
+        if ($validated['status'] === 'rejected' && trim((string) ($validated['comment'] ?? '')) === '') {
+            throw ValidationException::withMessages([
+                'comment' => 'Le motif du rejet est obligatoire.',
+            ]);
+        }
+
+        $history = is_array($workflow['history'] ?? null) ? $workflow['history'] : [];
+        $history[] = [
+            'acted_by_user_id' => $actor?->id,
+            'acted_at' => now()->toDateTimeString(),
+            'status' => $validated['status'],
+            'comment' => $validated['comment'] ?? null,
+            'step_index' => $currentIndex,
+            'step_profile' => $steps[$currentIndex]['profile'] ?? null,
+            'step_kind' => $steps[$currentIndex]['kind'] ?? null,
+        ];
+        $workflow['history'] = $history;
+
+        if ($validated['status'] === 'approved') {
+            if ($currentIndex < count($steps) - 1) {
+                $nextIndex = $currentIndex + 1;
+                $workflow['current_step_index'] = $nextIndex;
+                $workflow['current_approver_user_id'] = $steps[$nextIndex]['user_id'];
+                $metadata['approval_workflow'] = $workflow;
+                $event->metadata = $metadata;
+                $event->status = 'pending';
+                $event->save();
+
+                return redirect()->route('admin.index', [
+                    'tab' => 'personnel',
+                    'personnel_tab' => $validated['personnel_tab'] ?? 'career',
+                ])->with('success', 'Validation enregistrée et demande transmise au niveau suivant.');
+            }
+
+            $targetCode = (string) data_get($metadata, 'mutation_request.target_sub_entity_code', '');
+            if ($targetCode !== '') {
+                $targetSubEntity = SubEntity::query()
+                    ->where('scope_type', $event->employee->administration_type)
+                    ->where('scope_id', $event->employee->administration_id)
+                    ->where('code', $targetCode)
+                    ->first();
+                if ($targetSubEntity) {
+                    $event->employee->update(['sub_entity_id' => $targetSubEntity->id]);
+                }
+            }
+
+            $workflow['current_step_index'] = count($steps) - 1;
+            $workflow['current_approver_user_id'] = null;
+            $metadata['approval_workflow'] = $workflow;
+            $event->metadata = $metadata;
+            $event->status = 'validated';
+            $event->effective_date = now()->toDateString();
+            $event->save();
+
+            return redirect()->route('admin.index', [
+                'tab' => 'personnel',
+                'personnel_tab' => $validated['personnel_tab'] ?? 'career',
+            ])->with('success', 'Demande de mutation validée définitivement.');
+        }
+
+        $workflow['current_approver_user_id'] = null;
+        $metadata['approval_workflow'] = $workflow;
+        $metadata['rejection_reason'] = $validated['comment'] ?? null;
+        $event->metadata = $metadata;
+        $event->status = 'rejected';
+        $event->save();
+
+        return redirect()->route('admin.index', [
+            'tab' => 'personnel',
+            'personnel_tab' => $validated['personnel_tab'] ?? 'career',
+        ])->with('success', 'Demande de mutation rejetée.');
     }
 
     public function storePersonnelEmployee(Request $request)
@@ -1031,12 +1453,14 @@ class AdminController extends Controller
             'hire_date' => ['nullable', 'date'],
             'employment_status' => ['nullable', 'string', 'max:50'],
             'notes' => ['nullable', 'string'],
+            'employee_photo' => ['nullable', 'image', 'max:5120'],
         ]);
 
         $this->ensurePersonnelAdministrationExists($validated['administration_type'], $validated['administration_id']);
 
         $metadata = array_filter([
             'children_count' => $request->input('meta_children_count'),
+            'nni' => $request->input('meta_nni'),
             'direction_generale' => $request->input('meta_direction_generale'),
             'direction_centrale' => $request->input('meta_direction_centrale'),
             'sous_direction' => $request->input('meta_sous_direction'),
@@ -1045,6 +1469,12 @@ class AdminController extends Controller
             'grade' => $request->input('meta_grade'),
             'lieu_travail' => $request->input('meta_lieu_travail'),
         ], fn($v) => $v !== null && $v !== '');
+
+        if ($request->hasFile('employee_photo')) {
+            $photoPath = $request->file('employee_photo')->store('personnel-photos', 'public');
+            $metadata['photo_path'] = $photoPath;
+        }
+
         if (!empty($metadata)) {
             $validated['metadata'] = $metadata;
         }
@@ -1083,6 +1513,7 @@ class AdminController extends Controller
             'hire_date' => ['nullable', 'date'],
             'employment_status' => ['nullable', 'string', 'max:50'],
             'notes' => ['nullable', 'string'],
+            'employee_photo' => ['nullable', 'image', 'max:5120'],
         ]);
 
         $this->abortIfPersonnelEmployeeOutsideScope($employee);
@@ -1090,6 +1521,7 @@ class AdminController extends Controller
 
         $metadata = array_filter([
             'children_count' => $request->input('meta_children_count'),
+            'nni' => $request->input('meta_nni'),
             'direction_generale' => $request->input('meta_direction_generale'),
             'direction_centrale' => $request->input('meta_direction_centrale'),
             'sous_direction' => $request->input('meta_sous_direction'),
@@ -1098,6 +1530,16 @@ class AdminController extends Controller
             'grade' => $request->input('meta_grade'),
             'lieu_travail' => $request->input('meta_lieu_travail'),
         ], fn($v) => $v !== null && $v !== '');
+
+        if ($request->hasFile('employee_photo')) {
+            $oldPhotoPath = data_get($employee->metadata, 'photo_path');
+            if ($oldPhotoPath && Storage::disk('public')->exists($oldPhotoPath)) {
+                Storage::disk('public')->delete($oldPhotoPath);
+            }
+            $photoPath = $request->file('employee_photo')->store('personnel-photos', 'public');
+            $metadata['photo_path'] = $photoPath;
+        }
+
         $validated['metadata'] = array_merge($employee->metadata ?? [], $metadata);
 
         $employee->update($validated);
@@ -1107,6 +1549,162 @@ class AdminController extends Controller
             'personnel_tab' => $request->input('personnel_tab', 'employees'),
             'selected_employee' => $employee->id,
         ])->with('success', 'Fiche employé mise à jour.');
+    }
+
+    public function transmitVirtualCardForSignature(Request $request, PersonnelEmployee $employee)
+    {
+        $this->abortIfPersonnelEmployeeOutsideScope($employee);
+
+        $validated = $request->validate([
+            'card_html' => ['required', 'string'],
+            'signature_zone_page' => ['nullable', 'integer', 'min:1'],
+            'signature_zone_x' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'signature_zone_y' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'signature_zone_width' => ['nullable', 'numeric', 'min:1', 'max:100'],
+            'signature_zone_height' => ['nullable', 'numeric', 'min:1', 'max:100'],
+            'personnel_tab' => ['nullable', 'string'],
+        ]);
+
+        $actor = auth()->user();
+        $actorProfile = $actor?->profile_id ? AdministrationProfile::find($actor->profile_id) : null;
+        $isSuperAdmin = $actor?->role === 'admin';
+
+        if (!$isSuperAdmin && !$this->isAgentRhProfile($actorProfile)) {
+            abort(403, 'Seul un AGENT RH ou un SUPER ADMIN peut transmettre une carte pour signature.');
+        }
+
+        $superiorUserId = $actor ? $this->resolveSuperiorUserId($actor, $employee) : null;
+        if (!$superiorUserId) {
+            return redirect()->route('admin.index', [
+                'tab' => 'personnel',
+                'personnel_tab' => $validated['personnel_tab'] ?? 'employees',
+                'selected_employee' => $employee->id,
+            ])->with('error', 'Impossible de trouver le supérieur hiérarchique de l\'AGENT RH.');
+        }
+
+        $cleanCardHtml = preg_replace('#<script\b[^>]*>(.*?)</script>#is', '', (string) $validated['card_html']) ?? '';
+        $documentHtml = '<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+            . '<title>Carte virtuelle - ' . e($employee->full_name) . '</title>'
+            . '<style>body{font-family:Arial,sans-serif;background:#fff;margin:0;padding:20px;display:flex;justify-content:center;}#virtual-agent-card-preview{width:100%;max-width:700px;}</style>'
+            . '</head><body>' . $cleanCardHtml . '</body></html>';
+
+        $cardFileName = 'virtual-card-' . Str::slug($employee->full_name ?: 'agent') . '-' . now()->format('YmdHis') . '.html';
+        $cardFilePath = 'workflow-cards/' . $cardFileName;
+        Storage::disk('public')->put($cardFilePath, $documentHtml);
+
+        $document = Document::create([
+            'id' => (string) Str::uuid(),
+            'title' => 'Carte virtuelle - ' . ($employee->full_name ?: 'Agent'),
+            'description' => 'Carte virtuelle transmise pour signature.',
+            'file_path' => '/storage/' . $cardFilePath,
+            'file_size' => strlen($documentHtml),
+            'mime_type' => 'text/html',
+            'status' => 'draft',
+            'owner_id' => (string) auth()->id(),
+            'created_by' => (string) auth()->id(),
+        ]);
+
+        $workflow = Workflow::create([
+            'id' => (string) Str::uuid(),
+            'name' => 'Carte pour signature',
+            'description' => 'Workflow automatique de signature de la carte virtuelle de ' . ($employee->full_name ?: 'l\'agent') . '.',
+            'status' => 'active',
+            'created_by' => (string) auth()->id(),
+            'docs_to_sign' => [(string) $document->id],
+        ]);
+
+        WorkflowStep::create([
+            'id' => (string) Str::uuid(),
+            'workflow_id' => (string) $workflow->id,
+            'order' => 1,
+            'name' => 'Préparation RH',
+            'type' => 'review',
+            'assignee_id' => (string) auth()->id(),
+            'description' => 'Préparation de la carte virtuelle',
+            'requires_signature' => false,
+        ]);
+        WorkflowStep::create([
+            'id' => (string) Str::uuid(),
+            'workflow_id' => (string) $workflow->id,
+            'order' => 2,
+            'name' => 'Contrôle RH',
+            'type' => 'review',
+            'assignee_id' => (string) auth()->id(),
+            'description' => 'Contrôle avant signature',
+            'requires_signature' => false,
+        ]);
+        WorkflowStep::create([
+            'id' => (string) Str::uuid(),
+            'workflow_id' => (string) $workflow->id,
+            'order' => 3,
+            'name' => 'Signature supérieur hiérarchique',
+            'type' => 'sign',
+            'assignee_id' => (string) $superiorUserId,
+            'description' => 'Signature de la carte virtuelle',
+            'requires_signature' => true,
+        ]);
+
+        $zonePage = (int) ($validated['signature_zone_page'] ?? 1);
+        $zoneX = (float) ($validated['signature_zone_x'] ?? 70);
+        $zoneY = (float) ($validated['signature_zone_y'] ?? 84);
+        $zoneWidth = (float) ($validated['signature_zone_width'] ?? 26);
+        $zoneHeight = (float) ($validated['signature_zone_height'] ?? 10);
+
+        $docZones = [
+            (string) $document->id => [
+                'page' => $zonePage,
+                'x' => $zoneX,
+                'y' => $zoneY,
+                'width' => $zoneWidth,
+                'height' => $zoneHeight,
+                'label' => 'Signé par',
+            ],
+        ];
+
+        $execution = WorkflowExecution::create([
+            'id' => (string) Str::uuid(),
+            'workflow_id' => (string) $workflow->id,
+            'document_id' => (string) $document->id,
+            'current_step' => 3,
+            'status' => 'in_progress',
+            'step_data' => [
+                'doc_zones' => $docZones,
+                'workflow_type' => 'virtual_card_signature',
+                'employee_id' => (string) $employee->id,
+            ],
+            'started_at' => now(),
+        ]);
+
+        SignatureRequest::create([
+            'id' => (string) Str::uuid(),
+            'document_id' => (string) $document->id,
+            'requested_by' => (string) auth()->id(),
+            'requested_to' => (string) $superiorUserId,
+            'message' => 'Workflow: Carte pour signature — Étape 3: Signature supérieur hiérarchique',
+            'status' => 'pending',
+            'zone_page' => $zonePage,
+            'zone_x' => $zoneX,
+            'zone_y' => $zoneY,
+            'zone_width' => $zoneWidth,
+            'zone_height' => $zoneHeight,
+            'zone_label' => 'Signé par',
+        ]);
+
+        NotificationService::notify(
+            recipientId: (string) $superiorUserId,
+            type: 'workflow',
+            title: 'Carte à signer',
+            message: 'Une carte virtuelle vous a été transmise pour signature.',
+            actionUrl: route('signatures.index'),
+            workflowId: (string) $workflow->id,
+            executionId: (string) $execution->id
+        );
+
+        return redirect()->route('admin.index', [
+            'tab' => 'personnel',
+            'personnel_tab' => $validated['personnel_tab'] ?? 'employees',
+            'selected_employee' => $employee->id,
+        ])->with('success', 'Carte virtuelle transmise pour signature avec succès.');
     }
 
     public function createUserFromPersonnelEmployee(Request $request, PersonnelEmployee $employee)
@@ -2073,6 +2671,27 @@ class AdminController extends Controller
             'notes' => $validated['notes'] ?? null,
         ];
 
+        $isAgentRequest = ($request->input('personnel_tab') === 'agent-space');
+        if ($isAgentRequest) {
+            $workflowSteps = $this->buildTrainingApprovalWorkflow($employee);
+            if (empty($workflowSteps)) {
+                throw ValidationException::withMessages([
+                    'employee_id' => 'Circuit de validation introuvable pour cette demande de formation.',
+                ]);
+            }
+
+            $payload['status'] = 'pending';
+            $payload['metadata'] = [
+                'approval_workflow' => [
+                    'type' => 'training_hierarchical',
+                    'steps' => $workflowSteps,
+                    'current_step_index' => 0,
+                    'current_approver_user_id' => $workflowSteps[0]['user_id'] ?? null,
+                    'history' => [],
+                ],
+            ];
+        }
+
         if ($request->hasFile('certificate')) {
             $file = $request->file('certificate');
             $storedName = Str::uuid() . '_' . preg_replace('/[^A-Za-z0-9._-]/', '_', $file->getClientOriginalName());
@@ -2089,21 +2708,107 @@ class AdminController extends Controller
         return redirect()->route('admin.index', [
             'tab' => 'personnel',
             'personnel_tab' => $request->input('personnel_tab', 'training'),
-        ])->with('success', 'Formation affectée à l’employé.');
+        ])->with('success', $isAgentRequest ? 'Demande de formation transmise pour validation.' : 'Formation affectée à l’employé.');
     }
 
 
     public function updatePersonnelTrainingEnrollmentStatus(Request $request, string $enrollmentId)
     {
+        $enrollment = PersonnelTrainingEnrollment::with('employee')->findOrFail($enrollmentId);
+        $this->abortIfPersonnelEmployeeOutsideScope($enrollment->employee);
+
+        $metadata = is_array($enrollment->metadata) ? $enrollment->metadata : [];
+        $workflow = is_array($metadata['approval_workflow'] ?? null) ? $metadata['approval_workflow'] : null;
+
+        if ($workflow && ($workflow['type'] ?? '') === 'training_hierarchical') {
+            $validated = $request->validate([
+                'status' => ['required', 'in:approved,rejected'],
+                'comment' => ['nullable', 'string'],
+                'personnel_tab' => ['nullable', 'string'],
+            ]);
+
+            $steps = collect($workflow['steps'] ?? [])->filter(fn ($step) => !empty($step['user_id']))->values()->all();
+            if (empty($steps)) {
+                throw ValidationException::withMessages([
+                    'status' => 'Circuit de validation manquant pour cette demande.',
+                ]);
+            }
+
+            $currentIndex = (int) ($workflow['current_step_index'] ?? 0);
+            $currentApproverId = (string) ($workflow['current_approver_user_id'] ?? ($steps[$currentIndex]['user_id'] ?? ''));
+            $actor = auth()->user();
+            if ($currentApproverId === '' || (string) ($actor?->id ?? '') !== $currentApproverId) {
+                throw ValidationException::withMessages([
+                    'status' => 'Seul le valideur courant peut traiter cette demande de formation.',
+                ]);
+            }
+
+            if ($validated['status'] === 'rejected' && trim((string) ($validated['comment'] ?? '')) === '') {
+                throw ValidationException::withMessages([
+                    'comment' => 'Le motif du rejet est obligatoire.',
+                ]);
+            }
+
+            $history = is_array($workflow['history'] ?? null) ? $workflow['history'] : [];
+            $history[] = [
+                'acted_by_user_id' => $actor?->id,
+                'acted_at' => now()->toDateTimeString(),
+                'status' => $validated['status'],
+                'comment' => $validated['comment'] ?? null,
+                'step_index' => $currentIndex,
+                'step_profile' => $steps[$currentIndex]['profile'] ?? null,
+                'step_kind' => $steps[$currentIndex]['kind'] ?? null,
+            ];
+            $workflow['history'] = $history;
+
+            if ($validated['status'] === 'approved') {
+                if ($currentIndex < count($steps) - 1) {
+                    $nextIndex = $currentIndex + 1;
+                    $workflow['current_step_index'] = $nextIndex;
+                    $workflow['current_approver_user_id'] = $steps[$nextIndex]['user_id'];
+                    $metadata['approval_workflow'] = $workflow;
+                    $enrollment->metadata = $metadata;
+                    $enrollment->status = 'pending';
+                    $enrollment->save();
+
+                    return redirect()->route('admin.index', [
+                        'tab' => 'personnel',
+                        'personnel_tab' => $validated['personnel_tab'] ?? 'training',
+                    ])->with('success', 'Validation enregistrée et demande transmise au niveau suivant.');
+                }
+
+                $workflow['current_step_index'] = count($steps) - 1;
+                $workflow['current_approver_user_id'] = null;
+                $metadata['approval_workflow'] = $workflow;
+                $enrollment->metadata = $metadata;
+                $enrollment->status = 'planned';
+                $enrollment->save();
+
+                return redirect()->route('admin.index', [
+                    'tab' => 'personnel',
+                    'personnel_tab' => $validated['personnel_tab'] ?? 'training',
+                ])->with('success', 'Demande de formation validée définitivement.');
+            }
+
+            $workflow['current_approver_user_id'] = null;
+            $metadata['approval_workflow'] = $workflow;
+            $metadata['rejection_reason'] = $validated['comment'] ?? null;
+            $enrollment->metadata = $metadata;
+            $enrollment->status = 'rejected';
+            $enrollment->save();
+
+            return redirect()->route('admin.index', [
+                'tab' => 'personnel',
+                'personnel_tab' => $validated['personnel_tab'] ?? 'training',
+            ])->with('success', 'Demande de formation rejetée.');
+        }
+
         $validated = $request->validate([
             'status' => ['required', 'in:planned,in_progress,completed,cancelled'],
             'personnel_tab' => ['nullable', 'string'],
         ]);
 
-        $enrollment = PersonnelTrainingEnrollment::with('employee')->findOrFail($enrollmentId);
-        $this->abortIfPersonnelEmployeeOutsideScope($enrollment->employee);
-
-        // Seul l'AGENT RH ou le SUPER ADMIN peut changer le statut
+        // Seul l'AGENT RH ou le SUPER ADMIN peut changer le statut hors workflow
         $actor = auth()->user();
         $actorProfile = $actor?->profile_id ? AdministrationProfile::find($actor->profile_id) : null;
         $isSuperAdmin = $actor?->role === 'admin';
