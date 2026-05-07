@@ -3173,6 +3173,55 @@ $_oc = [
       @if(!empty($mutation->summary))
       <div class="text-xs text-gray-500 mt-2">{{ $mutation->summary }}</div>
       @endif
+
+      @if($steps->isNotEmpty())
+      @php
+        $mutationHistory = collect(data_get($workflow, 'history', []));
+      @endphp
+      <div class="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3">
+        <div class="text-xs font-semibold text-gray-700 mb-2">Circuit de validation</div>
+        <div class="space-y-2">
+          @foreach($steps as $idx => $wfStep)
+          @php
+            $wfApproverName = $allUsers->firstWhere('id', (int) data_get($wfStep, 'user_id'))?->name ?? 'Valideur';
+            $wfProfile = (string) data_get($wfStep, 'profile', 'Niveau');
+            $wfHistoryStep = $mutationHistory->first(function ($h) use ($idx) {
+              return (int) data_get($h, 'step_index', -1) === (int) $idx;
+            });
+            $wfHistoryStatus = (string) data_get($wfHistoryStep, 'status', '');
+
+            if ($wfHistoryStatus === 'approved') {
+              $wfState = 'done';
+            } elseif ($wfHistoryStatus === 'rejected') {
+              $wfState = 'rejected';
+            } elseif ($status === 'pending' && $idx === $currentIndex) {
+              $wfState = 'current';
+            } else {
+              $wfState = 'todo';
+            }
+
+            $wfDotClass = $wfState === 'done'
+              ? 'bg-emerald-500'
+              : ($wfState === 'rejected' ? 'bg-red-500' : ($wfState === 'current' ? 'bg-blue-500' : 'bg-gray-300'));
+            $wfTextClass = $wfState === 'done'
+              ? 'text-emerald-700'
+              : ($wfState === 'rejected' ? 'text-red-700' : ($wfState === 'current' ? 'text-blue-700' : 'text-gray-500'));
+            $wfLabel = $wfState === 'done'
+              ? 'Approuvée'
+              : ($wfState === 'rejected' ? 'Rejetée' : ($wfState === 'current' ? 'En attente d\'action' : 'À venir'));
+          @endphp
+          <div class="flex items-start gap-2">
+            <span class="mt-1 h-2.5 w-2.5 rounded-full {{ $wfDotClass }}"></span>
+            <div class="text-xs min-w-0">
+              <div class="font-semibold {{ $wfTextClass }}">Étape {{ $idx + 1 }} · {{ $wfLabel }}</div>
+              <div class="text-gray-600 truncate">{{ $wfProfile }} - {{ $wfApproverName }}</div>
+            </div>
+          </div>
+          @endforeach
+        </div>
+      </div>
+      @endif
+
       @if($mutation->status === 'rejected' && data_get($mutation->metadata, 'rejection_reason'))
       <div class="mt-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">
         Motif du rejet: {{ data_get($mutation->metadata, 'rejection_reason') }}

@@ -920,6 +920,14 @@ class AdminController extends Controller
                     ->where('event_type', 'mutation_request')
                     ->latest();
                 $this->applyPersonnelScope($mutationRequestQuery, $adminScope);
+                $currentUserId = (string) (auth()->id() ?? '');
+                if ($currentUserId !== '') {
+                    $mutationRequestQuery->orWhere(function ($query) use ($currentUserId) {
+                        $query->where('event_type', 'mutation_request')
+                            ->where('status', 'pending')
+                            ->where('metadata->approval_workflow->current_approver_user_id', $currentUserId);
+                    });
+                }
                 $personnelMutationRequests = $mutationRequestQuery->limit(50)->get();
 
                 $personnelStats['careerEvents'] = (clone $this->applyPersonnelScope(PersonnelCareerEvent::query(), $adminScope))->count();
