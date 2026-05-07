@@ -1936,6 +1936,22 @@ $_oc = [
         $label = $mutationStatusLabel[$status] ?? ucfirst($status);
         $targetName = data_get($request->metadata, 'mutation_request.target_sub_entity_name', $request->new_job_title ?: '-');
         $sourceName = data_get($request->metadata, 'mutation_request.source_sub_entity_name', $request->previous_job_title ?: '-');
+        $workflow = is_array(data_get($request->metadata, 'approval_workflow')) ? data_get($request->metadata, 'approval_workflow') : [];
+        $steps = collect(data_get($workflow, 'steps', []))->values();
+        $currentStepIndex = (int) data_get($workflow, 'current_step_index', 0);
+        $history = collect(data_get($workflow, 'history', []));
+        $rejectedHistory = $history->first(function ($item) {
+          return (string) data_get($item, 'status', '') === 'rejected';
+        });
+        $rejectedStepIndex = $rejectedHistory !== null ? (int) data_get($rejectedHistory, 'step_index', -1) : -1;
+        $totalSteps = $steps->count();
+        if ($status === 'validated') {
+          $completedSteps = $totalSteps;
+        } elseif ($status === 'rejected') {
+          $completedSteps = max(0, $rejectedStepIndex);
+        } else {
+          $completedSteps = min(max(0, $currentStepIndex), $totalSteps);
+        }
       @endphp
       <div class="rounded-xl border border-gray-200 px-4 py-3">
         <div class="flex items-center justify-between gap-3">
@@ -1947,6 +1963,76 @@ $_oc = [
         @if(!empty($request->summary))
         <div class="text-xs text-gray-500 mt-2">{{ $request->summary }}</div>
         @endif
+
+        @if($steps->isNotEmpty())
+        <div class="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3">
+          <div class="flex items-center justify-between gap-2 flex-wrap">
+            <div class="text-xs font-semibold text-gray-700">Niveau d'évolution</div>
+            <div class="text-xs text-gray-600">
+              @if($status === 'rejected' && $rejectedStepIndex >= 0)
+                Rejet à l'étape {{ min($rejectedStepIndex + 1, $totalSteps) }}/{{ $totalSteps }}
+              @elseif($status === 'validated')
+                Circuit terminé ({{ $totalSteps }}/{{ $totalSteps }})
+              @else
+                Étapes franchies: {{ $completedSteps }}/{{ $totalSteps }}
+              @endif
+            </div>
+          </div>
+
+          <div class="mt-2 h-1.5 w-full rounded-full bg-gray-200 overflow-hidden">
+            @php
+              $progressPct = $totalSteps > 0 ? (int) round(($completedSteps / $totalSteps) * 100) : 0;
+            @endphp
+            <div class="h-full {{ $status === 'rejected' ? 'bg-red-500' : ($status === 'validated' ? 'bg-emerald-500' : 'bg-blue-500') }}" style="width: {{ $progressPct }}%"></div>
+          </div>
+
+          <div class="mt-3 space-y-2">
+            @foreach($steps as $idx => $step)
+            @php
+              $stepApproverName = $allUsers->firstWhere('id', (int) data_get($step, 'user_id'))?->name ?? 'Valideur';
+              $stepProfile = (string) data_get($step, 'profile', 'Niveau');
+              if ($status === 'validated') {
+                $stepState = 'done';
+              } elseif ($status === 'rejected') {
+                if ($rejectedStepIndex >= 0 && $idx === $rejectedStepIndex) {
+                  $stepState = 'rejected';
+                } elseif ($rejectedStepIndex >= 0 && $idx < $rejectedStepIndex) {
+                  $stepState = 'done';
+                } else {
+                  $stepState = 'todo';
+                }
+              } else {
+                if ($idx < $currentStepIndex) {
+                  $stepState = 'done';
+                } elseif ($idx === $currentStepIndex) {
+                  $stepState = 'current';
+                } else {
+                  $stepState = 'todo';
+                }
+              }
+
+              $stepDotClass = $stepState === 'done'
+                ? 'bg-emerald-500'
+                : ($stepState === 'rejected' ? 'bg-red-500' : ($stepState === 'current' ? 'bg-blue-500' : 'bg-gray-300'));
+              $stepTextClass = $stepState === 'done'
+                ? 'text-emerald-700'
+                : ($stepState === 'rejected' ? 'text-red-700' : ($stepState === 'current' ? 'text-blue-700' : 'text-gray-500'));
+              $stepLabel = $stepState === 'done'
+                ? 'Validée'
+                : ($stepState === 'rejected' ? 'Rejetée' : ($stepState === 'current' ? 'En cours' : 'À venir'));
+            @endphp
+            <div class="flex items-start gap-2">
+              <span class="mt-1 h-2.5 w-2.5 rounded-full {{ $stepDotClass }}"></span>
+              <div class="text-xs min-w-0">
+                <div class="font-semibold {{ $stepTextClass }}">Étape {{ $idx + 1 }} · {{ $stepLabel }}</div>
+                <div class="text-gray-600 truncate">{{ $stepProfile }} - {{ $stepApproverName }}</div>
+              </div>
+            </div>
+            @endforeach
+          </div>
+        </div>
+        @endif
+
         @if($status === 'rejected' && data_get($request->metadata, 'rejection_reason'))
         <div class="mt-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">
           Motif du rejet: {{ data_get($request->metadata, 'rejection_reason') }}
