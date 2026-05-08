@@ -5,14 +5,39 @@ namespace App\Http\Controllers;
 use App\Models\Document;
 use App\Models\Signature;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class QrVerificationController extends Controller
 {
+    private function normalizePublicStoragePath(string $sourcePath): string
+    {
+        $path = trim($sourcePath);
+        if ($path === '') {
+            return '';
+        }
+
+        // Si une URL complete est stockee, garder uniquement le chemin.
+        if (preg_match('#^https?://#i', $path) === 1) {
+            $parsed = parse_url($path, PHP_URL_PATH);
+            $path = is_string($parsed) ? $parsed : '';
+        }
+
+        $path = str_replace('\\', '/', $path);
+        $path = preg_replace('#^https?://[^/]+/#i', '', $path) ?? $path;
+        $path = preg_replace('#^/?e-administration_laravel/public/storage/#i', '', $path) ?? $path;
+        $path = preg_replace('#^/?e-administration_laravel/storage/#i', '', $path) ?? $path;
+        $path = preg_replace('#^/?public/storage/#i', '', $path) ?? $path;
+        $path = preg_replace('#^/?storage/#i', '', $path) ?? $path;
+        $path = preg_replace('#^/?public/#i', '', $path) ?? $path;
+
+        return ltrim($path, '/');
+    }
+
     private function buildDownloadResponse(Document $document)
     {
         $sourcePath = (string) ($document->signed_file_path ?: $document->file_path ?: '');
-        $path = ltrim(str_replace('/storage/', '', $sourcePath), '/');
+        $path = $this->normalizePublicStoragePath($sourcePath);
         $ext  = pathinfo($sourcePath, PATHINFO_EXTENSION) ?: 'bin';
 
         if ($path === '' || !Storage::disk('public')->exists($path)) {
@@ -23,7 +48,23 @@ class QrVerificationController extends Controller
         $safeTitle = trim((string) $safeTitle, '-') ?: 'document';
         $name = pathinfo($safeTitle, PATHINFO_EXTENSION) === $ext ? $safeTitle : ($safeTitle . '.' . $ext);
 
-        return Storage::disk('public')->download($path, $name);
+        try {
+            return Storage::disk('public')->download($path, $name);
+        } catch (\Throwable $e) {
+            Log::error('QR download failed', [
+                'document_id' => $document->id,
+                'source_path' => $sourcePath,
+                'normalized_path' => $path,
+                'error' => $e->getMessage(),
+            ]);
+
+            $absPath = Storage::disk('public')->path($path);
+            if (is_file($absPath) && is_readable($absPath)) {
+                return response()->download($absPath, $name);
+            }
+
+            abort(500, 'Impossible de telecharger le fichier.');
+        }
     }
 
     /**
