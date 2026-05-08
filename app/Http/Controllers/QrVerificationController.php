@@ -40,7 +40,19 @@ class QrVerificationController extends Controller
         $path = $this->normalizePublicStoragePath($sourcePath);
         $ext  = pathinfo($sourcePath, PATHINFO_EXTENSION) ?: 'bin';
 
-        if ($path === '' || !Storage::disk('public')->exists($path)) {
+        try {
+            $exists = $path !== '' && Storage::disk('public')->exists($path);
+        } catch (\Throwable $e) {
+            Log::error('QR download exists check failed', [
+                'document_id' => $document->id,
+                'source_path' => $sourcePath,
+                'normalized_path' => $path,
+                'error' => $e->getMessage(),
+            ]);
+            $exists = false;
+        }
+
+        if (!$exists) {
             abort(404, 'Fichier introuvable');
         }
 
@@ -58,12 +70,21 @@ class QrVerificationController extends Controller
                 'error' => $e->getMessage(),
             ]);
 
-            $absPath = Storage::disk('public')->path($path);
-            if (is_file($absPath) && is_readable($absPath)) {
-                return response()->download($absPath, $name);
+            // Fallback local uniquement si le driver supporte path().
+            try {
+                $absPath = Storage::disk('public')->path($path);
+                if (is_file($absPath) && is_readable($absPath)) {
+                    return response()->download($absPath, $name);
+                }
+            } catch (\Throwable $fallbackError) {
+                Log::error('QR download local fallback failed', [
+                    'document_id' => $document->id,
+                    'normalized_path' => $path,
+                    'error' => $fallbackError->getMessage(),
+                ]);
             }
 
-            abort(500, 'Impossible de telecharger le fichier.');
+            abort(404, 'Fichier introuvable');
         }
     }
 
