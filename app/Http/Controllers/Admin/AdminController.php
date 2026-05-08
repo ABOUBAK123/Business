@@ -37,6 +37,7 @@ use App\Models\AdministrationSmtpSetting;
 use App\Models\PersonnelEmployee;
 use App\Models\PersonnelEmployeeDocument;
 use App\Services\NotificationService;
+use App\Services\TemplateOfficeTextExtractor;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -3116,9 +3117,11 @@ class AdminController extends Controller
 
         // ── Auto-extraction des variables {{}} depuis le fichier Office ────────
         $extractedVars = [];
+        $fallbackContent = '';
         if (in_array($ext, ['docx', 'xlsx', 'pptx'])) {
             $absPath = \Illuminate\Support\Facades\Storage::disk('public')->path($storedPath);
             $extractedVars = $this->extractVarsFromUploadedFile($absPath);
+            $fallbackContent = app(TemplateOfficeTextExtractor::class)->extract($absPath);
 
             // Un modèle Office sans variable n'est pas utile: on refuse sa création.
             if (count($extractedVars) === 0) {
@@ -3141,6 +3144,9 @@ class AdminController extends Controller
             $template->file_name = (string) $file->getClientOriginalName();
             $template->file_type = (string) $ext;
             $template->storage_path = (string) $storedPath;
+            if ($fallbackContent !== '') {
+                $template->content = $fallbackContent;
+            }
             $template->administration_id = $request->input('administration_id') ?: null;
             $template->save();
         } else {
@@ -3150,7 +3156,7 @@ class AdminController extends Controller
                 'file_name'         => $file->getClientOriginalName(),
                 'file_type'         => $ext,
                 'storage_path'      => $storedPath,
-                'content'           => '',
+                'content'           => $fallbackContent,
                 'administration_id' => $request->input('administration_id') ?: null,
                 'created_by'        => auth()->id(),
             ]);

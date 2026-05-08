@@ -418,6 +418,19 @@ class SharedTemplateController extends Controller
             }
         } else {
             // Génération PDF depuis le contenu texte
+            if (trim((string) $content) === '') {
+                $message = 'Le template ne contient aucun contenu exploitable. Rechargez le fichier source du template ou editez son contenu avant generation.';
+
+                if ($request->expectsJson() || $request->ajax()) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $message,
+                    ], 422);
+                }
+
+                return back()->with('error', $message);
+            }
+
             $ext      = 'pdf';
             $mimeType = 'application/pdf';
             $destPath = 'documents/' . $baseName . '-' . now()->format('Ymd-His') . '.pdf';

@@ -1,7 +1,9 @@
 <?php
 
+use App\Models\DocumentTemplate;
 use App\Models\SignatureProviderConfig;
 use App\Models\WorkflowExecution;
+use App\Services\TemplateOfficeTextExtractor;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -11,6 +13,88 @@ use Illuminate\Support\Facades\Artisan;
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
+
+Artisan::command('templates:backfill-content
+    {--dry-run : Affiche les templates qui seront repares sans ecrire en base}
+    {--limit=200 : Nombre max de templates a traiter}
+    {--template-id= : Traite un template precis}', function () {
+    $limit = max(1, (int) $this->option('limit'));
+    $templateId = trim((string) $this->option('template-id'));
+    $dryRun = (bool) $this->option('dry-run');
+    $officeTypes = ['docx', 'xlsx', 'pptx'];
+    $extractor = app(TemplateOfficeTextExtractor::class);
+
+    $query = DocumentTemplate::query()
+        ->whereIn('file_type', $officeTypes)
+        ->whereNotNull('storage_path')
+        ->where(function ($subQuery) {
+            $subQuery->whereNull('content')
+                ->orWhere('content', '');
+        })
+        ->orderBy('created_at');
+
+    if ($templateId !== '') {
+        $query->where('id', $templateId);
+    }
+
+    $templates = $query->limit($limit)->get();
+    if ($templates->isEmpty()) {
+        $this->info('Aucun template a rattraper.');
+        return 0;
+    }
+
+    $this->info('Templates a analyser: ' . $templates->count() . ($dryRun ? ' (dry-run)' : ''));
+
+    $updated = 0;
+    $failed = 0;
+    $skipped = 0;
+
+    foreach ($templates as $template) {
+        $storagePath = (string) $template->storage_path;
+        $absPath = str_starts_with($storagePath, 'images/')
+            ? public_path($storagePath)
+            : Storage::disk('public')->path($storagePath);
+
+        if (!is_file($absPath)) {
+            $skipped++;
+            $this->warn("[SKIP] {$template->id} source introuvable: {$storagePath}");
+            continue;
+        }
+
+        try {
+            $content = $extractor->extract($absPath);
+            if (trim($content) === '') {
+                $failed++;
+                $this->error("[FAIL] {$template->id} contenu non extractible");
+                continue;
+            }
+
+            if ($dryRun) {
+                $updated++;
+                $preview = function_exists('mb_substr') ? mb_substr($content, 0, 80) : substr($content, 0, 80);
+                $this->line("[DRY] {$template->id} => {$preview}");
+                continue;
+            }
+
+            $template->forceFill(['content' => $content])->save();
+            $updated++;
+            $this->info("[OK] {$template->id} contenu renseigne");
+        } catch (\Throwable $e) {
+            $failed++;
+            $this->error("[FAIL] {$template->id} exception: {$e->getMessage()}");
+            Log::error('Template content backfill failed', [
+                'template_id' => $template->id,
+                'storage_path' => $storagePath,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    $this->newLine();
+    $this->info("Termine. OK={$updated}, FAIL={$failed}, SKIP={$skipped}");
+
+    return $failed > 0 ? 2 : 0;
+})->purpose('Renseigne le contenu de secours des anciens templates Office');
 
 Artisan::command('signatures:backfill-signed-docs
     {--dry-run : Affiche les exécutions à traiter sans télécharger}
