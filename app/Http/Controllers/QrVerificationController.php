@@ -37,8 +37,8 @@ class QrVerificationController extends Controller
     private function buildDownloadResponse(Document $document)
     {
         $candidateSources = array_values(array_filter([
-            (string) ($document->signed_file_path ?? ''),
             (string) ($document->file_path ?? ''),
+            (string) ($document->signed_file_path ?? ''),
         ], fn ($v) => trim($v) !== ''));
 
         $sourcePath = '';
