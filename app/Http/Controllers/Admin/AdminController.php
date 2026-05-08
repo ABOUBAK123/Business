@@ -3249,11 +3249,19 @@ class AdminController extends Controller
                 'user_id' => auth()->id(),
             ]);
 
+            $msg = 'Erreur interne lors de l\'upload du template.';
+            $raw = strtolower($e->getMessage());
+            if (str_contains($raw, 'permission') || str_contains($raw, 'denied') || str_contains($raw, 'unabletowritefile')) {
+                $msg = 'Impossible d\'enregistrer le fichier sur le serveur. Verifiez les droits d\'ecriture de storage/app/public/templates.';
+            } elseif (str_contains($raw, 'ziparchive')) {
+                $msg = 'Le serveur ne peut pas lire ce fichier Office (extension ZIP manquante ou fichier corrompu).';
+            }
+
             return response()->json([
                 'success' => false,
-                'message' => 'Erreur interne lors de l\'upload du template.',
+                'message' => $msg,
                 'error' => app()->environment('production') ? null : $e->getMessage(),
-            ], 500);
+            ], 200);
         }
     }
 

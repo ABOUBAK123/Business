@@ -4599,6 +4599,11 @@ $_oc = [
                 return;
             }
             var cfg = JSON.parse(xhr.responseText);
+            if (cfg && cfg.success === false) {
+              var backendMsg = cfg.message || 'Upload echoue.';
+              tplOoShowStatus(backendMsg, 7000);
+              return;
+            }
             var upPanel = document.getElementById('tpl-oo-upload-panel');
             if (upPanel) upPanel.classList.add('hidden');
             _tplOoUploadTargetId = null;
