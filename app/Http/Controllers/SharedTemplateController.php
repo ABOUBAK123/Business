@@ -565,29 +565,44 @@ class SharedTemplateController extends Controller
         ]);
 
         if ($sourceStoragePath && $sourceStoragePath !== $storagePath) {
-            DocumentVersion::create([
-                'document_id' => $docId,
-                'version'     => 1,
-                'file_path'   => $sourceStoragePath,
-                'creator_id'  => Auth::id(),
-                'change_log'  => 'Source editable generee depuis template : ' . $template->name,
-            ]);
+            try {
+                DocumentVersion::create([
+                    'document_id' => $docId,
+                    'version'     => 1,
+                    'file_path'   => $sourceStoragePath,
+                    'creator_id'  => Auth::id(),
+                    'change_log'  => 'Source editable generee depuis template : ' . $template->name,
+                ]);
+                \Log::info('GENERATE DocumentVersion v1 created', ['doc_id' => $docId, 'path' => $sourceStoragePath]);
+            } catch (\Throwable $e) {
+                \Log::error('GENERATE DocumentVersion v1 failed', ['doc_id' => $docId, 'error' => $e->getMessage()]);
+            }
 
-            DocumentVersion::create([
-                'document_id' => $docId,
-                'version'     => 2,
-                'file_path'   => $storagePath,
-                'creator_id'  => Auth::id(),
-                'change_log'  => 'Version PDF signable generee depuis template : ' . $template->name,
-            ]);
+            try {
+                DocumentVersion::create([
+                    'document_id' => $docId,
+                    'version'     => 2,
+                    'file_path'   => $storagePath,
+                    'creator_id'  => Auth::id(),
+                    'change_log'  => 'Version PDF signable generee depuis template : ' . $template->name,
+                ]);
+                \Log::info('GENERATE DocumentVersion v2 created', ['doc_id' => $docId, 'path' => $storagePath]);
+            } catch (\Throwable $e) {
+                \Log::error('GENERATE DocumentVersion v2 failed', ['doc_id' => $docId, 'error' => $e->getMessage()]);
+            }
         } else {
-            DocumentVersion::create([
-                'document_id' => $docId,
-                'version'     => 1,
-                'file_path'   => $storagePath,
-                'creator_id'  => Auth::id(),
-                'change_log'  => 'Génération depuis template : ' . $template->name,
-            ]);
+            try {
+                DocumentVersion::create([
+                    'document_id' => $docId,
+                    'version'     => 1,
+                    'file_path'   => $storagePath,
+                    'creator_id'  => Auth::id(),
+                    'change_log'  => 'Génération depuis template : ' . $template->name,
+                ]);
+                \Log::info('GENERATE DocumentVersion v1 created (single)', ['doc_id' => $docId, 'path' => $storagePath]);
+            } catch (\Throwable $e) {
+                \Log::error('GENERATE DocumentVersion v1 (single) failed', ['doc_id' => $docId, 'error' => $e->getMessage()]);
+            }
         }
 
         if ($request->expectsJson() || $request->ajax()) {
