@@ -77,6 +77,14 @@ class QrVerificationController extends Controller
         }
 
         if ($path === '') {
+            $recoveredPath = $this->recoverSignedPathFromStorage($document);
+            if ($recoveredPath !== null) {
+                $path = $recoveredPath;
+                $sourcePath = $recoveredPath;
+            }
+        }
+
+        if ($path === '') {
             Log::warning('QR download file not found on disk', [
                 'document_id' => $document->id,
                 'signed_file_path' => $document->signed_file_path,
@@ -118,6 +126,61 @@ class QrVerificationController extends Controller
 
             abort(404, 'Fichier introuvable');
         }
+    }
+
+    private function recoverSignedPathFromStorage(Document $document): ?string
+    {
+        $originalName = pathinfo((string) ($document->file_path ?? ''), PATHINFO_FILENAME);
+        if ($originalName === '') {
+            return null;
+        }
+
+        try {
+            $signedDirAbs = Storage::disk('public')->path('signed_documents');
+        } catch (\Throwable $e) {
+            Log::warning('QR signed path recovery skipped: path() unsupported', [
+                'document_id' => $document->id,
+                'error' => $e->getMessage(),
+            ]);
+            return null;
+        }
+
+        if (!is_dir($signedDirAbs)) {
+            return null;
+        }
+
+        $pattern = rtrim($signedDirAbs, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'signed_' . $originalName . '_*.pdf';
+        $matches = glob($pattern) ?: [];
+        if (empty($matches)) {
+            return null;
+        }
+
+        usort($matches, static fn (string $a, string $b) => (@filemtime($b) ?: 0) <=> (@filemtime($a) ?: 0));
+        $best = $matches[0] ?? null;
+        if (!$best || !is_file($best) || !is_readable($best)) {
+            return null;
+        }
+
+        $relative = 'signed_documents/' . basename($best);
+
+        if ((string) ($document->signed_file_path ?? '') !== $relative) {
+            try {
+                $document->forceFill(['signed_file_path' => $relative])->save();
+            } catch (\Throwable $e) {
+                Log::warning('QR signed path recovery: failed to persist recovered path', [
+                    'document_id' => $document->id,
+                    'recovered_path' => $relative,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        Log::info('QR signed path recovered from storage scan', [
+            'document_id' => $document->id,
+            'recovered_path' => $relative,
+        ]);
+
+        return $relative;
     }
 
     /**
