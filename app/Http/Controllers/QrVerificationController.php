@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Document;
+use App\Models\DocumentVersion;
 use App\Models\Signature;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -34,9 +35,23 @@ class QrVerificationController extends Controller
         return ltrim($path, '/');
     }
 
+    private function resolveSourceVersionPath(Document $document): ?string
+    {
+        $versionPath = $document->versions()
+            ->orderBy('version')
+            ->value('file_path');
+
+        if (!is_string($versionPath) || trim($versionPath) === '') {
+            return null;
+        }
+
+        return $versionPath;
+    }
+
     private function buildDownloadResponse(Document $document)
     {
         $candidateSources = array_values(array_filter([
+            (string) ($this->resolveSourceVersionPath($document) ?? ''),
             (string) ($document->file_path ?? ''),
             (string) ($document->signed_file_path ?? ''),
         ], fn ($v) => trim($v) !== ''));
