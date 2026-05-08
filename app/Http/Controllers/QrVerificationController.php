@@ -36,25 +36,56 @@ class QrVerificationController extends Controller
 
     private function buildDownloadResponse(Document $document)
     {
-        $sourcePath = (string) ($document->signed_file_path ?: $document->file_path ?: '');
-        $path = $this->normalizePublicStoragePath($sourcePath);
-        $ext  = pathinfo($sourcePath, PATHINFO_EXTENSION) ?: 'bin';
+        $candidateSources = array_values(array_filter([
+            (string) ($document->signed_file_path ?? ''),
+            (string) ($document->file_path ?? ''),
+        ], fn ($v) => trim($v) !== ''));
 
-        try {
-            $exists = $path !== '' && Storage::disk('public')->exists($path);
-        } catch (\Throwable $e) {
-            Log::error('QR download exists check failed', [
-                'document_id' => $document->id,
-                'source_path' => $sourcePath,
-                'normalized_path' => $path,
-                'error' => $e->getMessage(),
-            ]);
-            $exists = false;
+        $sourcePath = '';
+        $path = '';
+
+        foreach ($candidateSources as $sourceCandidate) {
+            $normalized = $this->normalizePublicStoragePath($sourceCandidate);
+            if ($normalized === '') {
+                continue;
+            }
+
+            $pathsToTry = [$normalized];
+            $baseName = basename($normalized);
+            if ($baseName !== '' && $baseName !== $normalized) {
+                $pathsToTry[] = 'signed_documents/' . $baseName;
+                $pathsToTry[] = 'documents/' . $baseName;
+                $pathsToTry[] = 'templates/' . $baseName;
+            }
+
+            foreach (array_values(array_unique($pathsToTry)) as $pathCandidate) {
+                try {
+                    if (Storage::disk('public')->exists($pathCandidate)) {
+                        $sourcePath = $sourceCandidate;
+                        $path = $pathCandidate;
+                        break 2;
+                    }
+                } catch (\Throwable $e) {
+                    Log::error('QR download exists check failed', [
+                        'document_id' => $document->id,
+                        'source_path' => $sourceCandidate,
+                        'normalized_path' => $pathCandidate,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
         }
 
-        if (!$exists) {
+        if ($path === '') {
+            Log::warning('QR download file not found on disk', [
+                'document_id' => $document->id,
+                'signed_file_path' => $document->signed_file_path,
+                'file_path' => $document->file_path,
+            ]);
             abort(404, 'Fichier introuvable');
         }
+
+        $ext  = pathinfo($sourcePath, PATHINFO_EXTENSION) ?: (pathinfo($path, PATHINFO_EXTENSION) ?: 'bin');
 
         // Evite les classes hex fragiles selon versions PCRE en production.
         $safeTitle = preg_replace('/[\/\\[:cntrl:]]+/', '-', (string) $document->title);
