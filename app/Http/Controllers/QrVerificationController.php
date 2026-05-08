@@ -56,7 +56,8 @@ class QrVerificationController extends Controller
             abort(404, 'Fichier introuvable');
         }
 
-        $safeTitle = preg_replace('/[\/\\\x00-\x1f]+/', '-', (string) $document->title);
+        // Evite les classes hex fragiles selon versions PCRE en production.
+        $safeTitle = preg_replace('/[\/\\[:cntrl:]]+/', '-', (string) $document->title);
         $safeTitle = trim((string) $safeTitle, '-') ?: 'document';
         $name = pathinfo($safeTitle, PATHINFO_EXTENSION) === $ext ? $safeTitle : ($safeTitle . '.' . $ext);
 
