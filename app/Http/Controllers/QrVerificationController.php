@@ -130,11 +130,6 @@ class QrVerificationController extends Controller
 
     private function recoverSignedPathFromStorage(Document $document): ?string
     {
-        $originalName = pathinfo((string) ($document->file_path ?? ''), PATHINFO_FILENAME);
-        if ($originalName === '') {
-            return null;
-        }
-
         try {
             $signedDirAbs = Storage::disk('public')->path('signed_documents');
         } catch (\Throwable $e) {
@@ -149,14 +144,13 @@ class QrVerificationController extends Controller
             return null;
         }
 
-        $pattern = rtrim($signedDirAbs, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'signed_' . $originalName . '_*.pdf';
-        $matches = glob($pattern) ?: [];
-        if (empty($matches)) {
+        $allSigned = glob(rtrim($signedDirAbs, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'signed_*.pdf') ?: [];
+        if (empty($allSigned)) {
             return null;
         }
 
-        usort($matches, static fn (string $a, string $b) => (@filemtime($b) ?: 0) <=> (@filemtime($a) ?: 0));
-        $best = $matches[0] ?? null;
+        usort($allSigned, static fn (string $a, string $b) => (@filemtime($b) ?: 0) <=> (@filemtime($a) ?: 0));
+        $best = $allSigned[0] ?? null;
         if (!$best || !is_file($best) || !is_readable($best)) {
             return null;
         }
