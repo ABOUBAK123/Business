@@ -140,32 +140,77 @@ class QrVerificationController extends Controller
             return null;
         }
 
-        usort($allSigned, static fn (string $a, string $b) => (@filemtime($b) ?: 0) <=> (@filemtime($a) ?: 0));
-        $best = $allSigned[0] ?? null;
-        if (!$best || !is_file($best) || !is_readable($best)) {
-            return null;
+        $sourcePath = $this->normalizePublicStoragePath((string) ($document->file_path ?? ''));
+        $sourceStem = pathinfo($sourcePath, PATHINFO_FILENAME);
+        $titleStem = pathinfo($this->normalizePublicStoragePath((string) ($document->title ?? '')), PATHINFO_FILENAME);
+
+        $stemsToTry = array_values(array_unique(array_filter([
+            $sourceStem,
+            $titleStem,
+        ], static fn (string $value) => trim($value) !== '')));
+
+        foreach ($stemsToTry as $stem) {
+            $matches = glob(rtrim($signedDirAbs, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'signed_' . $stem . '_*.pdf') ?: [];
+            if (empty($matches)) {
+                continue;
+            }
+
+            usort($matches, static fn (string $a, string $b) => (@filemtime($b) ?: 0) <=> (@filemtime($a) ?: 0));
+            $best = $matches[0] ?? null;
+            if (!$best || !is_file($best) || !is_readable($best)) {
+                continue;
+            }
+
+            $relative = 'signed_documents/' . basename($best);
+
+            if ((string) ($document->signed_file_path ?? '') !== $relative) {
+                try {
+                    $document->forceFill(['signed_file_path' => $relative])->save();
+                } catch (\Throwable $e) {
+                    Log::warning('QR signed path recovery: failed to persist recovered path', [
+                        'document_id' => $document->id,
+                        'recovered_path' => $relative,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+
+            Log::info('QR signed path recovered from storage scan', [
+                'document_id' => $document->id,
+                'recovered_path' => $relative,
+                'matched_stem' => $stem,
+            ]);
+
+            return $relative;
         }
 
-        $relative = 'signed_documents/' . basename($best);
+        if (count($allSigned) === 1) {
+            $best = $allSigned[0];
+            if ($best && is_file($best) && is_readable($best)) {
+                $relative = 'signed_documents/' . basename($best);
 
-        if ((string) ($document->signed_file_path ?? '') !== $relative) {
-            try {
-                $document->forceFill(['signed_file_path' => $relative])->save();
-            } catch (\Throwable $e) {
-                Log::warning('QR signed path recovery: failed to persist recovered path', [
+                if ((string) ($document->signed_file_path ?? '') !== $relative) {
+                    try {
+                        $document->forceFill(['signed_file_path' => $relative])->save();
+                    } catch (\Throwable $e) {
+                        Log::warning('QR signed path recovery: failed to persist recovered path', [
+                            'document_id' => $document->id,
+                            'recovered_path' => $relative,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+                }
+
+                Log::info('QR signed path recovered from singleton storage scan', [
                     'document_id' => $document->id,
                     'recovered_path' => $relative,
-                    'error' => $e->getMessage(),
                 ]);
+
+                return $relative;
             }
         }
 
-        Log::info('QR signed path recovered from storage scan', [
-            'document_id' => $document->id,
-            'recovered_path' => $relative,
-        ]);
-
-        return $relative;
+        return null;
     }
 
     /**
@@ -176,10 +221,10 @@ class QrVerificationController extends Controller
         $token = trim($token);
         abort_if($token === '', 404);
 
-        $document = Document::where('qr_token', $token)->first();
+        $document = Document::withTrashed()->where('qr_token', $token)->first();
 
         if (!$document) {
-            $signature = Signature::with('document')->where('qr_code_token', $token)->first();
+            $signature = Signature::with(['document' => fn ($query) => $query->withTrashed()])->where('qr_code_token', $token)->first();
             $document = $signature?->document;
         }
 
@@ -206,7 +251,7 @@ class QrVerificationController extends Controller
         $token = trim($request->token);
 
         // 1) Chercher un document dont le qr_token correspond
-        $document = Document::with(['owner', 'issuingAdministration'])
+        $document = Document::withTrashed()->with(['owner', 'issuingAdministration'])
             ->where('qr_token', $token)
             ->first();
 
@@ -256,7 +301,7 @@ class QrVerificationController extends Controller
         }
 
         // 2) Fallback : chercher une signature QR
-        $signature = Signature::with(['document', 'signer'])
+        $signature = Signature::with(['document' => fn ($query) => $query->withTrashed(), 'signer'])
             ->where('qr_code_token', $token)
             ->first();
 
@@ -305,7 +350,7 @@ class QrVerificationController extends Controller
         $input = trim((string) $request->input('document_number', ''));
         $normalizedInput = strtoupper(str_replace(' ', '', $input));
 
-        $document = Document::with(['owner', 'issuingAdministration'])
+        $document = Document::withTrashed()->with(['owner', 'issuingAdministration'])
             ->whereNotNull('document_number')
             ->whereRaw('UPPER(REPLACE(document_number, " ", "")) = ?', [$normalizedInput])
             ->first();
