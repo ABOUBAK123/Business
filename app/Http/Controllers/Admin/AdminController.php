@@ -5647,10 +5647,19 @@ class AdminController extends Controller
         $saved = 0;
 
         foreach ($vars as $v) {
+            $key = $this->makeVariableSlug((string) ($v['key'] ?? 'var'));
+            $label = (string) ($v['label'] ?? $key);
+            // Respecter la taille SQL (VARCHAR 255) pour eviter les erreurs 1406.
+            if (function_exists('mb_substr')) {
+                $label = mb_substr($label, 0, 255);
+            } else {
+                $label = substr($label, 0, 255);
+            }
+
             $created = \App\Models\TemplateVariable::firstOrCreate(
-                ['template_id' => $template->id, 'key' => $v['key']],
+                ['template_id' => $template->id, 'key' => $key],
                 [
-                    'label' => $v['label'],
+                    'label' => $label,
                     'field_type' => 'text',
                     'required' => false,
                     'placeholder' => '',
@@ -5677,7 +5686,20 @@ class AdminController extends Controller
         $slug = strtolower($source);
         $slug = str_replace("'", '_', $slug);
         $slug = preg_replace('/[^a-z0-9]+/', '_', $slug);
+        $slug = trim((string) $slug, '_');
+        if ($slug === '') {
+            $slug = 'var';
+        }
 
-        return trim((string) $slug, '_') ?: 'var';
+        // La colonne template_variables.key est VARCHAR(150).
+        // On reserve un suffixe hash pour conserver l'unicite en cas de troncature.
+        $max = 150;
+        if (strlen($slug) > $max) {
+            $hash = substr(sha1($orig), 0, 10);
+            $base = substr($slug, 0, $max - 11);
+            $slug = rtrim($base, '_') . '_' . $hash;
+        }
+
+        return $slug;
     }
 }

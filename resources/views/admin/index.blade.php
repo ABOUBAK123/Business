@@ -4232,6 +4232,7 @@ $_oc = [
     var _adminBase = _adminBaseRuntime || _adminBaseServer || '/admin';
     window._adminBase = _adminBase;
     var _adminTplBase = _adminBase + '/templates';
+    var _adminTplUploadUrl = @json(route('admin.admin.templates.uploadFile'));
     var _tplOoUploadTargetId = null;
     window._tplStoreUrl = @json(route('admin.templates.store'));
     var _tplOoDebug = false;
@@ -4580,25 +4581,48 @@ $_oc = [
 
         var formData = new FormData(form);
         formData.set('name', upName.value.trim());
-        formData.append('file', fileInput.files[0]);
+        // Evite d'envoyer deux fois le même champ fichier (append + form initial)
+        formData.set('file', fileInput.files[0]);
         var upAdmin = document.getElementById('tpl-oo-up-admin');
         if (upAdmin && upAdmin.value) formData.set('administration_id', upAdmin.value);
         if (_tplOoUploadTargetId) formData.set('template_id', _tplOoUploadTargetId);
         var xhr = new XMLHttpRequest();
-        xhr.open('POST', _adminTplBase + '/upload-file');
+        xhr.open('POST', _adminTplUploadUrl || (_adminTplBase + '/upload-file'));
         xhr.setRequestHeader('X-CSRF-TOKEN', document.querySelector('meta[name="csrf-token"]').content);
         xhr.setRequestHeader('Accept', 'application/json');
 
         xhr.onload = function() {
             if (submitBtn) submitBtn.disabled = false;
             if (progressDiv) progressDiv.classList.add('hidden');
-            if (xhr.status !== 200) {
-                var errMsg = 'Erreur serveur (' + xhr.status + ').';
-                try { var j = JSON.parse(xhr.responseText); errMsg = j.message || errMsg; } catch(ex) {}
-                tplOoShowStatus(errMsg, 6000);
-                return;
+
+          var payload = null;
+          try {
+            payload = xhr.responseText ? JSON.parse(xhr.responseText) : null;
+          } catch (ex) {
+            payload = null;
+          }
+
+          if (xhr.status < 200 || xhr.status >= 300) {
+            var errMsg = 'Erreur serveur (' + xhr.status + ').';
+            if (payload && payload.message) {
+              errMsg = payload.message;
+            } else if (xhr.status === 413) {
+              errMsg = 'Fichier trop volumineux pour le serveur (limite PHP/Nginx/Apache).';
+            } else if (xhr.status === 419) {
+              errMsg = 'Session expirée. Rechargez la page puis réessayez.';
+            } else if (xhr.status === 422) {
+              errMsg = 'Données invalides. Vérifiez le nom du modèle et le type de fichier.';
             }
-            var cfg = JSON.parse(xhr.responseText);
+            tplOoShowStatus(errMsg, 7000);
+            return;
+          }
+
+          if (!payload) {
+            tplOoShowStatus('Réponse serveur invalide après upload.', 7000);
+            return;
+          }
+
+          var cfg = payload;
             if (cfg && cfg.success === false) {
               var backendMsg = cfg.message || 'Upload echoue.';
               tplOoShowStatus(backendMsg, 7000);
