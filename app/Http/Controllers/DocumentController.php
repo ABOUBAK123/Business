@@ -374,7 +374,10 @@ class DocumentController extends Controller
             }
         }
 
-        $sourcePath = (string) ($document->signed_file_path ?: $document->file_path ?: '');
+        $preferSource = $request->boolean('source');
+        $sourcePath = $preferSource
+            ? (string) ($document->file_path ?: $document->signed_file_path ?: '')
+            : (string) ($document->signed_file_path ?: $document->file_path ?: '');
         $path = ltrim(str_replace('/storage/', '', $sourcePath), '/');
         $ext  = pathinfo($sourcePath, PATHINFO_EXTENSION) ?: 'bin';
 
@@ -392,7 +395,7 @@ class DocumentController extends Controller
 
         if ($request->boolean('inline')) {
             return Storage::disk('public')->response($path, $name, [
-                'Content-Type' => ($document->signed_file_path ? 'application/pdf' : ($document->mime_type ?: 'application/octet-stream')),
+                'Content-Type' => ($preferSource ? ($document->mime_type ?: 'application/octet-stream') : ($document->signed_file_path ? 'application/pdf' : ($document->mime_type ?: 'application/octet-stream'))),
                 'Content-Disposition' => 'inline; filename="' . addslashes($name) . '"',
             ]);
         }
