@@ -3103,6 +3103,8 @@ class AdminController extends Controller
             'template_id'       => 'nullable|string',
         ]);
 
+        try {
+
         $file      = $request->file('file');
         $ext       = strtolower($file->getClientOriginalExtension());
         $origName  = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
@@ -3240,6 +3242,19 @@ class AdminController extends Controller
             'form_fields_count' => count($formFields),
             'ai'             => $aiMeta,
         ]);
+        } catch (\Throwable $e) {
+            Log::error('Template upload failed', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'user_id' => auth()->id(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Erreur interne lors de l\'upload du template.',
+                'error' => app()->environment('production') ? null : $e->getMessage(),
+            ], 500);
+        }
     }
 
     private function autoEnrichTemplateVariables(DocumentTemplate $template, array $rawVars = []): array
@@ -5548,12 +5563,7 @@ class AdminController extends Controller
             foreach ($allMatches as $orig) {
                 $orig = trim($orig);
                 if (!$orig) continue;
-                $ascii = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $orig);
-                $slug  = $ascii !== false && $ascii !== '' ? $ascii : $orig;
-                $slug  = strtolower($slug);
-                $slug  = str_replace("'", '_', $slug);
-                $slug  = preg_replace('/[^a-z0-9]+/', '_', $slug);
-                $slug  = trim($slug, '_') ?: 'var';
+                $slug = $this->makeVariableSlug($orig);
                 if (!isset($found[$slug])) $found[$slug] = $orig;
             }
         }
@@ -5615,12 +5625,7 @@ class AdminController extends Controller
         foreach (array_merge($m1[1], $m2[1]) as $orig) {
             $orig = trim($orig);
             if (!$orig) continue;
-            $ascii = iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $orig);
-            $slug  = $ascii !== false && $ascii !== '' ? $ascii : $orig;
-            $slug  = strtolower($slug);
-            $slug  = str_replace("'", '_', $slug);
-            $slug  = preg_replace('/[^a-z0-9]+/', '_', $slug);
-            $slug  = trim($slug, '_') ?: 'var';
+            $slug  = $this->makeVariableSlug($orig);
             if (!isset($found[$slug])) {
                 $found[$slug] = ['key' => $slug, 'label' => $orig];
             }
@@ -5649,5 +5654,22 @@ class AdminController extends Controller
         }
 
         return $saved;
+    }
+
+    private function makeVariableSlug(string $orig): string
+    {
+        $source = $orig;
+        if (function_exists('iconv')) {
+            $ascii = @iconv('UTF-8', 'ASCII//TRANSLIT//IGNORE', $orig);
+            if ($ascii !== false && $ascii !== '') {
+                $source = $ascii;
+            }
+        }
+
+        $slug = strtolower($source);
+        $slug = str_replace("'", '_', $slug);
+        $slug = preg_replace('/[^a-z0-9]+/', '_', $slug);
+
+        return trim((string) $slug, '_') ?: 'var';
     }
 }

@@ -374,8 +374,9 @@ class DocumentController extends Controller
             }
         }
 
-        $path = ltrim(str_replace('/storage/', '', (string) $document->file_path), '/');
-        $ext  = pathinfo((string) $document->file_path, PATHINFO_EXTENSION) ?: 'bin';
+        $sourcePath = (string) ($document->signed_file_path ?: $document->file_path ?: '');
+        $path = ltrim(str_replace('/storage/', '', $sourcePath), '/');
+        $ext  = pathinfo($sourcePath, PATHINFO_EXTENSION) ?: 'bin';
 
         if ($path === '' || !Storage::disk('public')->exists($path)) {
             abort(404, 'Fichier introuvable sur le serveur.');
@@ -391,7 +392,7 @@ class DocumentController extends Controller
 
         if ($request->boolean('inline')) {
             return Storage::disk('public')->response($path, $name, [
-                'Content-Type' => $document->mime_type ?: 'application/octet-stream',
+                'Content-Type' => ($document->signed_file_path ? 'application/pdf' : ($document->mime_type ?: 'application/octet-stream')),
                 'Content-Disposition' => 'inline; filename="' . addslashes($name) . '"',
             ]);
         }
@@ -417,8 +418,9 @@ class DocumentController extends Controller
         }
 
         $document = Document::findOrFail($share->document_id);
-        $path = ltrim(str_replace('/storage/', '', (string) $document->file_path), '/');
-        $ext  = pathinfo((string) $document->file_path, PATHINFO_EXTENSION) ?: 'bin';
+        $sourcePath = (string) ($document->signed_file_path ?: $document->file_path ?: '');
+        $path = ltrim(str_replace('/storage/', '', $sourcePath), '/');
+        $ext  = pathinfo($sourcePath, PATHINFO_EXTENSION) ?: 'bin';
 
         if ($path === '' || !Storage::disk('public')->exists($path)) {
             abort(404, 'Fichier introuvable');

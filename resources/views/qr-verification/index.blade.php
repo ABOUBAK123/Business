@@ -106,27 +106,43 @@ async function verifyToken() {
 
         if (resp.ok && data.valid) {
             const doc = data.document ?? {};
+            const isSigned = !!(data.is_signed || data.type === 'signature');
             const rows = [
                 doc.document_number ? `<tr><th class="text-left py-1 pr-4 text-gray-500 font-medium w-40">N° Document</th><td class="py-1 font-mono font-bold text-blue-700">${esc(doc.document_number)}</td></tr>` : '',
                 doc.title           ? `<tr><th class="text-left py-1 pr-4 text-gray-500 font-medium">Titre</th><td class="py-1">${esc(doc.title)}</td></tr>` : '',
                 doc.administration  ? `<tr><th class="text-left py-1 pr-4 text-gray-500 font-medium">Administration</th><td class="py-1">${esc(doc.administration)}</td></tr>` : '',
                 doc.owner           ? `<tr><th class="text-left py-1 pr-4 text-gray-500 font-medium">Généré par</th><td class="py-1">${esc(doc.owner)}</td></tr>` : '',
                 doc.created_at      ? `<tr><th class="text-left py-1 pr-4 text-gray-500 font-medium">Date de génération</th><td class="py-1">${esc(doc.created_at)}</td></tr>` : '',
-                data.signer         ? `<tr><th class="text-left py-1 pr-4 text-gray-500 font-medium">Signataire</th><td class="py-1">${esc(data.signer.name)}</td></tr>` : '',
-                data.signed_at      ? `<tr><th class="text-left py-1 pr-4 text-gray-500 font-medium">Signé le</th><td class="py-1">${esc(data.signed_at)}</td></tr>` : '',
+                data.signer         ? `<tr><th class="text-left py-1 pr-4 text-gray-500 font-medium">Signataire</th><td class="py-1 font-semibold text-emerald-700">${esc(data.signer.name)}</td></tr>` : '',
+                (data.signed_at || doc.signed_at) ? `<tr><th class="text-left py-1 pr-4 text-gray-500 font-medium">Signé le</th><td class="py-1 font-semibold text-emerald-700">${esc(data.signed_at || doc.signed_at)}</td></tr>` : '',
             ].filter(Boolean).join('');
+
+            const signedBadge = isSigned
+                ? `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold border border-emerald-200">
+                    <i class="fas fa-file-signature text-[11px]"></i> Version PDF signée électroniquement
+                   </span>`
+                : `<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 text-amber-700 text-xs font-bold border border-amber-200">
+                    <i class="fas fa-hourglass-half text-[11px]"></i> Non signé — en attente de signature
+                   </span>`;
+
+            const dlLabel = isSigned
+                ? `<i class="fas fa-file-pdf"></i> Télécharger la version signée (PDF)`
+                : `<i class="fas fa-download"></i> Télécharger le document`;
 
             result.innerHTML = `
                 <div class="p-5 bg-green-50 border border-green-200 rounded-xl space-y-3">
-                    <p class="font-bold text-green-800 flex items-center gap-2 text-base">
-                        <i class="fas fa-check-circle text-green-500 text-lg"></i>
-                        Document authentique — ${data.type === 'signature' ? 'Signé électroniquement' : 'Généré par le système'}
-                    </p>
+                    <div class="flex items-start justify-between gap-3 flex-wrap">
+                        <p class="font-bold text-green-800 flex items-center gap-2 text-base">
+                            <i class="fas fa-check-circle text-green-500 text-lg"></i>
+                            Document authentique
+                        </p>
+                        ${signedBadge}
+                    </div>
                     <table class="w-full text-sm text-gray-700">${rows}</table>
                     <div class="pt-2 flex flex-wrap items-center gap-2">
                         ${data.download_url ? `<a href="${data.download_url}"
-                           class="inline-flex items-center gap-2 px-5 py-2.5 bg-[#2453d6] hover:bg-[#1f47bb] text-white font-semibold rounded-xl text-sm transition">
-                            <i class="fas fa-download"></i> Télécharger une copie certifiée
+                           class="inline-flex items-center gap-2 px-5 py-2.5 ${isSigned ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-[#2453d6] hover:bg-[#1f47bb]'} text-white font-semibold rounded-xl text-sm transition">
+                            ${dlLabel}
                         </a>` : ''}
                         ${data.is_owner && data.editor_url ? `<button type="button" onclick="openOnlyOfficeEditor('${(data.editor_url || '').replace(/'/g, "\\'")}')"
                             class="inline-flex items-center gap-2 px-5 py-2.5 bg-slate-700 hover:bg-slate-800 text-white font-semibold rounded-xl text-sm transition">

@@ -161,10 +161,10 @@
                 <div class="mb-4">
                     <label for="gen-output-format" class="block text-xs font-semibold text-gray-700 mb-1">Format de sortie</label>
                     <select id="gen-output-format" class="w-full border border-gray-300 rounded-xl px-3 py-2.5 text-sm focus:ring-2 focus:ring-[#2453d6] outline-none bg-white transition">
-                        <option value="source" selected>Format source du template (DOCX/XLSX/PPTX)</option>
-                        <option value="pdf">PDF (nécessite LibreOffice sur le serveur)</option>
+                        <option value="source">Format source du template (DOCX/XLSX/PPTX)</option>
+                        <option value="pdf" selected>PDF signable</option>
                     </select>
-                    <p class="text-[11px] text-gray-500 mt-1">Le mode PDF nécessite LibreOffice (soffice) sur le serveur.</p>
+                    <p class="text-[11px] text-gray-500 mt-1">Les templates Office sont convertis automatiquement en PDF pour le circuit de signature. La source editable est conservee dans les versions si la conversion reussit.</p>
                 </div>
 
                 <div id="gen-fields-container" class="space-y-4"></div>
@@ -351,6 +351,11 @@
         document.getElementById('gen-tpl-name').textContent =
             tpl.name + (tpl.file_type ? ' \u2014 ' + tpl.file_type.toUpperCase() : '');
 
+        var outputFormatEl = document.getElementById('gen-output-format');
+        if (outputFormatEl) {
+            outputFormatEl.value = 'pdf';
+        }
+
         var cmap   = extractContentVars(tpl.content || '');
         var fields = buildFields(tpl.db_vars || [], cmap, tpl.docx_vars || []);
         var cont   = document.getElementById('gen-fields-container');
@@ -423,7 +428,7 @@
             headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-TOKEN': csrf },
             body: JSON.stringify({
                 values: vals,
-                output_format: outputFormatEl ? outputFormatEl.value : 'source',
+                output_format: outputFormatEl ? outputFormatEl.value : 'pdf',
             }),
         })
         .then(function(r) { return r.json(); })

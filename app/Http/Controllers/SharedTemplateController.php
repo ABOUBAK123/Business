@@ -103,7 +103,7 @@ class SharedTemplateController extends Controller
         $template->loadMissing('variables');
 
         $values = $request->input('values', []);
-        $outputFormat = 'source';
+        $outputFormat = (string) $request->input('output_format', 'pdf');
         $generationWarning = null;
 
         // Convertir les dates ISO (YYYY-MM-DD) en format français (ex: "29 avril 2026")
@@ -309,6 +309,7 @@ class SharedTemplateController extends Controller
             ? preg_replace('/\.[^.]+$/', '', $template->file_name)
             : Str::slug($template->name);
         $storagePath = null;
+        $sourceStoragePath = null;
         $mimeType    = 'text/plain';
         $ext         = 'txt';
 
@@ -382,8 +383,28 @@ class SharedTemplateController extends Controller
                     );
                 }
 
-                // Le document Office (DOCX/XLSX/PPTX) est servi directement avec les variables remplacées.
-                $storagePath = '/storage/' . $destPath;
+                $sourceStoragePath = '/storage/' . $destPath;
+
+                // Les documents Office issus des templates partagés doivent être signés en PDF.
+                // On conserve donc la source éditable, mais le document canonique devient le PDF.
+                $pdfAbsPath = $this->convertOfficeToPdf($absPath);
+                if ($pdfAbsPath && file_exists($pdfAbsPath)) {
+                    $pdfDestPath = 'documents/' . pathinfo($destPath, PATHINFO_FILENAME) . '.pdf';
+                    Storage::disk('public')->put($pdfDestPath, file_get_contents($pdfAbsPath));
+
+                    $storagePath = '/storage/' . $pdfDestPath;
+                    $mimeType = 'application/pdf';
+                    $ext = 'pdf';
+
+                    @unlink($pdfAbsPath);
+
+                    if ($outputFormat !== 'pdf') {
+                        $generationWarning = 'Le template Office a ete converti automatiquement en PDF afin de permettre le circuit de signature. La source editable a ete conservee dans l\'historique des versions.';
+                    }
+                } else {
+                    $storagePath = $sourceStoragePath;
+                    $generationWarning = 'La conversion PDF n\'a pas pu etre effectuee. Installez LibreOffice sur le serveur pour obtenir un PDF signable depuis les templates Office.';
+                }
             }
 
             // Nettoyage QR temp
@@ -509,10 +530,15 @@ class SharedTemplateController extends Controller
         $docId    = (string) Str::uuid();
         $title    = ($docNumber ? '[' . $docNumber . '] ' : '') . $template->name . ' — ' . now()->format('d/m/Y H:i');
 
+        $description = 'Généré depuis : ' . $template->name;
+        if ($sourceStoragePath && $sourceStoragePath !== $storagePath) {
+            $description .= ' (source editable conservee dans les versions)';
+        }
+
         $document = Document::create([
             'id'                     => $docId,
             'title'                  => $title,
-            'description'            => 'Généré depuis : ' . $template->name,
+            'description'            => $description,
             'file_path'              => $storagePath,
             'file_size'              => $storagePath ? Storage::disk('public')->size(ltrim(str_replace('/storage/', '', $storagePath), '/')) : 0,
             'mime_type'              => $mimeType,
@@ -525,13 +551,31 @@ class SharedTemplateController extends Controller
             'issuing_administration_id' => $issuingAdminId,
         ]);
 
-        DocumentVersion::create([
-            'document_id' => $docId,
-            'version'     => 1,
-            'file_path'   => $storagePath,
-            'creator_id'  => Auth::id(),
-            'change_log'  => 'Génération depuis template : ' . $template->name,
-        ]);
+        if ($sourceStoragePath && $sourceStoragePath !== $storagePath) {
+            DocumentVersion::create([
+                'document_id' => $docId,
+                'version'     => 1,
+                'file_path'   => $sourceStoragePath,
+                'creator_id'  => Auth::id(),
+                'change_log'  => 'Source editable generee depuis template : ' . $template->name,
+            ]);
+
+            DocumentVersion::create([
+                'document_id' => $docId,
+                'version'     => 2,
+                'file_path'   => $storagePath,
+                'creator_id'  => Auth::id(),
+                'change_log'  => 'Version PDF signable generee depuis template : ' . $template->name,
+            ]);
+        } else {
+            DocumentVersion::create([
+                'document_id' => $docId,
+                'version'     => 1,
+                'file_path'   => $storagePath,
+                'creator_id'  => Auth::id(),
+                'change_log'  => 'Génération depuis template : ' . $template->name,
+            ]);
+        }
 
         if ($request->expectsJson() || $request->ajax()) {
             return response()->json([
@@ -542,6 +586,7 @@ class SharedTemplateController extends Controller
                 'qr_token'          => $qrToken,
                 'verify_url'        => $verifyUrl,
                 'file_path'         => $storagePath,
+                'source_file_path'  => $sourceStoragePath,
                 'generated_content' => $content,
                 'message'           => 'Document généré et enregistré dans Mes Documents.',
                 'warning'           => $generationWarning,
@@ -573,38 +618,137 @@ class SharedTemplateController extends Controller
      * Tente la conversion d'un fichier Office (docx/xlsx/pptx) en PDF via LibreOffice.
      * Retourne le chemin absolu du PDF généré, ou null si échec / binaire absent.
      */
+    /**
+     * Convertit un fichier Office (docx/xlsx/pptx) en PDF via l'API OnlyOffice ConvertService.
+     * Retourne le chemin absolu local du PDF produit, ou null en cas d'échec.
+     */
     private function convertOfficeToPdf(string $absOfficePath): ?string
     {
-        $tmpOutDir = storage_path('app/tmp/pdf-convert');
-        if (!is_dir($tmpOutDir)) {
-            @mkdir($tmpOutDir, 0755, true);
+        // ── 1. Essai LibreOffice local si disponible ──────────────────────────
+        foreach (['soffice', 'libreoffice'] as $bin) {
+            $which = null;
+            @exec('where ' . $bin . ' 2>NUL', $out, $rc);   // Windows
+            if ($rc !== 0) {
+                @exec('which ' . $bin . ' 2>/dev/null', $out2, $rc2);
+                $rc = $rc2;
+            }
+            if ($rc === 0) {
+                $tmpOutDir = storage_path('app/tmp/pdf-convert');
+                if (!is_dir($tmpOutDir)) {
+                    @mkdir($tmpOutDir, 0755, true);
+                }
+                @exec($bin . ' --headless --nologo --convert-to pdf --outdir '
+                    . escapeshellarg($tmpOutDir) . ' ' . escapeshellarg($absOfficePath),
+                    $o, $code);
+                if ($code === 0) {
+                    $pdfFile = $tmpOutDir . DIRECTORY_SEPARATOR
+                        . pathinfo($absOfficePath, PATHINFO_FILENAME) . '.pdf';
+                    if (file_exists($pdfFile)) {
+                        return $pdfFile;
+                    }
+                    $candidates = glob($tmpOutDir . DIRECTORY_SEPARATOR . '*.pdf') ?: [];
+                    if (!empty($candidates)) {
+                        usort($candidates, fn($a, $b) => filemtime($b) <=> filemtime($a));
+                        return $candidates[0];
+                    }
+                }
+            }
         }
 
-        $commands = [
-            'soffice --headless --nologo --convert-to pdf --outdir ' . escapeshellarg($tmpOutDir) . ' ' . escapeshellarg($absOfficePath),
-            'libreoffice --headless --nologo --convert-to pdf --outdir ' . escapeshellarg($tmpOutDir) . ' ' . escapeshellarg($absOfficePath),
-        ];
+        // ── 2. Fallback : API OnlyOffice ConvertService ───────────────────────
+        try {
+            $ooUrl    = rtrim((string) \App\Models\AppSetting::where('key', 'onlyoffice_server_url')->value('value'), '/');
+            $ooSecret = (string) \App\Models\AppSetting::where('key', 'onlyoffice_secret')->value('value');
+            $appUrl   = rtrim((string) \App\Models\AppSetting::where('key', 'app_public_url')->value('value'), '/');
 
-        foreach ($commands as $cmd) {
-            @exec($cmd, $output, $code);
-            if ($code !== 0) {
-                continue;
+            if (empty($ooUrl)) {
+                return null; // OnlyOffice non configuré
             }
 
-            $pdfFile = $tmpOutDir . DIRECTORY_SEPARATOR . pathinfo($absOfficePath, PATHINFO_FILENAME) . '.pdf';
-            if (file_exists($pdfFile)) {
-                return $pdfFile;
+            // Publier le fichier source temporairement dans storage/public/tmp-convert/
+            $tmpDir  = 'tmp-convert';
+            $tmpName = uniqid('conv_', true) . '.' . pathinfo($absOfficePath, PATHINFO_EXTENSION);
+            \Illuminate\Support\Facades\Storage::disk('public')->put($tmpDir . '/' . $tmpName, file_get_contents($absOfficePath));
+            $fileUrl = $appUrl . '/storage/' . $tmpDir . '/' . $tmpName;
+
+            $ext      = strtolower(pathinfo($absOfficePath, PATHINFO_EXTENSION));
+            $convKey  = md5($tmpName . time());
+
+            $payload = [
+                'async'        => false,
+                'embeddedfonts'=> true,
+                'filetype'     => $ext,
+                'key'          => $convKey,
+                'outputtype'   => 'pdf',
+                'title'        => pathinfo($absOfficePath, PATHINFO_FILENAME) . '.pdf',
+                'url'          => $fileUrl,
+            ];
+
+            // Générer le JWT si secret configuré
+            $headers = ['Authorization: Bearer '];
+            if (!empty($ooSecret)) {
+                $jwtHeader  = rtrim(strtr(base64_encode(json_encode(['alg' => 'HS256', 'typ' => 'JWT'])), '+/', '-_'), '=');
+                $jwtBody    = rtrim(strtr(base64_encode(json_encode(['payload' => $payload])), '+/', '-_'), '=');
+                $jwtSig     = rtrim(strtr(base64_encode(hash_hmac('sha256', "$jwtHeader.$jwtBody", $ooSecret, true)), '+/', '-_'), '=');
+                $jwt        = "$jwtHeader.$jwtBody.$jwtSig";
+                $headers    = ['Authorization: Bearer ' . $jwt, 'Accept: application/json'];
             }
 
-            // Fallback si LibreOffice applique un nom différent
-            $candidates = glob($tmpOutDir . DIRECTORY_SEPARATOR . '*.pdf') ?: [];
-            if (!empty($candidates)) {
-                usort($candidates, fn($a, $b) => filemtime($b) <=> filemtime($a));
-                return $candidates[0];
+            $ch = curl_init($ooUrl . '/ConvertService.ashx');
+            curl_setopt_array($ch, [
+                CURLOPT_POST           => true,
+                CURLOPT_POSTFIELDS     => json_encode($payload),
+                CURLOPT_HTTPHEADER     => array_merge(['Content-Type: application/json'], $headers),
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT        => 60,
+                CURLOPT_SSL_VERIFYPEER => false,
+            ]);
+            $body = curl_exec($ch);
+            curl_close($ch);
+
+            // Supprimer le fichier source temporaire
+            \Illuminate\Support\Facades\Storage::disk('public')->delete($tmpDir . '/' . $tmpName);
+
+            if (!$body) {
+                return null;
             }
+
+            $json = json_decode($body, true);
+            $pdfUrl = $json['fileUrl'] ?? null;
+
+            if (!$pdfUrl) {
+                return null;
+            }
+
+            // Télécharger le PDF converti
+            $pdfContent = @file_get_contents($pdfUrl);
+            if (!$pdfContent) {
+                // Essai avec curl (si SSL ou auth nécessaire)
+                $ch2 = curl_init($pdfUrl);
+                curl_setopt_array($ch2, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_TIMEOUT        => 30,
+                    CURLOPT_SSL_VERIFYPEER => false,
+                ]);
+                $pdfContent = curl_exec($ch2);
+                curl_close($ch2);
+            }
+
+            if (!$pdfContent) {
+                return null;
+            }
+
+            $localPdf = storage_path('app/tmp/pdf-convert/'
+                . pathinfo($absOfficePath, PATHINFO_FILENAME) . '_oo.pdf');
+            @mkdir(dirname($localPdf), 0755, true);
+            file_put_contents($localPdf, $pdfContent);
+
+            return $localPdf;
+
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::warning('convertOfficeToPdf (OO fallback) failed: ' . $e->getMessage());
+            return null;
         }
-
-        return null;
     }
 
     /**

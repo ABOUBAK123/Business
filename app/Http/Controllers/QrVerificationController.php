@@ -9,6 +9,23 @@ use Illuminate\Support\Facades\Storage;
 
 class QrVerificationController extends Controller
 {
+    private function buildDownloadResponse(Document $document)
+    {
+        $sourcePath = (string) ($document->signed_file_path ?: $document->file_path ?: '');
+        $path = ltrim(str_replace('/storage/', '', $sourcePath), '/');
+        $ext  = pathinfo($sourcePath, PATHINFO_EXTENSION) ?: 'bin';
+
+        if ($path === '' || !Storage::disk('public')->exists($path)) {
+            abort(404, 'Fichier introuvable');
+        }
+
+        $safeTitle = preg_replace('/[\/\\\x00-\x1f]+/', '-', (string) $document->title);
+        $safeTitle = trim((string) $safeTitle, '-') ?: 'document';
+        $name = pathinfo($safeTitle, PATHINFO_EXTENSION) === $ext ? $safeTitle : ($safeTitle . '.' . $ext);
+
+        return Storage::disk('public')->download($path, $name);
+    }
+
     /**
      * Téléchargement direct d'un document via son token QR.
      */
@@ -17,20 +34,16 @@ class QrVerificationController extends Controller
         $token = trim($token);
         abort_if($token === '', 404);
 
-        $document = Document::where('qr_token', $token)->firstOrFail();
+        $document = Document::where('qr_token', $token)->first();
 
-        $path = str_replace('/storage/', '', (string) $document->file_path);
-        $ext  = pathinfo((string) $document->file_path, PATHINFO_EXTENSION) ?: 'bin';
-
-        if (!Storage::disk('public')->exists($path)) {
-            abort(404, 'Fichier introuvable');
+        if (!$document) {
+            $signature = Signature::with('document')->where('qr_code_token', $token)->first();
+            $document = $signature?->document;
         }
 
-        $safeTitle = preg_replace('/[\/\\\\\x00-\x1f]+/', '-', (string) $document->title);
-        $safeTitle = trim((string) $safeTitle, '-') ?: 'document';
-        $name = pathinfo($safeTitle, PATHINFO_EXTENSION) === $ext ? $safeTitle : ($safeTitle . '.' . $ext);
+        abort_if(!$document, 404);
 
-        return Storage::disk('public')->download($path, $name);
+        return $this->buildDownloadResponse($document);
     }
 
     public function index()
@@ -62,9 +75,23 @@ class QrVerificationController extends Controller
                 (string) $document->owner_id === $currentUserId ||
                 (string) ($document->created_by ?? '') === $currentUserId
             );
+
+            $isSigned = !empty($document->signed_file_path);
+
+            // Récupérer les infos du signataire depuis la table signatures si disponible
+            $lastSignature = null;
+            if ($isSigned) {
+                $lastSignature = \App\Models\Signature::with('signer')
+                    ->where('document_id', $document->id)
+                    ->where('status', 'valid')
+                    ->orderByDesc('signed_at')
+                    ->first();
+            }
+
             return response()->json([
                 'valid'           => true,
                 'type'            => 'document',
+                'is_signed'       => $isSigned,
                 'is_owner'        => $isOwner,
                 'editor_url'      => $isOwner ? route('documents.index', ['open_oo' => $document->id]) : null,
                 'document'        => [
@@ -75,9 +102,14 @@ class QrVerificationController extends Controller
                     'created_at'      => $document->created_at?->format('d/m/Y à H:i'),
                     'owner'           => $document->owner?->name,
                     'administration'  => $document->issuingAdministration?->name,
+                    'signed_at'       => $document->signed_at?->format('d/m/Y à H:i'),
                 ],
+                'signer'          => $lastSignature ? ['name' => $lastSignature->signer?->name ?? 'Signataire'] : null,
+                'signed_at'       => $document->signed_at?->format('d/m/Y à H:i'),
                 'download_url'    => $downloadUrl,
-                'message'         => 'Document authentique — généré par le système.',
+                'message'         => $isSigned
+                    ? 'Document authentique — version PDF signée électroniquement.'
+                    : 'Document authentique — généré par le système (non encore signé).',
             ]);
         }
 
