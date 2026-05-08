@@ -101,7 +101,12 @@ class QrVerificationController extends Controller
         $name = pathinfo($safeTitle, PATHINFO_EXTENSION) === $ext ? $safeTitle : ($safeTitle . '.' . $ext);
 
         try {
-            return Storage::disk('public')->download($path, $name);
+            // Utiliser le chemin absolu directement pour eviter les erreurs de slash avec Storage::download()
+            $absPath = Storage::disk('public')->path($path);
+            if (!is_file($absPath) || !is_readable($absPath)) {
+                throw new \Exception('File not accessible');
+            }
+            return response()->download($absPath, $name);
         } catch (\Throwable $e) {
             Log::error('QR download failed', [
                 'document_id' => $document->id,
@@ -109,20 +114,6 @@ class QrVerificationController extends Controller
                 'normalized_path' => $path,
                 'error' => $e->getMessage(),
             ]);
-
-            // Fallback local uniquement si le driver supporte path().
-            try {
-                $absPath = Storage::disk('public')->path($path);
-                if (is_file($absPath) && is_readable($absPath)) {
-                    return response()->download($absPath, $name);
-                }
-            } catch (\Throwable $fallbackError) {
-                Log::error('QR download local fallback failed', [
-                    'document_id' => $document->id,
-                    'normalized_path' => $path,
-                    'error' => $fallbackError->getMessage(),
-                ]);
-            }
 
             abort(404, 'Fichier introuvable');
         }
