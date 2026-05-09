@@ -229,6 +229,22 @@
     var RE_VAR_CURLY = new RegExp(OB + OB + '\\s*([^' + CB + ']+?)\\s*' + CB + CB, 'g');
     var RE_VAR_SQUARE = /\[([^\[\]]+?)\]/g;
 
+    // Variables injectees automatiquement par le backend a la generation.
+    // Elles ne doivent pas apparaitre comme champs a saisir.
+    var AUTO_KEYS = new Set([
+        'document_number',
+        'qr_verify_url',
+        'date_du_jour',
+        'date_today',
+        'date',
+        'aujourd_hui',
+        'date_generation',
+        'nom_responsable',
+        'responsable',
+        'signataire',
+        'nom_signataire'
+    ]);
+
     function cleanVarToken(token) {
         return String(token || '').trim();
     }
@@ -257,6 +273,7 @@
         // 1. Variables BDD (priorité max — ont label, type, etc.)
         (dbVars || []).forEach(function(v) {
             if (!v || !v.key) return;
+            if (AUTO_KEYS.has(v.key)) return;
             map.set(v.key, {
                 key: v.key, label: v.label || v.key,
                 ft: v.field_type || 'text',
@@ -268,6 +285,7 @@
         // 2. Variables extraites du XML docx (si pas déjà dans BDD)
         (docxVars || []).forEach(function(v) {
             if (!v || !v.key) return;
+            if (AUTO_KEYS.has(v.key)) return;
             if (!map.has(v.key)) {
                 map.set(v.key, {
                     key: v.key, label: v.label || v.key,
@@ -280,6 +298,7 @@
         });
         // 3. Variables extraites du champ content texte (si pas déjà présentes)
         Object.keys(cmap).forEach(function(slug) {
+            if (AUTO_KEYS.has(slug)) return;
             if (!map.has(slug)) {
                 map.set(slug, { key: slug, label: cmap[slug], ft: 'text', ph: '', def: '', req: false, opts: [] });
             }
@@ -356,8 +375,22 @@
             outputFormatEl.value = 'pdf';
         }
 
-        var cmap   = extractContentVars(tpl.content || '');
-        var fields = buildFields(tpl.db_vars || [], cmap, tpl.docx_vars || []);
+        var fileType = String(tpl.file_type || '').toLowerCase();
+        var isOffice = ['docx', 'xlsx', 'pptx'].indexOf(fileType) !== -1;
+        var docxVars = Array.isArray(tpl.docx_vars) ? tpl.docx_vars : [];
+        var dbVars = Array.isArray(tpl.db_vars) ? tpl.db_vars : [];
+
+        // Si le core DOCX a des variables, il devient la reference stricte.
+        // Evite d'afficher des champs historiques de la BDD qui n'existent plus dans le fichier.
+        if (isOffice && docxVars.length > 0) {
+            var coreKeys = new Set(docxVars.map(function(v) { return v && v.key ? String(v.key) : ''; }));
+            dbVars = dbVars.filter(function(v) { return v && v.key && coreKeys.has(String(v.key)); });
+        }
+
+        // Pour les templates Office, la source de verite est le fichier (db_vars/docx_vars).
+        // Evite d'ajouter des champs fantomes issus du texte brut extrait dans content.
+        var cmap   = isOffice ? {} : extractContentVars(tpl.content || '');
+        var fields = buildFields(dbVars, cmap, docxVars);
         var cont   = document.getElementById('gen-fields-container');
         var noF    = document.getElementById('gen-no-fields');
         var hint   = document.getElementById('gen-hint');

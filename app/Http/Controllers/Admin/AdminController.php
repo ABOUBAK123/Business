@@ -4396,16 +4396,10 @@ class AdminController extends Controller
                         $absNewPath = $savedAbsPath;
                         if (in_array($ext, ['docx', 'xlsx', 'pptx']) && file_exists($absNewPath)) {
                             foreach ($this->extractVarsFromUploadedFile($absNewPath) as $fileVar) {
-                                \App\Models\TemplateVariable::firstOrCreate(
-                                    ['template_id' => $template->id, 'key' => $fileVar['key']],
-                                    [
-                                        'label'         => $fileVar['label'],
-                                        'field_type'    => 'text',
-                                        'required'      => false,
-                                        'placeholder'   => '',
-                                        'default_value' => '',
-                                        'options'       => json_encode([]),
-                                    ]
+                                $this->firstOrCreateTemplateVariable(
+                                    $template,
+                                    (string) ($fileVar['key'] ?? 'var'),
+                                    (string) ($fileVar['label'] ?? ($fileVar['key'] ?? 'var'))
                                 );
                             }
                             \Log::info('OO vars extracted for template ' . $templateId);
@@ -5493,18 +5487,12 @@ class AdminController extends Controller
             $saved = 0;
 
             foreach ($extractedVars as $fileVar) {
-                $var = \App\Models\TemplateVariable::firstOrCreate(
-                    ['template_id' => $template->id, 'key' => $fileVar['key']],
-                    [
-                        'label'         => $fileVar['label'],
-                        'field_type'    => 'text',
-                        'required'      => false,
-                        'placeholder'   => '',
-                        'default_value' => '',
-                        'options'       => json_encode([]),
-                    ]
+                $var = $this->firstOrCreateTemplateVariable(
+                    $template,
+                    (string) ($fileVar['key'] ?? 'var'),
+                    (string) ($fileVar['label'] ?? ($fileVar['key'] ?? 'var'))
                 );
-                if ($var->wasRecentlyCreated) {
+                if ($var && $var->wasRecentlyCreated) {
                     $saved++;
                 }
             }
@@ -5653,30 +5641,78 @@ class AdminController extends Controller
         $saved = 0;
 
         foreach ($vars as $v) {
-            $key = $this->makeVariableSlug((string) ($v['key'] ?? 'var'));
-            $label = (string) ($v['label'] ?? $key);
-            // Respecter la taille SQL (VARCHAR 255) pour eviter les erreurs 1406.
-            if (function_exists('mb_substr')) {
-                $label = mb_substr($label, 0, 255);
-            } else {
-                $label = substr($label, 0, 255);
-            }
-
-            $created = \App\Models\TemplateVariable::firstOrCreate(
-                ['template_id' => $template->id, 'key' => $key],
-                [
-                    'label' => $label,
-                    'field_type' => 'text',
-                    'required' => false,
-                    'placeholder' => '',
-                    'default_value' => '',
-                    'options' => json_encode([]),
-                ]
+            $rawKey = (string) ($v['key'] ?? 'var');
+            $label = (string) ($v['label'] ?? $rawKey);
+            $created = $this->firstOrCreateTemplateVariable(
+                $template,
+                $rawKey,
+                $label
             );
-            if ($created->wasRecentlyCreated) $saved++;
+            if ($created && $created->wasRecentlyCreated) {
+                $saved++;
+            }
         }
 
         return $saved;
+    }
+
+    private function firstOrCreateTemplateVariable(DocumentTemplate $template, string $rawKey, string $rawLabel): ?\App\Models\TemplateVariable
+    {
+        $key = $this->makeVariableSlug($rawKey);
+        $label = function_exists('mb_substr') ? mb_substr($rawLabel, 0, 255) : substr($rawLabel, 0, 255);
+
+        $attributes = ['template_id' => $template->id, 'key' => $key];
+        $defaults = [
+            'label' => $label,
+            'field_type' => 'text',
+            'required' => false,
+            'placeholder' => '',
+            'default_value' => '',
+            'options' => json_encode([]),
+        ];
+
+        try {
+            return \App\Models\TemplateVariable::firstOrCreate($attributes, $defaults);
+        } catch (\Throwable $e) {
+            $message = strtolower($e->getMessage());
+            $isTooLong = str_contains($message, 'data too long') && str_contains($message, 'template_variables');
+            if (!$isTooLong) {
+                \Log::warning('Template variable persistence failed', [
+                    'template_id' => $template->id,
+                    'key' => $key,
+                    'error' => $e->getMessage(),
+                ]);
+                return null;
+            }
+
+            // Compatibilite: si la base est encore en VARCHAR(150), retenter avec une cle reduite.
+            $legacyKey = $this->shortenVariableKey($key, 150, $rawKey);
+            $attributes['key'] = $legacyKey;
+
+            try {
+                return \App\Models\TemplateVariable::firstOrCreate($attributes, $defaults);
+            } catch (\Throwable $retryError) {
+                \Log::warning('Template variable persistence failed after fallback', [
+                    'template_id' => $template->id,
+                    'key' => $key,
+                    'legacy_key' => $legacyKey,
+                    'error' => $retryError->getMessage(),
+                ]);
+                return null;
+            }
+        }
+    }
+
+    private function shortenVariableKey(string $key, int $max, string $seed = ''): string
+    {
+        if (strlen($key) <= $max) {
+            return $key;
+        }
+
+        $hashSource = $seed !== '' ? $seed : $key;
+        $hash = substr(sha1($hashSource), 0, 10);
+        $base = substr($key, 0, max(1, $max - 11));
+        return rtrim($base, '_') . '_' . $hash;
     }
 
     private function makeVariableSlug(string $orig): string
@@ -5697,9 +5733,9 @@ class AdminController extends Controller
             $slug = 'var';
         }
 
-        // La colonne template_variables.key est VARCHAR(150).
+        // La colonne template_variables.key est VARCHAR(500).
         // On reserve un suffixe hash pour conserver l'unicite en cas de troncature.
-        $max = 150;
+        $max = 500;
         if (strlen($slug) > $max) {
             $hash = substr(sha1($orig), 0, 10);
             $base = substr($slug, 0, $max - 11);
