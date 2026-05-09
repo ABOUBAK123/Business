@@ -1298,7 +1298,12 @@ class DocumentController extends Controller
         @unlink($pdfAbsPath);
 
         $publicPdfPath = '/storage/' . $pdfDestPath;
+        $title = (string) ($document->title ?? 'document');
+        $titleWithoutExt = preg_replace('/\.(doc|docx|xls|xlsx|ppt|pptx|odt|ods|odp|pdf)$/i', '', $title) ?: $title;
+        $pdfTitle = rtrim($titleWithoutExt) . '.pdf';
         $document->update([
+            'title' => $pdfTitle,
+            'file_path' => $publicPdfPath,
             'final_file_path' => $publicPdfPath,
             'mime_type' => 'application/pdf',
             'file_size' => (int) Storage::disk('public')->size($pdfDestPath),
@@ -1324,6 +1329,8 @@ class DocumentController extends Controller
         return response()->json([
             'ok' => true,
             'message' => 'Conversion en PDF effectuée avec succès.',
+            'title' => $document->title,
+            'file_path' => $publicPdfPath,
             'final_file_path' => $publicPdfPath,
             'file_size' => $document->file_size,
             'status' => $document->status,

@@ -15,6 +15,7 @@
         'title'        => $d->title,
         'description'  => $d->description,
         'file_path'    => $d->file_path,
+        'final_file_path' => $d->final_file_path,
         'file_size'    => $d->file_size,
         'mime_type'    => $d->mime_type,
         'status'       => $d->status,
@@ -610,10 +611,12 @@ const ext = (doc) => {
     const n = (doc.title || '').toLowerCase();
     const i = n.lastIndexOf('.');
     if (i >= 0 && i < n.length - 1) return n.slice(i + 1);
-    // Fallback sur file_path
-    const fp = (doc.file_path || '').toLowerCase();
+    // Fallback sur final_file_path puis file_path
+    const fp = (doc.final_file_path || doc.file_path || '').toLowerCase();
     const j = fp.lastIndexOf('.');
-    return j >= 0 ? fp.slice(j + 1) : '';
+    if (j >= 0) return fp.slice(j + 1);
+    if ((doc.mime_type || '').toLowerCase() === 'application/pdf') return 'pdf';
+    return '';
 };
 const iconClass = (doc) => {
     if (isFolder(doc)) return 'fas fa-folder text-blue-600';
@@ -921,6 +924,12 @@ async function handleConvertPdf(id) {
         }
 
         if (data.final_file_path) {
+            if (data.title) {
+                doc.title = data.title;
+            }
+            if (data.file_path) {
+                doc.file_path = data.file_path;
+            }
             doc.final_file_path = data.final_file_path;
             doc.mime_type = 'application/pdf';
         }
