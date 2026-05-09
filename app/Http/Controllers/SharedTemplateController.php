@@ -1206,7 +1206,7 @@ class SharedTemplateController extends Controller
             // On évite les fichiers de styles/settings/relations qui n'ont pas de runs.
             $isWordContent = preg_match('#word/(document|header|footer|endnote|footnote)#i', $name);
             if ($isWordContent) {
-                $newContent = $this->defragmentRuns($xmlContent);
+                $newContent = $this->defragmentRuns($xmlContent, $name);
                 if (!is_string($newContent) || $newContent === '') {
                     \Log::warning('replaceInOfficeFile defragmentRuns returned invalid content, fallback to original XML', [
                         'file' => $name,
@@ -1567,12 +1567,31 @@ class SharedTemplateController extends Controller
      * Les paragraphes sans [variable] ne sont pas touchés.
      * Le texte XML brut est conservé tel quel (pas de decode/re-encode).
      */
-    private function defragmentRuns(string $xml): string
+    private function defragmentRuns(string $xml, string $xmlName = ''): string
     {
+        // Mode safe: pour les très gros XML, on contourne totalement la défragmentation regex
+        // afin d'éviter backtracking/catastrophic regex et tout risque de vidage du document.
+        $maxXmlBytesForRegex = 1200000;
+        if (strlen($xml) > $maxXmlBytesForRegex) {
+            \Log::info('defragmentRuns skipped for large XML (safe mode)', [
+                'file' => $xmlName,
+                'xml_bytes' => strlen($xml),
+                'threshold' => $maxXmlBytesForRegex,
+            ]);
+            return $xml;
+        }
+
         $result = preg_replace_callback(
             '/<w:p[ >].*?<\/w:p>/s',
             function (array $match) {
                 $para = $match[0];
+
+                // Mode safe: ne jamais défragmenter les paragraphes trop gros.
+                // Sur des blocs massifs, les regex peuvent devenir instables/ coûteuses.
+                $maxParagraphBytesForRegex = 45000;
+                if (strlen($para) > $maxParagraphBytesForRegex) {
+                    return $para;
+                }
 
                 // Ne jamais toucher les paragraphes complexes: ils peuvent contenir
                 // des objets/ancres/champs que la reconstruction d'un unique <w:r>
