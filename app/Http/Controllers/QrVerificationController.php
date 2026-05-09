@@ -299,7 +299,7 @@ class QrVerificationController extends Controller
             ->first();
 
         if ($document) {
-            $downloadUrl = route('qr.download', ['token' => $token]);
+            $downloadUrl = route('qr.download', ['token' => $token], false);
             $currentUserId = (string) (auth()->id() ?? '');
             $isOwner = $currentUserId !== '' && (
                 (string) $document->owner_id === $currentUserId ||
@@ -323,7 +323,7 @@ class QrVerificationController extends Controller
                 'type'            => 'document',
                 'is_signed'       => $isSigned,
                 'is_owner'        => $isOwner,
-                'editor_url'      => $isOwner ? route('documents.index', ['open_oo' => $document->id]) : null,
+                'editor_url'      => $isOwner ? route('documents.index', ['open_oo' => $document->id], false) : null,
                 'document'        => [
                     'id'              => $document->id,
                     'title'           => $document->title,
@@ -349,7 +349,7 @@ class QrVerificationController extends Controller
             ->first();
 
         if ($signature && $signature->document) {
-            $downloadUrl = route('qr.download', ['token' => $token]);
+            $downloadUrl = route('qr.download', ['token' => $token], false);
             $currentUserId = (string) (auth()->id() ?? '');
             $sigDoc = $signature->document;
             $isOwner = $currentUserId !== '' && (
@@ -359,8 +359,9 @@ class QrVerificationController extends Controller
             return response()->json([
                 'valid'        => (bool) $signature->is_valid,
                 'type'         => 'signature',
+                'is_signed'    => true,
                 'is_owner'     => $isOwner,
-                'editor_url'   => $isOwner ? route('documents.index', ['open_oo' => $sigDoc->id]) : null,
+                'editor_url'   => $isOwner ? route('documents.index', ['open_oo' => $sigDoc->id], false) : null,
                 'document'     => [
                     'id'              => $sigDoc->id,
                     'title'           => $sigDoc->title,
@@ -408,10 +409,10 @@ class QrVerificationController extends Controller
         $downloadUrl = route('documents.download', [
             'document' => $document->id,
             'inline' => 1,
-        ]);
+        ], false);
 
         if (!empty((string) $document->qr_token)) {
-            $downloadUrl = route('qr.download', ['token' => (string) $document->qr_token]);
+            $downloadUrl = route('qr.download', ['token' => (string) $document->qr_token], false);
         }
 
         $currentUserId = (string) (auth()->id() ?? '');
@@ -434,7 +435,7 @@ class QrVerificationController extends Controller
             ],
             'download_url' => $downloadUrl,
             'preview_url' => $isOwner ? $downloadUrl : null,
-            'editor_url' => $isOwner ? route('documents.index', ['open_oo' => $document->id]) : null,
+            'editor_url' => $isOwner ? route('documents.index', ['open_oo' => $document->id], false) : null,
         ]);
     }
 }
