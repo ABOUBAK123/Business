@@ -1263,4 +1263,198 @@ class DocumentController extends Controller
             'url'          => $docUrl,
         ]);
     }
+
+    public function convertToPdf(Document $document)
+    {
+        abort_if(!$this->userCanManageDocument($document, Auth::id()), 403);
+
+        if (($document->description ?? '') === '[folder]') {
+            return response()->json(['ok' => false, 'message' => 'Un dossier ne peut pas être converti.'], 422);
+        }
+
+        $sourcePath = (string) ($document->file_path ?: $document->final_file_path ?: '');
+        $relative = ltrim(str_replace('/storage/', '', $sourcePath), '/');
+        if ($relative === '' || !Storage::disk('public')->exists($relative)) {
+            return response()->json(['ok' => false, 'message' => 'Fichier source introuvable.'], 404);
+        }
+
+        $ext = strtolower(pathinfo($relative, PATHINFO_EXTENSION));
+        $convertible = ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp'];
+        if (!in_array($ext, $convertible, true)) {
+            return response()->json(['ok' => false, 'message' => 'Ce type de fichier ne peut pas être converti en PDF.'], 422);
+        }
+
+        $absOfficePath = Storage::disk('public')->path($relative);
+        $pdfAbsPath = $this->convertOfficeToPdf($absOfficePath);
+        if (!$pdfAbsPath || !file_exists($pdfAbsPath) || $this->isSuspiciousPdf($pdfAbsPath)) {
+            if ($pdfAbsPath && file_exists($pdfAbsPath)) {
+                @unlink($pdfAbsPath);
+            }
+            return response()->json(['ok' => false, 'message' => 'La conversion PDF a échoué. Vérifiez LibreOffice/OnlyOffice.'], 422);
+        }
+
+        $pdfDestPath = 'documents/' . pathinfo($relative, PATHINFO_FILENAME) . '-' . now()->format('Ymd-His') . '.pdf';
+        Storage::disk('public')->put($pdfDestPath, file_get_contents($pdfAbsPath));
+        @unlink($pdfAbsPath);
+
+        $publicPdfPath = '/storage/' . $pdfDestPath;
+        $document->update([
+            'final_file_path' => $publicPdfPath,
+            'mime_type' => 'application/pdf',
+            'file_size' => (int) Storage::disk('public')->size($pdfDestPath),
+        ]);
+
+        try {
+            $nextVersion = ((int) ($document->versions()->max('version') ?? 0)) + 1;
+            DocumentVersion::create([
+                'id' => Str::uuid(),
+                'document_id' => $document->id,
+                'version' => $nextVersion,
+                'file_path' => $publicPdfPath,
+                'creator_id' => Auth::id(),
+                'change_log' => 'Conversion en PDF depuis Mes Documents',
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Document convertToPdf: version save failed', [
+                'document_id' => (string) $document->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'message' => 'Conversion en PDF effectuée avec succès.',
+            'final_file_path' => $publicPdfPath,
+            'file_size' => $document->file_size,
+            'status' => $document->status,
+        ]);
+    }
+
+    private function convertOfficeToPdf(string $absOfficePath): ?string
+    {
+        foreach (['soffice', 'libreoffice'] as $bin) {
+            @exec('where ' . $bin . ' 2>NUL', $out, $rc);
+            if ($rc !== 0) {
+                @exec('which ' . $bin . ' 2>/dev/null', $out2, $rc2);
+                $rc = $rc2;
+            }
+            if ($rc === 0) {
+                $tmpOutDir = storage_path('app/tmp/pdf-convert');
+                if (!is_dir($tmpOutDir)) {
+                    @mkdir($tmpOutDir, 0755, true);
+                }
+                @exec($bin . ' --headless --nologo --convert-to pdf --outdir '
+                    . escapeshellarg($tmpOutDir) . ' ' . escapeshellarg($absOfficePath),
+                    $o, $code);
+                if ($code === 0) {
+                    $pdfFile = $tmpOutDir . DIRECTORY_SEPARATOR . pathinfo($absOfficePath, PATHINFO_FILENAME) . '.pdf';
+                    if (file_exists($pdfFile)) {
+                        return $pdfFile;
+                    }
+                    $candidates = glob($tmpOutDir . DIRECTORY_SEPARATOR . '*.pdf') ?: [];
+                    if (!empty($candidates)) {
+                        usort($candidates, fn($a, $b) => filemtime($b) <=> filemtime($a));
+                        return $candidates[0];
+                    }
+                }
+            }
+        }
+
+        try {
+            $ooUrl    = rtrim((string) AppSetting::where('key', 'onlyoffice_server_url')->value('value'), '/');
+            $ooSecret = (string) AppSetting::where('key', 'onlyoffice_secret')->value('value');
+            $appUrl   = rtrim((string) AppSetting::where('key', 'app_public_url')->value('value'), '/');
+
+            if (empty($ooUrl) || empty($appUrl)) {
+                return null;
+            }
+
+            $tmpDir  = 'tmp-convert';
+            $tmpName = uniqid('conv_', true) . '.' . pathinfo($absOfficePath, PATHINFO_EXTENSION);
+            Storage::disk('public')->put($tmpDir . '/' . $tmpName, file_get_contents($absOfficePath));
+            $fileUrl = $appUrl . '/storage/' . $tmpDir . '/' . $tmpName;
+
+            $ext      = strtolower(pathinfo($absOfficePath, PATHINFO_EXTENSION));
+            $convKey  = md5($tmpName . time());
+            $payload = [
+                'async' => false,
+                'embeddedfonts' => true,
+                'filetype' => $ext,
+                'key' => $convKey,
+                'outputtype' => 'pdf',
+                'title' => pathinfo($absOfficePath, PATHINFO_FILENAME) . '.pdf',
+                'url' => $fileUrl,
+            ];
+
+            $headers = ['Authorization: Bearer '];
+            if (!empty($ooSecret)) {
+                $jwtHeader  = rtrim(strtr(base64_encode(json_encode(['alg' => 'HS256', 'typ' => 'JWT'])), '+/', '-_'), '=');
+                $jwtBody    = rtrim(strtr(base64_encode(json_encode(['payload' => $payload])), '+/', '-_'), '=');
+                $jwtSig     = rtrim(strtr(base64_encode(hash_hmac('sha256', "$jwtHeader.$jwtBody", $ooSecret, true)), '+/', '-_'), '=');
+                $jwt        = "$jwtHeader.$jwtBody.$jwtSig";
+                $headers    = ['Authorization: Bearer ' . $jwt, 'Accept: application/json'];
+            }
+
+            $ch = curl_init($ooUrl . '/ConvertService.ashx');
+            curl_setopt_array($ch, [
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => json_encode($payload),
+                CURLOPT_HTTPHEADER => array_merge(['Content-Type: application/json'], $headers),
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT => 60,
+                CURLOPT_SSL_VERIFYPEER => false,
+            ]);
+            $body = curl_exec($ch);
+            curl_close($ch);
+
+            Storage::disk('public')->delete($tmpDir . '/' . $tmpName);
+
+            if (!$body) {
+                return null;
+            }
+
+            $json = json_decode($body, true);
+            $pdfUrl = $json['fileUrl'] ?? null;
+            if (!$pdfUrl) {
+                return null;
+            }
+
+            $pdfContent = @file_get_contents($pdfUrl);
+            if (!$pdfContent) {
+                $ch2 = curl_init($pdfUrl);
+                curl_setopt_array($ch2, [
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_TIMEOUT => 30,
+                    CURLOPT_SSL_VERIFYPEER => false,
+                ]);
+                $pdfContent = curl_exec($ch2);
+                curl_close($ch2);
+            }
+
+            if (!$pdfContent) {
+                return null;
+            }
+
+            $localPdf = storage_path('app/tmp/pdf-convert/' . pathinfo($absOfficePath, PATHINFO_FILENAME) . '_oo.pdf');
+            @mkdir(dirname($localPdf), 0755, true);
+            file_put_contents($localPdf, $pdfContent);
+            return $localPdf;
+        } catch (\Throwable $e) {
+            Log::warning('Document convertOfficeToPdf failed', ['error' => $e->getMessage()]);
+            return null;
+        }
+    }
+
+    private function isSuspiciousPdf(string $absPdfPath): bool
+    {
+        if (!file_exists($absPdfPath)) {
+            return true;
+        }
+        $size = @filesize($absPdfPath);
+        if ($size === false || $size < 2048) {
+            return true;
+        }
+        $head = @file_get_contents($absPdfPath, false, null, 0, 4096);
+        return !is_string($head) || strpos($head, '%PDF-') !== 0;
+    }
 }

@@ -193,6 +193,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/documents/{document}/share', [DocumentController::class, 'share'])->name('documents.share');
     Route::get('/documents/{document}/versions', [DocumentController::class, 'versions'])->name('documents.versions');
     Route::post('/documents/{document}/status', [DocumentController::class, 'changeStatus'])->name('documents.status');
+    Route::post('/documents/{document}/convert-pdf', [DocumentController::class, 'convertToPdf'])->name('documents.convertPdf');
 
     // Workflows
     Route::resource('workflows', WorkflowController::class);

@@ -454,6 +454,7 @@ const ROUTES = {
     destroy:          (id) => `${_BASE}/${id}`,
     versions:         (id) => `${_BASE}/${id}/versions`,
     status:           (id) => `${_BASE}/${id}/status`,
+    convertPdf:       (id) => `${_BASE}/${id}/convert-pdf`,
     createNew:        '{{ url("documents/new") }}',
     uploadAjax:       '{{ url("documents/upload-ajax") }}',
     shareLookupTracking: '{{ route("documents.share.lookupTracking") }}',
@@ -777,6 +778,7 @@ function renderTable() {
         const labels = getLabels(doc.id);
         const canManage = !!doc.is_owner;
         const canShare = !!doc.can_share;
+        const canConvertPdf = canManage && !isFolder(doc) && ['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'odp'].includes(ext(doc));
         const labelsHtml = labels.slice(0, 3).map(c =>
             `<span class="inline-flex items-center rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 text-[10px] font-semibold">${c}</span>`
         ).join('') + (labels.length > 3 ? `<span class="inline-flex items-center rounded-md bg-gray-50 text-gray-600 border border-gray-200 px-1.5 py-0.5 text-[10px] font-semibold">+${labels.length - 3}</span>` : '');
@@ -835,6 +837,9 @@ function renderTable() {
                         <a href="${ROUTES.download(doc.id)}" class="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
                             <i class="fas fa-download text-gray-400 w-4"></i> Télécharger
                         </a>
+                        ${canConvertPdf ? `<button onclick="handleConvertPdf('${doc.id}')" class="w-full flex items-center gap-3 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                            <i class="fas fa-file-pdf text-red-400 w-4"></i> Convertir en PDF
+                        </button>` : ''}
                         ${canManage ? '<hr class="my-1 border-gray-100">' : ''}
                         ${canManage ? `<button onclick="handleDelete('${doc.id}')" class="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50">
                             <i class="fas fa-trash-alt text-red-400 w-4"></i> Supprimer
@@ -894,29 +899,40 @@ async function handleFavorite(id) {
     renderTable();
 }
 
-// ---- Renommer (modal) ----
-function handleRename(id) {
+async function handleConvertPdf(id) {
     toggleActions(id);
-    _renameDocId = id;
-    const doc = allDocs.find(d => d.id === id);
-    const input = document.getElementById('renameInput');
-    input.value = doc.title;
-    document.getElementById('renameError').classList.add('hidden');
-    document.getElementById('renameModal').classList.remove('hidden');
-    setTimeout(() => { input.select(); }, 50);
-}
-async function confirmRename() {
-    const input = document.getElementById('renameInput');
-    const newTitle = input.value.trim();
-    const errEl = document.getElementById('renameError');
-    if (!newTitle) { errEl.textContent = 'Le nom ne peut pas être vide.'; errEl.classList.remove('hidden'); return; }
-    const doc = allDocs.find(d => d.id === _renameDocId);
-    if (newTitle === doc.title) { document.getElementById('renameModal').classList.add('hidden'); return; }
-    const data = await post(ROUTES.rename(_renameDocId), { title: newTitle });
-    doc.title = data.title;
-    document.getElementById('renameModal').classList.add('hidden');
-    renderTable();
-    showToast(`Document renommé en « ${data.title} »`);
+    const doc = allDocs.find((d) => d.id === id);
+    if (!doc) return;
+
+    const confirmed = window.confirm(`Convertir « ${doc.title} » en PDF ?`);
+    if (!confirmed) return;
+
+    try {
+        const resp = await fetch(ROUTES.convertPdf(id), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': CSRF, Accept: 'application/json' },
+            body: JSON.stringify({}),
+        });
+
+        const data = await resp.json();
+        if (!resp.ok || !data.ok) {
+            showToast(data.message || 'Conversion PDF impossible.');
+            return;
+        }
+
+        if (data.final_file_path) {
+            doc.final_file_path = data.final_file_path;
+            doc.mime_type = 'application/pdf';
+        }
+        if (typeof data.file_size !== 'undefined') {
+            doc.file_size = Number(data.file_size) || doc.file_size;
+        }
+
+        renderTable();
+        showToast(data.message || 'Document converti en PDF.');
+    } catch (e) {
+        showToast('Erreur lors de la conversion PDF.');
+    }
 }
 
 // ---- Déplacer (modal) ----
