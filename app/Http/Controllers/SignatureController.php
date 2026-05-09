@@ -2680,6 +2680,10 @@ class SignatureController extends Controller
 
         // Éviter de re-télécharger si déjà récupéré, sauf en mode chaînage multi-signatures.
         if (!$forceRefresh && !empty($document->signed_file_path)) {
+            if ($markAsFinalSignature) {
+                // En multi-étapes, le PDF signé peut déjà exister mais ne pas encore être promu dans Mes Documents.
+                $this->promoteSignedPdfAsMainDocument($document, (string) $document->signed_file_path);
+            }
             Log::info('SunnyStamp: document signé déjà téléchargé', [
                 'execution_id' => $execution->id,
                 'signed_file_path' => $document->signed_file_path,
@@ -2732,23 +2736,12 @@ class SignatureController extends Controller
                 'signed_file_path' => $storagePath,
             ];
 
+            $document->update($documentUpdates);
+
             if ($markAsFinalSignature) {
                 // Le PDF signe final devient la version principale visible dans Mes Documents.
-                $publicStoragePath = '/storage/' . $storagePath;
-                $title = (string) ($document->title ?? 'document');
-                $titleWithoutExt = preg_replace('/\.(doc|docx|xls|xlsx|ppt|pptx|odt|ods|odp|pdf)$/i', '', $title) ?: $title;
-                $pdfTitle = rtrim($titleWithoutExt) . '.pdf';
-
-                $documentUpdates['title'] = $pdfTitle;
-                $documentUpdates['file_path'] = $publicStoragePath;
-                $documentUpdates['final_file_path'] = $publicStoragePath;
-                $documentUpdates['mime_type'] = 'application/pdf';
-                $documentUpdates['file_size'] = strlen($pdfContent);
-                $documentUpdates['status'] = 'signed';
-                $documentUpdates['signed_at'] = now();
+                $this->promoteSignedPdfAsMainDocument($document->fresh(), $storagePath, strlen($pdfContent));
             }
-
-            $document->update($documentUpdates);
 
             Log::info('SunnyStamp: document signé sauvegardé ✅', [
                 'execution_id'     => $execution->id,
@@ -2763,6 +2756,49 @@ class SignatureController extends Controller
                 'error'        => $e->getMessage(),
             ]);
         }
+    }
+
+    private function promoteSignedPdfAsMainDocument(Document $document, string $signedPath, ?int $knownSize = null): void
+    {
+        $normalizedSignedPath = ltrim(str_replace('/storage/', '', $signedPath), '/');
+        if ($normalizedSignedPath === '') {
+            return;
+        }
+
+        $publicStoragePath = '/storage/' . $normalizedSignedPath;
+        $title = (string) ($document->title ?? 'document');
+        $titleWithoutExt = preg_replace('/\.(doc|docx|xls|xlsx|ppt|pptx|odt|ods|odp|pdf)$/i', '', $title) ?: $title;
+        $pdfTitle = rtrim($titleWithoutExt) . '.pdf';
+
+        $fileSize = $knownSize;
+        if ($fileSize === null) {
+            try {
+                if (Storage::disk('public')->exists($normalizedSignedPath)) {
+                    $fileSize = (int) Storage::disk('public')->size($normalizedSignedPath);
+                }
+            } catch (\Throwable $e) {
+                Log::warning('SunnyStamp: unable to resolve signed file size during promotion', [
+                    'document_id' => $document->id,
+                    'signed_path' => $normalizedSignedPath,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        $updates = [
+            'title' => $pdfTitle,
+            'file_path' => $publicStoragePath,
+            'final_file_path' => $publicStoragePath,
+            'mime_type' => 'application/pdf',
+            'status' => 'signed',
+            'signed_at' => now(),
+        ];
+
+        if ($fileSize !== null) {
+            $updates['file_size'] = $fileSize;
+        }
+
+        $document->update($updates);
     }
 
     /**
