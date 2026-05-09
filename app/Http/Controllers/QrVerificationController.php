@@ -11,6 +11,11 @@ use Illuminate\Support\Facades\Storage;
 
 class QrVerificationController extends Controller
 {
+    private function buildAbsoluteUrlFromRequest(string $path): string
+    {
+        return rtrim(request()->root(), '/') . '/' . ltrim($path, '/');
+    }
+
     private function normalizePublicStoragePath(string $sourcePath): string
     {
         $path = trim($sourcePath);
@@ -411,9 +416,12 @@ class QrVerificationController extends Controller
             'document' => $document->id,
             'inline' => 1,
         ]);
+        $downloadUrl = $this->buildAbsoluteUrlFromRequest(parse_url($downloadUrl, PHP_URL_PATH) ?: $downloadUrl);
 
         if (!empty((string) $document->qr_token)) {
-            $downloadUrl = route('qr.download', ['token' => (string) $document->qr_token]);
+            $downloadUrl = $this->buildAbsoluteUrlFromRequest(
+                parse_url(route('qr.download', ['token' => (string) $document->qr_token]), PHP_URL_PATH) ?: route('qr.download', ['token' => (string) $document->qr_token])
+            );
         }
 
         $currentUserId = (string) (auth()->id() ?? '');
@@ -436,7 +444,7 @@ class QrVerificationController extends Controller
             ],
             'download_url' => $downloadUrl,
             'preview_url' => $isOwner ? $downloadUrl : null,
-            'editor_url' => $isOwner ? route('documents.index', ['open_oo' => $document->id]) : null,
+            'editor_url' => $isOwner ? $this->buildAbsoluteUrlFromRequest(parse_url(route('documents.index', ['open_oo' => $document->id]), PHP_URL_PATH) ?: route('documents.index', ['open_oo' => $document->id])) : null,
         ]);
     }
 }
