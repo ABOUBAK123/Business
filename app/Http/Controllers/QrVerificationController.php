@@ -50,10 +50,36 @@ class QrVerificationController extends Controller
 
     private function buildDownloadResponse(Document $document)
     {
+        if (!empty($document->signed_file_path)) {
+            $signedNormalized = $this->normalizePublicStoragePath((string) $document->signed_file_path);
+            if ($signedNormalized !== '' && Storage::disk('public')->exists($signedNormalized)) {
+                $path = $signedNormalized;
+                $sourcePath = (string) $document->signed_file_path;
+
+                $ext  = pathinfo($sourcePath, PATHINFO_EXTENSION) ?: (pathinfo($path, PATHINFO_EXTENSION) ?: 'pdf');
+                $safeTitle = preg_replace('/[\/\\[:cntrl:]]+/', '-', (string) $document->title);
+                $safeTitle = trim((string) $safeTitle, '-') ?: 'document';
+                $name = pathinfo($safeTitle, PATHINFO_EXTENSION) === $ext ? $safeTitle : ($safeTitle . '.' . $ext);
+
+                try {
+                    $absPath = Storage::disk('public')->path($path);
+                    if (is_file($absPath) && is_readable($absPath)) {
+                        return response()->download($absPath, $name);
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning('QR signed fast-path failed, fallback to candidate scan', [
+                        'document_id' => $document->id,
+                        'signed_path' => $path,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+        }
+
         $candidateSources = array_values(array_filter([
-            (string) ($this->resolveSourceVersionPath($document) ?? ''),
-            (string) ($document->file_path ?? ''),
             (string) ($document->signed_file_path ?? ''),
+            (string) ($document->file_path ?? ''),
+            (string) ($this->resolveSourceVersionPath($document) ?? ''),
         ], fn ($v) => trim($v) !== ''));
 
         $sourcePath = '';
@@ -380,8 +406,11 @@ class QrVerificationController extends Controller
         $downloadUrl = route('documents.download', [
             'document' => $document->id,
             'inline' => 1,
-            'source' => 1,
         ]);
+
+        if (!empty((string) $document->qr_token)) {
+            $downloadUrl = route('qr.download', ['token' => (string) $document->qr_token]);
+        }
 
         $currentUserId = (string) (auth()->id() ?? '');
         $isOwner = $currentUserId !== '' && (
@@ -402,7 +431,7 @@ class QrVerificationController extends Controller
                 'administration' => $document->issuingAdministration?->name,
             ],
             'download_url' => $downloadUrl,
-            'preview_url' => $isOwner ? route('documents.download', ['document' => $document->id, 'inline' => 1, 'source' => 1]) : null,
+            'preview_url' => $isOwner ? $downloadUrl : null,
             'editor_url' => $isOwner ? route('documents.index', ['open_oo' => $document->id]) : null,
         ]);
     }
