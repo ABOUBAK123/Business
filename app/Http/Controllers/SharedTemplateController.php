@@ -653,6 +653,36 @@ class SharedTemplateController extends Controller
     }
 
     /**
+     * Lit une valeur entière depuis AppSetting avec fallback et bornes de sécurité.
+     */
+    private function getIntAppSetting(string $key, int $default, int $min, int $max): int
+    {
+        try {
+            $raw = AppSetting::where('key', $key)->value('value');
+            if ($raw === null || $raw === '') {
+                return $default;
+            }
+
+            if (!is_numeric($raw)) {
+                return $default;
+            }
+
+            $value = (int) $raw;
+            if ($value < $min || $value > $max) {
+                return $default;
+            }
+
+            return $value;
+        } catch (\Throwable $e) {
+            \Log::warning('getIntAppSetting fallback used', [
+                'key' => $key,
+                'error' => $e->getMessage(),
+            ]);
+            return $default;
+        }
+    }
+
+    /**
      * Tente la conversion d'un fichier Office (docx/xlsx/pptx) en PDF via LibreOffice.
      * Retourne le chemin absolu du PDF généré, ou null si échec / binaire absent.
      */
@@ -1569,9 +1599,22 @@ class SharedTemplateController extends Controller
      */
     private function defragmentRuns(string $xml, string $xmlName = ''): string
     {
+        $maxXmlBytesForRegex = $this->getIntAppSetting(
+            'template_defrag_max_xml_bytes',
+            1200000,
+            200000,
+            20000000
+        );
+
+        $maxParagraphBytesForRegex = $this->getIntAppSetting(
+            'template_defrag_max_paragraph_bytes',
+            45000,
+            2000,
+            500000
+        );
+
         // Mode safe: pour les très gros XML, on contourne totalement la défragmentation regex
         // afin d'éviter backtracking/catastrophic regex et tout risque de vidage du document.
-        $maxXmlBytesForRegex = 1200000;
         if (strlen($xml) > $maxXmlBytesForRegex) {
             \Log::info('defragmentRuns skipped for large XML (safe mode)', [
                 'file' => $xmlName,
@@ -1583,12 +1626,11 @@ class SharedTemplateController extends Controller
 
         $result = preg_replace_callback(
             '/<w:p[ >].*?<\/w:p>/s',
-            function (array $match) {
+            function (array $match) use ($maxParagraphBytesForRegex) {
                 $para = $match[0];
 
                 // Mode safe: ne jamais défragmenter les paragraphes trop gros.
                 // Sur des blocs massifs, les regex peuvent devenir instables/ coûteuses.
-                $maxParagraphBytesForRegex = 45000;
                 if (strlen($para) > $maxParagraphBytesForRegex) {
                     return $para;
                 }
