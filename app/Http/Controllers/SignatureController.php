@@ -2727,13 +2727,23 @@ class SignatureController extends Controller
             Storage::disk('public')->makeDirectory('signed_documents');
             Storage::disk('public')->put($storagePath, $pdfContent);
 
-            // Mettre à jour le document en base.
+            // Mettre a jour le document en base.
             $documentUpdates = [
                 'signed_file_path' => $storagePath,
-                'final_file_path' => $storagePath,
             ];
 
             if ($markAsFinalSignature) {
+                // Le PDF signe final devient la version principale visible dans Mes Documents.
+                $publicStoragePath = '/storage/' . $storagePath;
+                $title = (string) ($document->title ?? 'document');
+                $titleWithoutExt = preg_replace('/\.(doc|docx|xls|xlsx|ppt|pptx|odt|ods|odp|pdf)$/i', '', $title) ?: $title;
+                $pdfTitle = rtrim($titleWithoutExt) . '.pdf';
+
+                $documentUpdates['title'] = $pdfTitle;
+                $documentUpdates['file_path'] = $publicStoragePath;
+                $documentUpdates['final_file_path'] = $publicStoragePath;
+                $documentUpdates['mime_type'] = 'application/pdf';
+                $documentUpdates['file_size'] = strlen($pdfContent);
                 $documentUpdates['status'] = 'signed';
                 $documentUpdates['signed_at'] = now();
             }
@@ -2771,6 +2781,8 @@ class SignatureController extends Controller
         if (!$document || $signedPath === '') {
             abort(404, 'Document signé non disponible.');
         }
+
+        $signedPath = ltrim(str_replace('/storage/', '', $signedPath), '/');
 
         if (!Storage::disk('public')->exists($signedPath)) {
             abort(404, 'Fichier introuvable sur le serveur.');

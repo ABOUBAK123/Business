@@ -50,11 +50,12 @@ class QrVerificationController extends Controller
 
     private function buildDownloadResponse(Document $document)
     {
-        if (!empty($document->final_file_path)) {
-            $signedNormalized = $this->normalizePublicStoragePath((string) $document->final_file_path);
+        $signedSource = (string) ($document->signed_file_path ?: $document->final_file_path ?: '');
+        if ($signedSource !== '') {
+            $signedNormalized = $this->normalizePublicStoragePath($signedSource);
             if ($signedNormalized !== '' && Storage::disk('public')->exists($signedNormalized)) {
                 $path = $signedNormalized;
-                $sourcePath = (string) $document->final_file_path;
+                $sourcePath = $signedSource;
 
                 $ext  = pathinfo($sourcePath, PATHINFO_EXTENSION) ?: (pathinfo($path, PATHINFO_EXTENSION) ?: 'pdf');
                 $safeTitle = preg_replace('/[\/\\[:cntrl:]]+/', '-', (string) $document->title);
@@ -77,8 +78,8 @@ class QrVerificationController extends Controller
         }
 
         $candidateSources = array_values(array_filter([
-            (string) ($document->final_file_path ?? ''),
             (string) ($document->signed_file_path ?? ''),
+            (string) ($document->final_file_path ?? ''),
             (string) ($document->file_path ?? ''),
             (string) ($this->resolveSourceVersionPath($document) ?? ''),
         ], fn ($v) => trim($v) !== ''));
