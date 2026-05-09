@@ -12,7 +12,25 @@ class AppSettingController extends Controller
     public function index()
     {
         $settings = AppSetting::all()->keyBy('key');
-        return view('admin.settings', compact('settings'));
+
+        $thresholdSettings = [
+            'template_defrag_max_xml_bytes' => [
+                'label' => 'Seuil XML max avant mode safe (bytes)',
+                'description' => 'Si le XML depasse ce seuil, la defragmentation regex est contournee.',
+                'default' => 1200000,
+                'min' => 200000,
+                'max' => 20000000,
+            ],
+            'template_defrag_max_paragraph_bytes' => [
+                'label' => 'Seuil paragraphe max avant mode safe (bytes)',
+                'description' => 'Si un paragraphe depasse ce seuil, il est ignore par la defragmentation regex.',
+                'default' => 45000,
+                'min' => 2000,
+                'max' => 500000,
+            ],
+        ];
+
+        return view('admin.settings', compact('settings', 'thresholdSettings'));
     }
 
     /** Clés autorisées à être modifiées via ce contrôleur. */
@@ -26,6 +44,7 @@ class AppSettingController extends Controller
         'courrier_archival_days',
         'email_notifications_enabled', 'email_notifications_from',
         'chat_enabled', 'chat_scope',
+        'template_defrag_max_xml_bytes', 'template_defrag_max_paragraph_bytes',
     ];
 
     public function update(Request $request)
@@ -37,11 +56,22 @@ class AppSettingController extends Controller
             'Accès réservé aux administrateurs.'
         );
 
+        $validated = $request->validate([
+            'template_defrag_max_xml_bytes' => 'nullable|integer|min:200000|max:20000000',
+            'template_defrag_max_paragraph_bytes' => 'nullable|integer|min:2000|max:500000',
+        ]);
+
         $filtered = array_filter(
             $request->except('_token', '_method'),
             fn($key) => in_array($key, self::ALLOWED_KEYS, true),
             ARRAY_FILTER_USE_KEY
         );
+
+        foreach (array_keys($validated) as $k) {
+            if (array_key_exists($k, $filtered) && ($filtered[$k] === null || $filtered[$k] === '')) {
+                unset($filtered[$k]);
+            }
+        }
 
         foreach ($filtered as $key => $value) {
             AppSetting::updateOrCreate(
