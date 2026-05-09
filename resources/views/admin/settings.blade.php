@@ -64,7 +64,15 @@
             <p class="text-gray-400 text-sm text-center py-4">Aucun paramètre configuré.</p>
             @endif
 
-            <div class="pt-3">
+            <div class="pt-3 flex flex-wrap items-center gap-2">
+                <button
+                    type="submit"
+                    name="restore_defrag_defaults"
+                    value="1"
+                    class="bg-amber-100 text-amber-800 px-4 py-2.5 rounded-lg text-sm font-medium hover:bg-amber-200 border border-amber-200"
+                >
+                    <i class="fas fa-rotate-left mr-2"></i>Restaurer valeurs recommandees
+                </button>
                 <button type="submit" class="bg-indigo-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-indigo-700">
                     <i class="fas fa-save mr-2"></i>Enregistrer les paramètres
                 </button>

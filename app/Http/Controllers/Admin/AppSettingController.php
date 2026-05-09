@@ -9,6 +9,11 @@ use Illuminate\Support\Str;
 
 class AppSettingController extends Controller
 {
+    private const DEFRAG_RECOMMENDED = [
+        'template_defrag_max_xml_bytes' => 1500000,
+        'template_defrag_max_paragraph_bytes' => 60000,
+    ];
+
     public function index()
     {
         $settings = AppSetting::all()->keyBy('key');
@@ -56,6 +61,11 @@ class AppSettingController extends Controller
             'Accès réservé aux administrateurs.'
         );
 
+        $restoreRequested = (string) $request->input('restore_defrag_defaults', '') === '1';
+        if ($restoreRequested) {
+            $request->merge(self::DEFRAG_RECOMMENDED);
+        }
+
         $validated = $request->validate([
             'template_defrag_max_xml_bytes' => 'nullable|integer|min:200000|max:20000000',
             'template_defrag_max_paragraph_bytes' => 'nullable|integer|min:2000|max:500000',
@@ -79,7 +89,12 @@ class AppSettingController extends Controller
                 ['id' => Str::uuid(), 'value' => $value]
             );
         }
-        return back()->with('success', 'Paramètres enregistrés.');
+
+        $message = $restoreRequested
+            ? 'Valeurs recommandees restaurees pour les seuils templates.'
+            : 'Paramètres enregistrés.';
+
+        return back()->with('success', $message);
     }
 
     public function get(string $key)
