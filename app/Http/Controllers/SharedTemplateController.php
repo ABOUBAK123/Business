@@ -1253,29 +1253,33 @@ class SharedTemplateController extends Controller
                 $val = htmlspecialchars($values[$slug] ?? '', ENT_XML1, 'UTF-8');
 
                 // Syntaxe nouvelle : [original]  — insensible à la casse (iu)
-                $newContent = preg_replace(
+                $newContent = $this->safePregReplace(
                     '/\[' . preg_quote($original, '/') . '\]/iu',
                     $val,
-                    $newContent
+                    $newContent,
+                    'replaceInOfficeFile:[' . $name . '] original=' . $original
                 );
                 // Syntaxe ancienne : {{original}} — insensible à la casse (iu)
-                $newContent = preg_replace(
+                $newContent = $this->safePregReplace(
                     '/\{\{\s*' . preg_quote($original, '/') . '\s*\}\}/iu',
                     $val,
-                    $newContent
+                    $newContent,
+                    'replaceInOfficeFile:[' . $name . '] original_curly=' . $original
                 );
                 if ($slug !== $original) {
                     // Syntaxe nouvelle avec slug : [slug] — insensible à la casse (iu)
-                    $newContent = preg_replace(
+                    $newContent = $this->safePregReplace(
                         '/\[' . preg_quote($slug, '/') . '\]/iu',
                         $val,
-                        $newContent
+                        $newContent,
+                        'replaceInOfficeFile:[' . $name . '] slug=' . $slug
                     );
                     // Syntaxe ancienne avec slug : {{slug}} — insensible à la casse (iu)
-                    $newContent = preg_replace(
+                    $newContent = $this->safePregReplace(
                         '/\{\{\s*' . preg_quote($slug, '/') . '\s*\}\}/iu',
                         $val,
-                        $newContent
+                        $newContent,
+                        'replaceInOfficeFile:[' . $name . '] slug_curly=' . $slug
                     );
                 }
 
@@ -1285,15 +1289,17 @@ class SharedTemplateController extends Controller
                 // On essaie donc aussi le texte exact extrait du fichier.
                 $docxOrig = $docxOriginalMap[$slug] ?? null;
                 if ($docxOrig !== null && $docxOrig !== $original && $docxOrig !== $slug) {
-                    $newContent = preg_replace(
+                    $newContent = $this->safePregReplace(
                         '/\[' . preg_quote($docxOrig, '/') . '\]/iu',
                         $val,
-                        $newContent
+                        $newContent,
+                        'replaceInOfficeFile:[' . $name . '] docx_orig=' . $docxOrig
                     );
-                    $newContent = preg_replace(
+                    $newContent = $this->safePregReplace(
                         '/\{\{\s*' . preg_quote($docxOrig, '/') . '\s*\}\}/iu',
                         $val,
-                        $newContent
+                        $newContent,
+                        'replaceInOfficeFile:[' . $name . '] docx_orig_curly=' . $docxOrig
                     );
                 }
 
@@ -1301,15 +1307,17 @@ class SharedTemplateController extends Controller
                 // Couvre [nom du demandeur] depuis le slug 'nom_du_demandeur'.
                 $slugSpaces = str_replace('_', ' ', $slug);
                 if ($slugSpaces !== $slug && $slugSpaces !== $original && $slugSpaces !== ($docxOrig ?? '')) {
-                    $newContent = preg_replace(
+                    $newContent = $this->safePregReplace(
                         '/\[' . preg_quote($slugSpaces, '/') . '\]/iu',
                         $val,
-                        $newContent
+                        $newContent,
+                        'replaceInOfficeFile:[' . $name . '] slug_spaces=' . $slugSpaces
                     );
-                    $newContent = preg_replace(
+                    $newContent = $this->safePregReplace(
                         '/\{\{\s*' . preg_quote($slugSpaces, '/') . '\s*\}\}/iu',
                         $val,
-                        $newContent
+                        $newContent,
+                        'replaceInOfficeFile:[' . $name . '] slug_spaces_curly=' . $slugSpaces
                     );
                 }
 
@@ -1335,15 +1343,17 @@ class SharedTemplateController extends Controller
                     // {{(MATRICULE_1)}}, {{« INTITULE »}}, etc.
                     $decor = "(?:<[^>]+>|[\\s\\x{00A0}\\x{00AB}\\x{00BB}\"'()«»]|&nbsp;|&#160;)*";
 
-                    $newContent = preg_replace(
+                    $newContent = $this->safePregReplace(
                         '~\[\s*' . $decor . $loose . $decor . '\s*\]~iu',
                         $val,
-                        $newContent
+                        $newContent,
+                        'replaceInOfficeFile:[' . $name . '] loose_square=' . $slug
                     );
-                    $newContent = preg_replace(
+                    $newContent = $this->safePregReplace(
                         '~\{\{\s*' . $decor . $loose . $decor . '\s*\}\}~iu',
                         $val,
-                        $newContent
+                        $newContent,
+                        'replaceInOfficeFile:[' . $name . '] loose_curly=' . $slug
                     );
                 }
             }
@@ -1404,6 +1414,23 @@ class SharedTemplateController extends Controller
             }
             $zip2->close();
         }
+    }
+
+    /**
+     * preg_replace defensif: en cas d'erreur PCRE, conserve le sujet inchange.
+     */
+    private function safePregReplace(string $pattern, string $replacement, string $subject, string $context): string
+    {
+        $out = preg_replace($pattern, $replacement, $subject);
+        if ($out === null) {
+            \Log::warning('safePregReplace failed, preserving XML content', [
+                'context' => $context,
+                'preg_error' => function_exists('preg_last_error_msg') ? preg_last_error_msg() : preg_last_error(),
+            ]);
+            return $subject;
+        }
+
+        return $out;
     }
 
     /**
