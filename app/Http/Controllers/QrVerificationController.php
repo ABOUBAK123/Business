@@ -50,6 +50,13 @@ class QrVerificationController extends Controller
 
     private function buildDownloadResponse(Document $document)
     {
+        Log::debug('QR download start', [
+            'document_id' => $document->id,
+            'file_path' => $document->file_path,
+            'signed_file_path' => $document->signed_file_path,
+            'final_file_path' => $document->final_file_path,
+        ]);
+
         $signedSource = (string) ($document->signed_file_path ?: $document->final_file_path ?: '');
         if ($signedSource !== '') {
             $signedNormalized = $this->normalizePublicStoragePath($signedSource);
@@ -58,8 +65,11 @@ class QrVerificationController extends Controller
                 $sourcePath = $signedSource;
 
                 $ext  = pathinfo($sourcePath, PATHINFO_EXTENSION) ?: (pathinfo($path, PATHINFO_EXTENSION) ?: 'pdf');
-                $safeTitle = preg_replace('/[\/\\[:cntrl:]]+/', '-', (string) $document->title);
-                $safeTitle = trim((string) $safeTitle, '-') ?: 'document';
+                // Nettoyer le titre des caractères invalides dans les noms de fichier
+                $safeTitle = (string) $document->title;
+                $safeTitle = preg_replace('/[\x00-\x1f\x7f\/\\\\:*?"<>|]+/', ' ', $safeTitle) ?: $safeTitle;
+                $safeTitle = preg_replace('/\s+/', ' ', $safeTitle) ?: $safeTitle;
+                $safeTitle = substr(trim($safeTitle), 0, 200) ?: 'document';
                 $name = pathinfo($safeTitle, PATHINFO_EXTENSION) === $ext ? $safeTitle : ($safeTitle . '.' . $ext);
 
                 try {
@@ -84,6 +94,11 @@ class QrVerificationController extends Controller
             (string) ($this->resolveSourceVersionPath($document) ?? ''),
         ], fn ($v) => trim($v) !== ''));
 
+        Log::debug('QR candidate sources', [
+            'document_id' => $document->id,
+            'sources' => $candidateSources,
+        ]);
+
         $sourcePath = '';
         $path = '';
 
@@ -92,6 +107,12 @@ class QrVerificationController extends Controller
             if ($normalized === '') {
                 continue;
             }
+
+            Log::debug('QR testing candidate', [
+                'document_id' => $document->id,
+                'source' => $sourceCandidate,
+                'normalized' => $normalized,
+            ]);
 
             $pathsToTry = [$normalized];
             $baseName = basename($normalized);
@@ -103,9 +124,20 @@ class QrVerificationController extends Controller
 
             foreach (array_values(array_unique($pathsToTry)) as $pathCandidate) {
                 try {
-                    if (Storage::disk('public')->exists($pathCandidate)) {
+                    $exists = Storage::disk('public')->exists($pathCandidate);
+                    Log::debug('QR path check', [
+                        'document_id' => $document->id,
+                        'path_candidate' => $pathCandidate,
+                        'exists' => $exists,
+                    ]);
+
+                    if ($exists) {
                         $sourcePath = $sourceCandidate;
                         $path = $pathCandidate;
+                        Log::debug('QR path found', [
+                            'document_id' => $document->id,
+                            'path' => $path,
+                        ]);
                         break 2;
                     }
                 } catch (\Throwable $e) {
@@ -139,9 +171,15 @@ class QrVerificationController extends Controller
 
         $ext  = pathinfo($sourcePath, PATHINFO_EXTENSION) ?: (pathinfo($path, PATHINFO_EXTENSION) ?: 'bin');
 
-        // Evite les classes hex fragiles selon versions PCRE en production.
-        $safeTitle = preg_replace('/[\/\\[:cntrl:]]+/', '-', (string) $document->title);
-        $safeTitle = trim((string) $safeTitle, '-') ?: 'document';
+        // Nettoyer le titre des caractères invalides dans les noms de fichier
+        $safeTitle = (string) $document->title;
+        // Supprimer tous les caractères de contrôle et les slashes
+        $safeTitle = preg_replace('/[\x00-\x1f\x7f\/\\\\:*?"<>|]+/', ' ', $safeTitle) ?: $safeTitle;
+        // Remplacer les espaces multiples par un seul
+        $safeTitle = preg_replace('/\s+/', ' ', $safeTitle) ?: $safeTitle;
+        // Couper à 200 caractères max
+        $safeTitle = substr(trim($safeTitle), 0, 200) ?: 'document';
+
         $name = pathinfo($safeTitle, PATHINFO_EXTENSION) === $ext ? $safeTitle : ($safeTitle . '.' . $ext);
 
         try {
