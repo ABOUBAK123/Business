@@ -210,6 +210,7 @@ class DocumentController extends Controller
             'id'         => Str::uuid(),
             'title'      => $title,
             'file_path'  => '/storage/' . $path,
+            'final_file_path' => '/storage/' . $path,
             'file_size'  => $file->getSize(),
             'mime_type'  => $file->getMimeType(),
             'status'     => 'draft',
@@ -247,6 +248,7 @@ class DocumentController extends Controller
             'title'      => $request->title,
             'description'=> $request->description,
             'file_path'  => '/storage/' . $path,
+            'final_file_path' => '/storage/' . $path,
             'file_size'  => $file->getSize(),
             'mime_type'  => $file->getMimeType(),
             'status'     => 'draft',
@@ -376,8 +378,8 @@ class DocumentController extends Controller
 
         $preferSource = $request->boolean('source');
         $sourcePath = $preferSource
-            ? (string) ($document->file_path ?: $document->signed_file_path ?: '')
-            : (string) ($document->signed_file_path ?: $document->file_path ?: '');
+            ? (string) ($document->file_path ?: $document->final_file_path ?: $document->signed_file_path ?: '')
+            : (string) ($document->final_file_path ?: $document->signed_file_path ?: $document->file_path ?: '');
         $path = ltrim(str_replace('/storage/', '', $sourcePath), '/');
         $ext  = pathinfo($sourcePath, PATHINFO_EXTENSION) ?: 'bin';
 
@@ -395,7 +397,7 @@ class DocumentController extends Controller
 
         if ($request->boolean('inline')) {
             return Storage::disk('public')->response($path, $name, [
-                'Content-Type' => ($preferSource ? ($document->mime_type ?: 'application/octet-stream') : ($document->signed_file_path ? 'application/pdf' : ($document->mime_type ?: 'application/octet-stream'))),
+                'Content-Type' => ($preferSource ? ($document->mime_type ?: 'application/octet-stream') : (strtolower((string) pathinfo($sourcePath, PATHINFO_EXTENSION)) === 'pdf' ? 'application/pdf' : ($document->mime_type ?: 'application/octet-stream'))),
                 'Content-Disposition' => 'inline; filename="' . addslashes($name) . '"',
             ]);
         }
@@ -421,7 +423,7 @@ class DocumentController extends Controller
         }
 
         $document = Document::findOrFail($share->document_id);
-        $sourcePath = (string) ($document->signed_file_path ?: $document->file_path ?: '');
+        $sourcePath = (string) ($document->final_file_path ?: $document->signed_file_path ?: $document->file_path ?: '');
         $path = ltrim(str_replace('/storage/', '', $sourcePath), '/');
         $ext  = pathinfo($sourcePath, PATHINFO_EXTENSION) ?: 'bin';
 
@@ -1115,6 +1117,7 @@ class DocumentController extends Controller
             'title'       => $title,
             'description' => $type === 'folder' ? '[folder]' : ($folder ? "Dossier: {$folder}" : null),
             'file_path'   => $filePath,
+            'final_file_path' => $filePath,
             'mime_type'   => $type === 'folder' ? 'application/x-folder' : $mimeType,
             'status'      => 'draft',
             'owner_id'    => Auth::id(),

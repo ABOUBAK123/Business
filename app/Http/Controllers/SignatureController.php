@@ -55,7 +55,7 @@ class SignatureController extends Controller
             return;
         }
 
-        $sourcePath = (string) ($document->signed_file_path ?: $document->file_path ?: '');
+        $sourcePath = (string) ($document->final_file_path ?: $document->signed_file_path ?: $document->file_path ?: '');
         if ($sourcePath === '') {
             return;
         }
@@ -1114,6 +1114,7 @@ class SignatureController extends Controller
             'id'         => Str::uuid(),
             'title'      => $title,
             'file_path'  => 'storage/' . $filePath,
+            'final_file_path' => 'storage/' . $filePath,
             'file_size'  => $file->getSize(),
             'mime_type'  => 'application/pdf',
             'status'     => 'signed',
@@ -1645,7 +1646,7 @@ class SignatureController extends Controller
         // Si un PDF déjà signé existe, l'utiliser comme base pour conserver les signatures précédentes.
         $sourceFilePath = !empty($document->signed_file_path)
             ? (string) $document->signed_file_path
-            : (string) ($document->file_path ?? '');
+            : (string) ($document->final_file_path ?: $document->file_path ?: '');
 
         $filePath = trim($sourceFilePath);
         $normalizedPublicDiskPath = ltrim($filePath, '/');
@@ -2729,6 +2730,7 @@ class SignatureController extends Controller
             // Mettre à jour le document en base.
             $documentUpdates = [
                 'signed_file_path' => $storagePath,
+                'final_file_path' => $storagePath,
             ];
 
             if ($markAsFinalSignature) {
@@ -2765,16 +2767,17 @@ class SignatureController extends Controller
         }
 
         $document = $execution->document_id ? Document::find($execution->document_id) : null;
-        if (!$document || empty($document->signed_file_path)) {
+        $signedPath = $document ? (string) ($document->signed_file_path ?: $document->final_file_path ?: '') : '';
+        if (!$document || $signedPath === '') {
             abort(404, 'Document signé non disponible.');
         }
 
-        if (!Storage::disk('public')->exists($document->signed_file_path)) {
+        if (!Storage::disk('public')->exists($signedPath)) {
             abort(404, 'Fichier introuvable sur le serveur.');
         }
 
         $filename = 'signed_' . Str::slug($document->title ?? 'document') . '.pdf';
-        return Storage::disk('public')->download($document->signed_file_path, $filename, [
+        return Storage::disk('public')->download($signedPath, $filename, [
             'Content-Type' => 'application/pdf',
         ]);
     }

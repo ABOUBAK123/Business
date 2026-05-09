@@ -1622,6 +1622,7 @@ class AdminController extends Controller
             'title' => 'Carte virtuelle - ' . ($employee->full_name ?: 'Agent'),
             'description' => 'Carte virtuelle transmise pour signature.',
             'file_path' => '/storage/' . $cardFilePath,
+            'final_file_path' => '/storage/' . $cardFilePath,
             'file_size' => strlen($documentHtml),
             'mime_type' => 'text/html',
             'status' => 'draft',

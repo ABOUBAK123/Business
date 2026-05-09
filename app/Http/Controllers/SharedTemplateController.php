@@ -563,6 +563,7 @@ class SharedTemplateController extends Controller
             'title'                  => $title,
             'description'            => $description,
             'file_path'              => $storagePath,
+            'final_file_path'        => $storagePath,
             'file_size'              => $storagePath ? Storage::disk('public')->size(ltrim(str_replace('/storage/', '', $storagePath), '/')) : 0,
             'mime_type'              => $mimeType,
             'status'                 => 'active',

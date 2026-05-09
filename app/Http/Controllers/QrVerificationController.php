@@ -50,11 +50,11 @@ class QrVerificationController extends Controller
 
     private function buildDownloadResponse(Document $document)
     {
-        if (!empty($document->signed_file_path)) {
-            $signedNormalized = $this->normalizePublicStoragePath((string) $document->signed_file_path);
+        if (!empty($document->final_file_path)) {
+            $signedNormalized = $this->normalizePublicStoragePath((string) $document->final_file_path);
             if ($signedNormalized !== '' && Storage::disk('public')->exists($signedNormalized)) {
                 $path = $signedNormalized;
-                $sourcePath = (string) $document->signed_file_path;
+                $sourcePath = (string) $document->final_file_path;
 
                 $ext  = pathinfo($sourcePath, PATHINFO_EXTENSION) ?: (pathinfo($path, PATHINFO_EXTENSION) ?: 'pdf');
                 $safeTitle = preg_replace('/[\/\\[:cntrl:]]+/', '-', (string) $document->title);
@@ -77,6 +77,7 @@ class QrVerificationController extends Controller
         }
 
         $candidateSources = array_values(array_filter([
+            (string) ($document->final_file_path ?? ''),
             (string) ($document->signed_file_path ?? ''),
             (string) ($document->file_path ?? ''),
             (string) ($this->resolveSourceVersionPath($document) ?? ''),
@@ -128,6 +129,7 @@ class QrVerificationController extends Controller
         if ($path === '') {
             Log::warning('QR download file not found on disk', [
                 'document_id' => $document->id,
+                'final_file_path' => $document->final_file_path,
                 'signed_file_path' => $document->signed_file_path,
                 'file_path' => $document->file_path,
             ]);
@@ -204,9 +206,9 @@ class QrVerificationController extends Controller
 
             $relative = 'signed_documents/' . basename($best);
 
-            if ((string) ($document->signed_file_path ?? '') !== $relative) {
+            if ((string) ($document->signed_file_path ?? '') !== $relative || (string) ($document->final_file_path ?? '') !== $relative) {
                 try {
-                    $document->forceFill(['signed_file_path' => $relative])->save();
+                    $document->forceFill(['signed_file_path' => $relative, 'final_file_path' => $relative])->save();
                 } catch (\Throwable $e) {
                     Log::warning('QR signed path recovery: failed to persist recovered path', [
                         'document_id' => $document->id,
@@ -230,9 +232,9 @@ class QrVerificationController extends Controller
             if ($best && is_file($best) && is_readable($best)) {
                 $relative = 'signed_documents/' . basename($best);
 
-                if ((string) ($document->signed_file_path ?? '') !== $relative) {
+                if ((string) ($document->signed_file_path ?? '') !== $relative || (string) ($document->final_file_path ?? '') !== $relative) {
                     try {
-                        $document->forceFill(['signed_file_path' => $relative])->save();
+                        $document->forceFill(['signed_file_path' => $relative, 'final_file_path' => $relative])->save();
                     } catch (\Throwable $e) {
                         Log::warning('QR signed path recovery: failed to persist recovered path', [
                             'document_id' => $document->id,
@@ -304,7 +306,7 @@ class QrVerificationController extends Controller
                 (string) ($document->created_by ?? '') === $currentUserId
             );
 
-            $isSigned = !empty($document->signed_file_path);
+            $isSigned = !empty($document->signed_file_path) || (!empty($document->final_file_path) && strtolower((string) pathinfo((string) $document->final_file_path, PATHINFO_EXTENSION)) === 'pdf');
 
             // Récupérer les infos du signataire depuis la table signatures si disponible
             $lastSignature = null;
