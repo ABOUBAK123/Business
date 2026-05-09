@@ -410,10 +410,10 @@ class QrVerificationController extends Controller
         $downloadUrl = route('documents.download', [
             'document' => $document->id,
             'inline' => 1,
-        ], false);
+        ]);
 
         if (!empty((string) $document->qr_token)) {
-            $downloadUrl = route('qr.download', ['token' => (string) $document->qr_token], false);
+            $downloadUrl = route('qr.download', ['token' => (string) $document->qr_token]);
         }
 
         $currentUserId = (string) (auth()->id() ?? '');
@@ -436,7 +436,7 @@ class QrVerificationController extends Controller
             ],
             'download_url' => $downloadUrl,
             'preview_url' => $isOwner ? $downloadUrl : null,
-            'editor_url' => $isOwner ? route('documents.index', ['open_oo' => $document->id], false) : null,
+            'editor_url' => $isOwner ? route('documents.index', ['open_oo' => $document->id]) : null,
         ]);
     }
 }
