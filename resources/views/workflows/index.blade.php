@@ -632,8 +632,9 @@ function renderTable() {
                     </button>
                     ${showSignedDownload
                         ? `<a href="${signedDownloadUrl}" target="_blank"
-                            class="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded-lg transition" title="Télécharger signé">
-                            <i class="fas fa-download text-sm"></i>
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-green-300 text-green-700 bg-green-50 hover:bg-green-100 text-xs font-semibold transition" title="Télécharger le document signé">
+                            <i class="fa-solid fa-file-pdf text-sm"></i>
+                            Voir signé
                         </a>`
                         : `<button onclick='openViewMode(${JSON.stringify(wf)})'
                             class="p-1.5 text-purple-500 hover:bg-purple-50 rounded-lg transition" title="Vue lecture">
@@ -2154,8 +2155,9 @@ function renderStepOperation() {
             <div class="flex flex-wrap gap-2">
                 ${showSignedDownload
                     ? `<a href="${signedDownloadUrl}" target="_blank"
-                        class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg flex items-center gap-2 transition">
-                        <i class="fas fa-download"></i> Télécharger signé
+                        class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-green-300 text-green-700 bg-green-50 hover:bg-green-100 text-xs font-semibold transition">
+                        <i class="fa-solid fa-file-pdf text-sm"></i>
+                        Voir signé
                     </a>`
                     : `<button type="button" onclick='duplicateWorkflow("${viewingWf.id}")'
                         class="px-4 py-2 bg-[#2453d6] hover:bg-[#1f47bb] text-white text-sm font-semibold rounded-lg flex items-center gap-2 transition">
