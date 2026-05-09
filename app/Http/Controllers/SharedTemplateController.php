@@ -1207,6 +1207,13 @@ class SharedTemplateController extends Controller
             $isWordContent = preg_match('#word/(document|header|footer|endnote|footnote)#i', $name);
             if ($isWordContent) {
                 $newContent = $this->defragmentRuns($xmlContent);
+                if (!is_string($newContent) || $newContent === '') {
+                    \Log::warning('replaceInOfficeFile defragmentRuns returned invalid content, fallback to original XML', [
+                        'file' => $name,
+                        'preg_error' => function_exists('preg_last_error_msg') ? preg_last_error_msg() : preg_last_error(),
+                    ]);
+                    $newContent = $xmlContent;
+                }
             } else {
                 $newContent = $xmlContent;
             }
@@ -1562,7 +1569,7 @@ class SharedTemplateController extends Controller
      */
     private function defragmentRuns(string $xml): string
     {
-        return preg_replace_callback(
+        $result = preg_replace_callback(
             '/<w:p[ >].*?<\/w:p>/s',
             function (array $match) {
                 $para = $match[0];
@@ -1645,6 +1652,15 @@ class SharedTemplateController extends Controller
             },
             $xml
         );
+
+        if (!is_string($result)) {
+            \Log::warning('defragmentRuns regex failed, preserving original XML', [
+                'preg_error' => function_exists('preg_last_error_msg') ? preg_last_error_msg() : preg_last_error(),
+            ]);
+            return $xml;
+        }
+
+        return $result;
     }
 }
 
