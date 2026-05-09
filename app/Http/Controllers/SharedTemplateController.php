@@ -389,17 +389,27 @@ class SharedTemplateController extends Controller
                 // On conserve donc la source éditable, mais le document canonique devient le PDF.
                 $pdfAbsPath = $this->convertOfficeToPdf($absPath);
                 if ($pdfAbsPath && file_exists($pdfAbsPath)) {
-                    $pdfDestPath = 'documents/' . pathinfo($destPath, PATHINFO_FILENAME) . '.pdf';
-                    Storage::disk('public')->put($pdfDestPath, file_get_contents($pdfAbsPath));
+                    if ($this->isSuspiciousPdf($pdfAbsPath)) {
+                        $storagePath = $sourceStoragePath;
+                        $generationWarning = 'La conversion PDF a produit un fichier invalide ou vide. Le document source editable a ete conserve afin d\'eviter un document vierge.';
+                        @unlink($pdfAbsPath);
+                        \Log::warning('GENERATE suspicious PDF detected, fallback to source', [
+                            'template_id' => $template->id ?? null,
+                            'pdf_path' => $pdfAbsPath,
+                        ]);
+                    } else {
+                        $pdfDestPath = 'documents/' . pathinfo($destPath, PATHINFO_FILENAME) . '.pdf';
+                        Storage::disk('public')->put($pdfDestPath, file_get_contents($pdfAbsPath));
 
-                    $storagePath = '/storage/' . $pdfDestPath;
-                    $mimeType = 'application/pdf';
-                    $ext = 'pdf';
+                        $storagePath = '/storage/' . $pdfDestPath;
+                        $mimeType = 'application/pdf';
+                        $ext = 'pdf';
 
-                    @unlink($pdfAbsPath);
+                        @unlink($pdfAbsPath);
 
-                    if ($outputFormat !== 'pdf') {
-                        $generationWarning = 'Le template Office a ete converti automatiquement en PDF afin de permettre le circuit de signature. La source editable a ete conservee dans l\'historique des versions.';
+                        if ($outputFormat !== 'pdf') {
+                            $generationWarning = 'Le template Office a ete converti automatiquement en PDF afin de permettre le circuit de signature. La source editable a ete conservee dans l\'historique des versions.';
+                        }
                     }
                 } else {
                     $storagePath = $sourceStoragePath;
@@ -777,6 +787,28 @@ class SharedTemplateController extends Controller
             \Illuminate\Support\Facades\Log::warning('convertOfficeToPdf (OO fallback) failed: ' . $e->getMessage());
             return null;
         }
+    }
+
+    /**
+     * Detecte les PDF tres probablement invalides/vides produits par un convertisseur.
+     */
+    private function isSuspiciousPdf(string $absPdfPath): bool
+    {
+        if (!file_exists($absPdfPath)) {
+            return true;
+        }
+
+        $size = @filesize($absPdfPath);
+        if ($size === false || $size < 2048) {
+            return true;
+        }
+
+        $head = @file_get_contents($absPdfPath, false, null, 0, 4096);
+        if (!is_string($head) || strpos($head, '%PDF-') !== 0) {
+            return true;
+        }
+
+        return false;
     }
 
     /**
