@@ -1026,9 +1026,8 @@ class MeetingController extends Controller
         }
 
         /**
-         * Scelle les zones @@@ sans supprimer le texte voisin.
-         * Si un paragraphe contient du texte + @@@, on enlève seulement le token
-         * puis on ajoute la table de signature juste après ce paragraphe.
+         * Remplace chaque paragraphe contenant @@@ par une table Word centrée
+         * 10 cm (largeur) × 8 cm (hauteur), encadrée, fond bleu pâle.
          */
         private function sealSignatureZones(string $xml): string
         {
@@ -1074,55 +1073,14 @@ class MeetingController extends Controller
                 '</w:tbl>' .
                 '<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="0"/></w:pPr></w:p>';
 
-            // Traiter chaque paragraphe : conserver le texte et remplacer uniquement @@@
+            // Trouver chaque <w:p>…</w:p> dont le texte contient @@@ et le remplacer
             $sealed = preg_replace_callback(
                 '/<w:p[ >][\s\S]*?<\/w:p>/',  // pas de /U : *? doit rester lazy
                 static function (array $m) use ($signatureTableXml): string {
-                    $paraXml = $m[0];
-
-                    if (!preg_match_all('/<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>/s', $paraXml, $tMatches)) {
-                        return $paraXml;
-                    }
-
-                    $fullText = implode('', $tMatches[1]);
-                    if (!str_contains($fullText, '@@@')) {
-                        return $paraXml;
-                    }
-
-                    $cleaned = str_replace('@@@', '', $fullText);
-
-                    // Si le paragraphe n'avait que @@@, remplacer par la table seule.
-                    if (trim($cleaned) === '') {
+                    if (str_contains(strip_tags($m[0]), '@@@')) {
                         return $signatureTableXml;
                     }
-
-                    // Sinon conserver la ligne (ex: "Abidjan, le {{DATE}}") et
-                    // ajouter la table après.
-                    $firstDone = false;
-                    $newPara = preg_replace_callback(
-                        '/<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>/s',
-                        static function (array $tm) use ($cleaned, &$firstDone): string {
-                            if (!$firstDone) {
-                                $firstDone = true;
-                                preg_match('/^<w:t([^>]*)>/', $tm[0], $tagM);
-                                $attrs = $tagM[1] ?? '';
-                                if (!str_contains($attrs, 'xml:space') &&
-                                    (str_starts_with($cleaned, ' ') || str_ends_with($cleaned, ' '))) {
-                                    $attrs .= ' xml:space="preserve"';
-                                }
-                                $safe = htmlspecialchars($cleaned, ENT_XML1 | ENT_COMPAT, 'UTF-8');
-                                return "<w:t{$attrs}>{$safe}</w:t>";
-                            }
-                            return '<w:t/>';
-                        },
-                        $paraXml
-                    );
-
-                    if ($newPara === null) {
-                        return $paraXml;
-                    }
-
-                    return $newPara . $signatureTableXml;
+                    return $m[0];
                 },
                 $xml
             );

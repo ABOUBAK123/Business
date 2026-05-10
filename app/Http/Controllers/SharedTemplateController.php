@@ -252,7 +252,7 @@ class SharedTemplateController extends Controller
          *  QR CODE — token + URL de vérification
          * ══════════════════════════════════════════════════════════ */
         $qrToken   = Str::random(40);
-        $verifyUrl = route('qr.download', ['token' => $qrToken]);
+        $verifyUrl = route('qr.public', ['token' => $qrToken]);
 
         // Position QR prioritaire: paramètre OnlyOffice/API Signature (signature_qr_position)
         // Fallback: anciens paramètres qr_image_* (en mm)

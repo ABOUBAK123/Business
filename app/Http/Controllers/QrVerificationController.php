@@ -1,15 +1,3 @@
-    /**
-     * Nettoie le nom de fichier pour le téléchargement.
-     */
-    private function getSafeDownloadFilename(Document $document, ?string $ext = null): string
-    {
-        $safeTitle = (string) $document->title;
-        $safeTitle = preg_replace('/[\x00-\x1f\x7f\/\\:*?"<>|]+/', ' ', $safeTitle) ?: $safeTitle;
-        $safeTitle = preg_replace('/\s+/', ' ', $safeTitle) ?: $safeTitle;
-        $safeTitle = substr(trim($safeTitle), 0, 200) ?: 'document';
-        $ext = $ext ?: (pathinfo($safeTitle, PATHINFO_EXTENSION) ?: 'pdf');
-        return pathinfo($safeTitle, PATHINFO_EXTENSION) === $ext ? $safeTitle : ($safeTitle . '.' . $ext);
-    }
 <?php
 
 namespace App\Http\Controllers;
@@ -23,6 +11,16 @@ use Illuminate\Support\Facades\Storage;
 
 class QrVerificationController extends Controller
 {
+    private function getSafeDownloadFilename(Document $document, ?string $ext = null): string
+    {
+        $safeTitle = (string) $document->title;
+        $safeTitle = preg_replace('/[\x00-\x1f\x7f\/\\:*?"<>|]+/', ' ', $safeTitle) ?: $safeTitle;
+        $safeTitle = preg_replace('/\s+/', ' ', $safeTitle) ?: $safeTitle;
+        $safeTitle = substr(trim($safeTitle), 0, 200) ?: 'document';
+        $ext = $ext ?: (pathinfo($safeTitle, PATHINFO_EXTENSION) ?: 'pdf');
+        return pathinfo($safeTitle, PATHINFO_EXTENSION) === $ext ? $safeTitle : ($safeTitle . '.' . $ext);
+    }
+
     private function normalizePublicStoragePath(string $sourcePath): string
     {
         $path = trim($sourcePath);
@@ -312,6 +310,54 @@ class QrVerificationController extends Controller
     {
         // Pré-remplir le token depuis l'URL ?token=...
         return view('qr-verification.index', ['token' => request('token', '')]);
+    }
+
+    /**
+     * Page publique de vérification (accessible sans auth, cible du QR code).
+     * Affiche les infos du document + lien de téléchargement de la version signée.
+     */
+    public function publicLanding(string $token)
+    {
+        $token = trim($token);
+        abort_if($token === '', 404);
+
+        $document  = Document::withTrashed()
+            ->with(['owner', 'issuingAdministration'])
+            ->where('qr_token', $token)
+            ->first();
+
+        $signatureModel = null;
+        if (!$document) {
+            $signatureModel = Signature::with(['document' => fn($q) => $q->withTrashed()->with(['owner', 'issuingAdministration']), 'signer'])
+                ->where('qr_code_token', $token)
+                ->first();
+            $document = $signatureModel?->document;
+        }
+
+        abort_if(!$document, 404, 'Document introuvable');
+
+        // Statut de signature
+        $isSigned = !empty($document->signed_file_path)
+            || $document->status === 'signed'
+            || (!empty($document->final_file_path)
+                && strtolower((string) pathinfo((string) $document->final_file_path, PATHINFO_EXTENSION)) === 'pdf'
+                && $document->signed_at !== null);
+
+        // Dernière signature valide
+        $lastSignature = $signatureModel;
+        if (!$lastSignature && $isSigned) {
+            $lastSignature = Signature::with('signer')
+                ->where('document_id', $document->id)
+                ->where('status', 'valid')
+                ->orderByDesc('signed_at')
+                ->first();
+        }
+
+        $ext         = $isSigned ? 'pdf' : (pathinfo((string) ($document->file_path ?? ''), PATHINFO_EXTENSION) ?: 'pdf');
+        $filename    = $this->getSafeDownloadFilename($document, $ext);
+        $downloadUrl = route('qr.download', ['token' => $token, 'filename' => $filename]);
+
+        return view('qr-verification.public', compact('document', 'isSigned', 'lastSignature', 'downloadUrl', 'token'));
     }
 
     /**

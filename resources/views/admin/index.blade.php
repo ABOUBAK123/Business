@@ -2091,79 +2091,249 @@ $_oc = [
         @endif
 
         @if($steps->isNotEmpty())
-        <div class="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3">
-          <div class="flex items-center justify-between gap-2 flex-wrap">
-            <div class="text-xs font-semibold text-gray-700">Suivi de validation des directeurs</div>
-            <div class="text-xs text-gray-600">
-              @if($status === 'rejected' && $rejectedStepIndex >= 0)
-                Rejet à l'étape {{ min($rejectedStepIndex + 1, $totalSteps) }}/{{ $totalSteps }}
-              @elseif($status === 'validated')
-                Circuit terminé ({{ $totalSteps }}/{{ $totalSteps }})
+        @php
+          $kindLabels = [
+            'target_entity_manager' => 'Responsable entité cible',
+            'chef_service'          => 'Chef de service',
+            'sous_directeur'        => 'Sous-Directeur',
+            'directeur'             => 'Directeur',
+            'drh_final'             => 'DRH / Ressources Humaines',
+          ];
+          $progressPct = $totalSteps > 0 ? (int) round(($completedSteps / $totalSteps) * 100) : 0;
+          $circuitId   = 'circuit_' . $request->id;
+          $circuitOpen = ($status === 'pending');
+          $nextStep    = ($status === 'pending' && $steps->has($currentStepIndex)) ? $steps->get($currentStepIndex) : null;
+          $nextApproverName = $nextStep ? ($allUsers->firstWhere('id', (string) data_get($nextStep, 'user_id'))?->name ?? 'Valideur') : null;
+          $nextKindLabel    = $nextStep ? ($kindLabels[data_get($nextStep, 'kind', '')] ?? data_get($nextStep, 'profile', '')) : null;
+        @endphp
+
+        {{-- Circuit de validation --}}
+        <div class="mt-3 rounded-xl overflow-hidden border
+          {{ $status === 'validated' ? 'border-emerald-200' : ($status === 'rejected' ? 'border-red-200' : 'border-blue-200') }}">
+
+          {{-- Header cliquable --}}
+          <button type="button"
+            onclick="(function(el){ el.classList.toggle('hidden') })(document.getElementById('{{ $circuitId }}'))"
+            class="w-full flex items-center justify-between px-3 py-2.5 text-left gap-2
+              {{ $status === 'validated' ? 'bg-emerald-50' : ($status === 'rejected' ? 'bg-red-50' : 'bg-blue-50') }}">
+
+            <div class="flex items-center gap-2">
+              @if($status === 'validated')
+                <span class="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500 text-white shadow-sm">
+                  <i class="fas fa-check-double text-xs"></i>
+                </span>
+                <span class="text-xs font-bold text-emerald-700">Circuit terminé — Mutation approuvée</span>
+              @elseif($status === 'rejected')
+                <span class="flex items-center justify-center w-6 h-6 rounded-full bg-red-500 text-white shadow-sm">
+                  <i class="fas fa-times text-xs"></i>
+                </span>
+                <span class="text-xs font-bold text-red-700">Demande rejetée</span>
               @else
-                Étapes franchies: {{ $completedSteps }}/{{ $totalSteps }}
+                <span class="relative flex items-center justify-center w-6 h-6">
+                  <span class="animate-ping absolute inset-0 rounded-full bg-blue-400 opacity-40"></span>
+                  <span class="relative flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white shadow-sm">
+                    <i class="fas fa-hourglass-half text-xs"></i>
+                  </span>
+                </span>
+                <span class="text-xs font-bold text-blue-700">Circuit de validation en cours</span>
               @endif
             </div>
-          </div>
 
-          <div class="mt-2 h-1.5 w-full rounded-full bg-gray-200 overflow-hidden">
-            @php
-              $progressPct = $totalSteps > 0 ? (int) round(($completedSteps / $totalSteps) * 100) : 0;
-            @endphp
-            <div class="h-full {{ $status === 'rejected' ? 'bg-red-500' : ($status === 'validated' ? 'bg-emerald-500' : 'bg-blue-500') }}" style="width: {{ $progressPct }}%"></div>
-          </div>
+            <div class="flex items-center gap-2 flex-shrink-0">
+              <span class="text-xs font-semibold
+                {{ $status === 'validated' ? 'text-emerald-600' : ($status === 'rejected' ? 'text-red-600' : 'text-blue-600') }}">
+                {{ $completedSteps }}/{{ $totalSteps }}
+              </span>
+              <div class="w-14 h-1.5 rounded-full bg-white/60 overflow-hidden border
+                {{ $status === 'validated' ? 'border-emerald-200' : ($status === 'rejected' ? 'border-red-200' : 'border-blue-200') }}">
+                <div class="h-full rounded-full
+                  {{ $status === 'rejected' ? 'bg-red-500' : ($status === 'validated' ? 'bg-emerald-500' : 'bg-blue-500') }}"
+                  style="width: {{ $progressPct }}%"></div>
+              </div>
+              <i class="fas fa-chevron-down text-xs opacity-40"></i>
+            </div>
+          </button>
 
-          <div class="mt-3 space-y-2">
-            @foreach($steps as $idx => $step)
-            @php
-              $stepApproverName = $allUsers->firstWhere('id', (string) data_get($step, 'user_id'))?->name ?? 'Valideur';
-              $stepProfile = (string) data_get($step, 'profile', 'Niveau');
-              if ($status === 'validated') {
-                $stepState = 'done';
-              } elseif ($status === 'rejected') {
-                if ($rejectedStepIndex >= 0 && $idx === $rejectedStepIndex) {
-                  $stepState = 'rejected';
-                } elseif ($rejectedStepIndex >= 0 && $idx < $rejectedStepIndex) {
-                  $stepState = 'done';
-                } else {
-                  $stepState = 'todo';
-                }
-              } else {
-                if ($idx < $currentStepIndex) {
-                  $stepState = 'done';
-                } elseif ($idx === $currentStepIndex) {
-                  $stepState = 'current';
-                } else {
-                  $stepState = 'todo';
-                }
-              }
+          {{-- Corps du circuit (ouvert si en attente) --}}
+          <div id="{{ $circuitId }}" class="{{ $circuitOpen ? '' : 'hidden' }} bg-white px-3 py-4">
 
-              $stepDotClass = $stepState === 'done'
-                ? 'bg-emerald-500'
-                : ($stepState === 'rejected' ? 'bg-red-500' : ($stepState === 'current' ? 'bg-blue-500' : 'bg-gray-300'));
-              $stepTextClass = $stepState === 'done'
-                ? 'text-emerald-700'
-                : ($stepState === 'rejected' ? 'text-red-700' : ($stepState === 'current' ? 'text-blue-700' : 'text-gray-500'));
-              $stepLabel = $stepState === 'done'
-                ? 'Validée'
-                : ($stepState === 'rejected' ? 'Rejetée' : ($stepState === 'current' ? 'En cours' : 'À venir'));
-            @endphp
-            <div class="flex items-start gap-2">
-              <span class="mt-1 h-2.5 w-2.5 rounded-full {{ $stepDotClass }}"></span>
-              <div class="text-xs min-w-0">
-                <div class="font-semibold {{ $stepTextClass }}">Étape {{ $idx + 1 }} · {{ $stepLabel }}</div>
-                <div class="text-gray-600 truncate">{{ $stepProfile }} - {{ $stepApproverName }}</div>
+            {{-- Barre de progression pleine --}}
+            <div class="mb-4 h-2 w-full rounded-full bg-gray-100 overflow-hidden border border-gray-200">
+              <div class="h-full rounded-full transition-all duration-700
+                {{ $status === 'rejected' ? 'bg-red-400' : ($status === 'validated' ? 'bg-emerald-500' : 'bg-blue-500') }}"
+                style="width: {{ $progressPct }}%"></div>
+            </div>
+
+            {{-- Timeline des étapes --}}
+            <div class="relative">
+              {{-- Ligne verticale de connexion --}}
+              @if($steps->count() > 1)
+              <div class="absolute left-[19px] top-5 bottom-5 w-0.5 bg-gray-200"></div>
+              @endif
+
+              <div class="space-y-4">
+                @foreach($steps as $idx => $step)
+                @php
+                  $sApproverName  = $allUsers->firstWhere('id', (string) data_get($step, 'user_id'))?->name ?? 'Valideur';
+                  $sKind          = (string) data_get($step, 'kind', '');
+                  $sProfile       = (string) data_get($step, 'profile', $sKind);
+                  $sKindLabel     = $kindLabels[$sKind] ?? $sProfile;
+                  $sWords         = preg_split('/\s+/', trim($sApproverName));
+                  $sInitials      = strtoupper(substr($sWords[0] ?? '', 0, 1)) . strtoupper(substr($sWords[1] ?? '', 0, 1));
+
+                  $sHistoryEntry  = $history->first(fn($h) => (int) data_get($h, 'step_index') === $idx);
+                  $sActedAt       = $sHistoryEntry ? data_get($sHistoryEntry, 'acted_at') : null;
+                  $sComment       = $sHistoryEntry ? data_get($sHistoryEntry, 'comment') : null;
+
+                  if ($status === 'validated') {
+                    $sState = 'done';
+                  } elseif ($status === 'rejected') {
+                    if ($rejectedStepIndex >= 0 && $idx === $rejectedStepIndex) $sState = 'rejected';
+                    elseif ($rejectedStepIndex >= 0 && $idx < $rejectedStepIndex) $sState = 'done';
+                    else $sState = 'todo';
+                  } else {
+                    if ($idx < $currentStepIndex) $sState = 'done';
+                    elseif ($idx === $currentStepIndex) $sState = 'current';
+                    else $sState = 'todo';
+                  }
+                @endphp
+
+                <div class="relative flex items-start gap-3">
+                  {{-- Icône de l'étape --}}
+                  <div class="relative z-10 flex-shrink-0">
+                    @if($sState === 'done')
+                      <div class="w-10 h-10 rounded-full bg-emerald-500 border-2 border-emerald-200 flex items-center justify-center shadow">
+                        <i class="fas fa-check text-white text-xs"></i>
+                      </div>
+                    @elseif($sState === 'rejected')
+                      <div class="w-10 h-10 rounded-full bg-red-500 border-2 border-red-200 flex items-center justify-center shadow">
+                        <i class="fas fa-times text-white text-xs"></i>
+                      </div>
+                    @elseif($sState === 'current')
+                      <div class="relative w-10 h-10">
+                        <span class="animate-ping absolute inset-0 rounded-full bg-blue-400 opacity-40"></span>
+                        <div class="relative w-10 h-10 rounded-full bg-blue-500 border-2 border-blue-200 flex items-center justify-center shadow">
+                          <i class="fas fa-hourglass-half text-white text-xs"></i>
+                        </div>
+                      </div>
+                    @else
+                      <div class="w-10 h-10 rounded-full bg-gray-100 border-2 border-gray-300 flex items-center justify-center">
+                        <span class="text-xs font-bold text-gray-400">{{ $idx + 1 }}</span>
+                      </div>
+                    @endif
+                  </div>
+
+                  {{-- Contenu de l'étape --}}
+                  <div class="flex-1 min-w-0 pb-1">
+                    <div class="flex items-start justify-between gap-2 flex-wrap">
+                      <div class="min-w-0">
+                        {{-- Rôle + badge état --}}
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                          <span class="text-xs font-bold
+                            {{ $sState === 'done' ? 'text-emerald-700' : ($sState === 'rejected' ? 'text-red-700' : ($sState === 'current' ? 'text-blue-700' : 'text-gray-400')) }}">
+                            {{ $sKindLabel }}
+                          </span>
+                          @if($sState === 'done')
+                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
+                              <i class="fas fa-check text-xs"></i> Validé
+                            </span>
+                          @elseif($sState === 'rejected')
+                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+                              <i class="fas fa-times text-xs"></i> Rejeté
+                            </span>
+                          @elseif($sState === 'current')
+                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 animate-pulse">
+                              <i class="fas fa-clock text-xs"></i> En attente
+                            </span>
+                          @else
+                            <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs text-gray-400 bg-gray-100">
+                              À venir
+                            </span>
+                          @endif
+                        </div>
+
+                        {{-- Nom du responsable avec avatar initiales --}}
+                        <div class="flex items-center gap-1.5 mt-1">
+                          <div class="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0
+                            {{ $sState === 'done' ? 'bg-emerald-100 text-emerald-700' : ($sState === 'rejected' ? 'bg-red-100 text-red-700' : ($sState === 'current' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400')) }}">
+                            {{ $sInitials ?: '?' }}
+                          </div>
+                          <span class="text-xs font-medium {{ $sState === 'todo' ? 'text-gray-400' : 'text-gray-700' }} truncate">
+                            {{ $sApproverName }}
+                          </span>
+                        </div>
+                      </div>
+
+                      {{-- Date de l'action --}}
+                      @if($sActedAt)
+                      <div class="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
+                        <i class="far fa-clock mr-0.5"></i>
+                        {{ \Carbon\Carbon::parse($sActedAt)->format('d/m/Y à H:i') }}
+                      </div>
+                      @endif
+                    </div>
+
+                    {{-- Commentaire / motif de rejet --}}
+                    @if($sComment)
+                    <div class="mt-2 rounded-lg px-3 py-2 text-xs flex items-start gap-2
+                      {{ $sState === 'rejected' ? 'bg-red-50 border border-red-100 text-red-700' : 'bg-gray-50 border border-gray-100 text-gray-600' }}">
+                      <i class="fas fa-comment-alt mt-0.5 opacity-60 flex-shrink-0"></i>
+                      <span>{{ $sComment }}</span>
+                    </div>
+                    @endif
+                  </div>
+                </div>
+                @endforeach
               </div>
             </div>
-            @endforeach
-          </div>
-        </div>
+
+            {{-- Callout "Prochain valideur" --}}
+            @if($status === 'pending' && $nextStep)
+            <div class="mt-4 rounded-xl bg-blue-50 border border-blue-200 px-4 py-3 flex items-center gap-3">
+              <div class="flex-shrink-0 w-9 h-9 rounded-full bg-blue-500 flex items-center justify-center shadow-sm">
+                <i class="fas fa-user-check text-white text-sm"></i>
+              </div>
+              <div class="min-w-0">
+                <div class="text-xs font-bold text-blue-900">Prochain valideur</div>
+                <div class="text-xs text-blue-700 truncate">
+                  {{ $nextApproverName }}
+                  <span class="mx-1 opacity-40">·</span>
+                  {{ $nextKindLabel }}
+                </div>
+              </div>
+            </div>
+            @endif
+
+            {{-- Callout "Validée" --}}
+            @if($status === 'validated')
+            <div class="mt-4 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 flex items-center gap-3">
+              <div class="flex-shrink-0 w-9 h-9 rounded-full bg-emerald-500 flex items-center justify-center shadow-sm">
+                <i class="fas fa-check-double text-white text-sm"></i>
+              </div>
+              <div>
+                <div class="text-xs font-bold text-emerald-800">Mutation approuvée par tous les responsables</div>
+                <div class="text-xs text-emerald-600">Décision finale le {{ optional($request->updated_at)->format('d/m/Y') }}</div>
+              </div>
+            </div>
+            @endif
+
+            {{-- Callout "Rejetée" avec motif global --}}
+            @if($status === 'rejected' && data_get($request->metadata, 'rejection_reason'))
+            <div class="mt-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3 flex items-start gap-3">
+              <div class="flex-shrink-0 w-9 h-9 rounded-full bg-red-500 flex items-center justify-center shadow-sm mt-0.5">
+                <i class="fas fa-ban text-white text-sm"></i>
+              </div>
+              <div class="min-w-0">
+                <div class="text-xs font-bold text-red-800">Motif de rejet</div>
+                <div class="text-xs text-red-700">{{ data_get($request->metadata, 'rejection_reason') }}</div>
+              </div>
+            </div>
+            @endif
+
+          </div>{{-- fin corps circuit --}}
+        </div>{{-- fin circuit --}}
         @endif
 
-        @if($status === 'rejected' && data_get($request->metadata, 'rejection_reason'))
-        <div class="mt-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">
-          Motif du rejet: {{ data_get($request->metadata, 'rejection_reason') }}
-        </div>
-        @endif
       </div>
       @empty
       <div class="rounded-xl bg-gray-50 border border-gray-200 px-3 py-3 text-sm text-gray-500">Aucune demande de mutation pour le moment.</div>

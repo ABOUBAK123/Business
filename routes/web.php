@@ -152,6 +152,9 @@ Route::get('/meetings/qr/{token}/lookup', [MeetingAttendanceController::class, '
 // Téléchargement public d'un document via token QR
 Route::get('/qr-download/{token}', [QrVerificationController::class, 'downloadByToken'])->name('qr.download');
 
+// Page de vérification publique (scannée depuis le QR du document)
+Route::get('/qr/{token}', [QrVerificationController::class, 'publicLanding'])->name('qr.public');
+
 // Application (auth requise)
 Route::middleware('auth')->group(function () {
 
