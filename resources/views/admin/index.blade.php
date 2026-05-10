@@ -2029,6 +2029,12 @@ $_oc = [
           }
         })();
       </script>
+      <div class="pt-4">
+        <button type="submit" class="w-full px-4 py-3 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition">
+          Envoyer la demande
+        </button>
+      </div>
+    </form>
   </section>
 
   <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
@@ -2165,6 +2171,7 @@ $_oc = [
     </div>
   </section>
 </div>
+@endif
 @else
 <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
   <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
