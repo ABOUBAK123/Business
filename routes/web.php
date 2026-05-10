@@ -337,6 +337,7 @@ Route::middleware('auth')->group(function () {
             ]);
         })->name('personnel.mutation-requests.index');
         Route::post('/personnel/mutation-requests', [AdminController::class, 'storePersonnelMutationRequest'])->name('personnel.mutation-requests.store');
+        Route::get('/personnel/mutation-requests/{event}/attachment/{attachmentIndex}', [AdminController::class, 'downloadPersonnelMutationRequestAttachment'])->name('personnel.mutation-requests.attachment.download');
         Route::patch('/personnel/mutation-requests/{event}/status', [AdminController::class, 'updatePersonnelMutationRequestStatus'])->name('personnel.mutation-requests.status');
         Route::post('/templates/upload-file', [AdminController::class, 'uploadTemplateFile'])->name('admin.templates.uploadFile');
         Route::post('/templates/{template}/detect-vars', [AdminController::class, 'detectTemplateVars'])->name('admin.templates.detectVars');

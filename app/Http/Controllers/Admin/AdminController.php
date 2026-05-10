@@ -1252,6 +1252,8 @@ class AdminController extends Controller
             'target_sub_entity_code' => ['required', 'string', 'max:100'],
             'summary' => ['nullable', 'string'],
             'notes' => ['nullable', 'string'],
+            'attachments' => ['nullable', 'array'],
+            'attachments.*' => ['nullable', 'file', 'max:20480', 'mimes:pdf,doc,docx,jpg,jpeg,png,zip'],
         ]);
 
         $employee = PersonnelEmployee::with('subEntity')->findOrFail($validated['employee_id']);
@@ -1296,6 +1298,7 @@ class AdminController extends Controller
                 'source_sub_entity_name' => (string) ($sourceSubEntity?->name ?? '-'),
                 'target_sub_entity_code' => (string) $targetSubEntity->code,
                 'target_sub_entity_name' => (string) $targetSubEntity->name,
+                'attachments' => [],
             ],
             'approval_workflow' => [
                 'type' => 'mutation_hierarchical',
@@ -1305,6 +1308,21 @@ class AdminController extends Controller
                 'history' => [],
             ],
         ];
+
+        if ($request->hasFile('attachments')) {
+            foreach ((array) $request->file('attachments') as $file) {
+                if ($file && $file->isValid()) {
+                    $path = $file->store('personnel/mutation-attachments', 'public');
+
+                    $metadata['mutation_request']['attachments'][] = [
+                        'path' => $path,
+                        'original_name' => $file->getClientOriginalName(),
+                        'mime_type' => $file->getClientMimeType(),
+                        'size' => $file->getSize(),
+                    ];
+                }
+            }
+        }
 
         $employee->careerEvents()->create([
             'recorded_by_user_id' => auth()->id(),
@@ -1327,6 +1345,26 @@ class AdminController extends Controller
             'agent_space_tab' => $validated['agent_space_tab'] ?? 'mutation',
             'selected_employee' => $employee->id,
         ])->with('success', 'Demande de mutation envoyée pour validation.');
+    }
+
+    public function downloadPersonnelMutationRequestAttachment(PersonnelCareerEvent $event, int $attachmentIndex)
+    {
+        if ($event->event_type !== 'mutation_request') {
+            abort(404);
+        }
+
+        $attachments = data_get($event->metadata, 'mutation_request.attachments', []);
+        if (!is_array($attachments) || !isset($attachments[$attachmentIndex])) {
+            abort(404);
+        }
+
+        $attachment = $attachments[$attachmentIndex];
+        $relativePath = ltrim((string) ($attachment['path'] ?? ''), '/');
+        $fileName = (string) ($attachment['original_name'] ?? basename($relativePath));
+
+        abort_unless(Storage::disk('public')->exists($relativePath), 404);
+
+        return Storage::disk('public')->download($relativePath, $fileName);
     }
 
     public function updatePersonnelMutationRequestStatus(Request $request, PersonnelCareerEvent $event)

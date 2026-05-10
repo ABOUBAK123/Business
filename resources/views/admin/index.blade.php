@@ -1889,7 +1889,7 @@ $_oc = [
       Aucune entité de destination disponible pour votre administration.
     </div>
     @else
-    <form method="POST" action="{{ route('admin.personnel.mutation-requests.store') }}" class="space-y-3">
+    <form method="POST" action="{{ route('admin.personnel.mutation-requests.store') }}" enctype="multipart/form-data" class="space-y-3">
       @csrf
       <input type="hidden" name="personnel_tab" value="agent-space">
       <input type="hidden" name="agent_space_tab" value="mutation">
@@ -1919,11 +1919,116 @@ $_oc = [
           class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm">{{ old('notes') }}</textarea>
       </div>
 
-      <button type="submit" class="px-4 py-2 bg-[#2453d6] text-white rounded-xl text-sm font-semibold">
-        <i class="fas fa-paper-plane mr-1"></i> Envoyer la demande
-      </button>
-    </form>
-    @endif
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">Pièces justificatives</label>
+        <div class="space-y-3">
+          <div class="flex gap-2">
+            <input type="file" id="mutationAttachmentInput" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.zip"
+              class="flex-1 text-sm text-gray-700 border border-gray-300 rounded-xl px-3 py-2" />
+            <button type="button" id="mutationAttachBtn" class="px-4 py-2 bg-slate-200 text-slate-800 rounded-xl text-sm font-semibold hover:bg-slate-300 transition">
+              <i class="fas fa-plus mr-1"></i> Joindre
+            </button>
+          </div>
+          <div id="mutationAttachmentsList" class="space-y-2"></div>
+        </div>
+        <p class="text-xs text-gray-500 mt-2">Ajoutez plusieurs justificatifs en cliquant sur le bouton "Joindre".</p>
+      </div>
+
+      <script>
+        (function() {
+          const attachmentInput = document.getElementById('mutationAttachmentInput');
+          const attachBtn = document.getElementById('mutationAttachBtn');
+          const attachmentsList = document.getElementById('mutationAttachmentsList');
+          let files = [];
+
+          attachBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const file = attachmentInput.files[0];
+            if (!file) {
+              alert('Veuillez sélectionner un fichier.');
+              return;
+            }
+
+            const maxSize = 20 * 1024 * 1024;
+            const allowedMimes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/jpeg', 'image/png', 'application/zip'];
+
+            if (file.size > maxSize) {
+              alert('Le fichier ne doit pas dépasser 20 Mo.');
+              return;
+            }
+            if (!allowedMimes.includes(file.type)) {
+              alert('Format non autorisé. Acceptés: PDF, DOC, DOCX, JPG, PNG, ZIP.');
+              return;
+            }
+
+            files.push(file);
+            renderAttachments();
+            attachmentInput.value = '';
+            attachmentInput.focus();
+          });
+
+          attachmentInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              attachBtn.click();
+            }
+          });
+
+          function renderAttachments() {
+            attachmentsList.innerHTML = '';
+            files.forEach((file, index) => {
+              const div = document.createElement('div');
+              div.className = 'flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2';
+              div.innerHTML = `
+                <div class="flex items-center gap-2 min-w-0">
+                  <i class="fas fa-file text-slate-600"></i>
+                  <span class="text-sm text-slate-700 truncate">${file.name}</span>
+                  <span class="text-xs text-slate-500 whitespace-nowrap">(${(file.size / 1024).toFixed(1)} KB)</span>
+                </div>
+                <button type="button" class="text-red-600 hover:text-red-800 text-sm font-semibold"
+                  onclick="mutationRemoveFile(${index})">Supprimer</button>
+              `;
+              attachmentsList.appendChild(div);
+            });
+          }
+
+          window.mutationRemoveFile = function(index) {
+            files.splice(index, 1);
+            renderAttachments();
+          };
+
+          const form = document.querySelector('form[action="{{ route('admin.personnel.mutation-requests.store') }}"]');
+          if (form) {
+            const originalAction = form.action;
+            form.addEventListener('submit', function(e) {
+              if (files.length === 0) return;
+
+              e.preventDefault();
+
+              const formData = new FormData(this);
+              files.forEach(file => {
+                formData.append('attachments[]', file);
+              });
+
+              fetch(originalAction, {
+                method: 'POST',
+                body: formData
+              })
+              .then(response => {
+                if (response.redirected) {
+                  window.location.href = response.url;
+                } else {
+                  return response.text();
+                }
+              })
+              .catch(error => {
+                console.error('Erreur:', error);
+                alert('Erreur lors de l\'envoi.');
+              });
+            });
+          }
+        })();
+      </script>
   </section>
 
   <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
@@ -1944,6 +2049,7 @@ $_oc = [
           return (string) data_get($item, 'status', '') === 'rejected';
         });
         $rejectedStepIndex = $rejectedHistory !== null ? (int) data_get($rejectedHistory, 'step_index', -1) : -1;
+        $attachments = is_array(data_get($request->metadata, 'mutation_request.attachments')) ? data_get($request->metadata, 'mutation_request.attachments') : [];
         $totalSteps = $steps->count();
         if ($status === 'validated') {
           $completedSteps = $totalSteps;
@@ -1964,10 +2070,24 @@ $_oc = [
         <div class="text-xs text-gray-500 mt-2">{{ $request->summary }}</div>
         @endif
 
+        @if(!empty($attachments))
+        <div class="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+          <div class="text-xs font-semibold text-slate-700">Pièce justificative</div>
+          <div class="mt-2 flex flex-wrap gap-2">
+            @foreach($attachments as $attachmentIndex => $attachment)
+            <a href="{{ route('admin.personnel.mutation-requests.attachment.download', [$request, $attachmentIndex]) }}"
+              class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-100">
+              <i class="fas fa-file-upload"></i> {{ $attachment['original_name'] ?? basename($attachment['path'] ?? '') }}
+            </a>
+            @endforeach
+          </div>
+        </div>
+        @endif
+
         @if($steps->isNotEmpty())
         <div class="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3">
           <div class="flex items-center justify-between gap-2 flex-wrap">
-            <div class="text-xs font-semibold text-gray-700">Niveau d'évolution</div>
+            <div class="text-xs font-semibold text-gray-700">Suivi de validation des directeurs</div>
             <div class="text-xs text-gray-600">
               @if($status === 'rejected' && $rejectedStepIndex >= 0)
                 Rejet à l'étape {{ min($rejectedStepIndex + 1, $totalSteps) }}/{{ $totalSteps }}
@@ -3309,6 +3429,7 @@ $_oc = [
           <th class="py-3 pr-4">GRADE</th>
           <th class="py-3 pr-4">EMPLOI</th>
           <th class="py-3 pr-4">JUSTIF</th>
+          <th class="py-3 pr-4">PJ</th>
           <th class="py-3">Action</th>
         </tr>
       </thead>
@@ -3322,6 +3443,7 @@ $_oc = [
           $mutationGrade = $mutationEmployeeMeta['grade'] ?? '-';
           $mutationEmployment = $mutation->employee?->job_title ?: ($mutationEmployeeMeta['employment'] ?? ($mutationEmployeeMeta['emploi'] ?? '-'));
           $mutationJustif = trim((string) ($mutation->summary ?? $mutation->notes ?? ''));
+          $mutationAttachments = is_array(data_get($mutation->metadata, 'mutation_request.attachments')) ? data_get($mutation->metadata, 'mutation_request.attachments') : [];
         @endphp
         <tr class="border-b border-gray-100 align-top">
           <td class="py-3 pr-4 text-gray-600">{{ optional($mutation->created_at)->format('d/m/Y H:i') }}</td>
@@ -3330,6 +3452,18 @@ $_oc = [
           <td class="py-3 pr-4 text-gray-600">{{ $mutationGrade }}</td>
           <td class="py-3 pr-4 text-gray-600">{{ $mutationEmployment }}</td>
           <td class="py-3 pr-4 text-gray-600">{{ $mutationJustif !== '' ? $mutationJustif : '-' }}</td>
+          <td class="py-3 pr-4 text-gray-600">
+            @if(!empty($mutationAttachments))
+              @foreach($mutationAttachments as $attachmentIndex => $attachment)
+              <a href="{{ route('admin.personnel.mutation-requests.attachment.download', [$mutation, $attachmentIndex]) }}"
+                class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-100">
+                <i class="fas fa-file"></i> {{ $attachment['original_name'] ?? basename($attachment['path'] ?? '') }}
+              </a>
+              @endforeach
+            @else
+              -
+            @endif
+          </td>
           <td class="py-3">
             @if($wfCanAct)
             <div class="flex items-center gap-2 whitespace-nowrap">
