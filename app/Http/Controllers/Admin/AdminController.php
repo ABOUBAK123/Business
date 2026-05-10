@@ -37,6 +37,7 @@ use App\Models\AdministrationSmtpSetting;
 use App\Models\PersonnelEmployee;
 use App\Models\PersonnelEmployeeDocument;
 use App\Services\NotificationService;
+use App\Services\Templates\TemplateGenerationCoreService;
 use App\Services\TemplateOfficeTextExtractor;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -1617,6 +1618,10 @@ class AdminController extends Controller
         $cardFilePath = 'workflow-cards/' . $cardFileName;
         Storage::disk('public')->put($cardFilePath, $documentHtml);
 
+        $user = auth()->user();
+        $service = new TemplateGenerationCoreService();
+        $docNumberData = $service->generateDocumentNumber($user);
+
         $document = Document::create([
             'id' => (string) Str::uuid(),
             'title' => 'Carte virtuelle - ' . ($employee->full_name ?: 'Agent'),
@@ -1628,6 +1633,9 @@ class AdminController extends Controller
             'status' => 'draft',
             'owner_id' => (string) auth()->id(),
             'created_by' => (string) auth()->id(),
+            'document_number' => $docNumberData['document_number'],
+            'sub_entity_code' => $docNumberData['sub_entity_code'],
+            'issuing_administration_id' => $docNumberData['issuing_administration_id'],
         ]);
 
         $workflow = Workflow::create([

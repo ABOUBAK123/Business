@@ -16,6 +16,7 @@ use App\Models\WorkflowExecution;
 use App\Models\WorkflowStep;
 use App\Models\Notification;
 use App\Services\NotificationService;
+use App\Services\Templates\TemplateGenerationCoreService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -1109,6 +1110,10 @@ class SignatureController extends Controller
         $filePath  = $file->store('uploads/signatures', 'public');
         $title     = $request->doc_title ?: pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
 
+        $user = Auth::user();
+        $service = new TemplateGenerationCoreService();
+        $docNumberData = $service->generateDocumentNumber($user);
+
         // Créer le document
         $document = Document::create([
             'id'         => Str::uuid(),
@@ -1121,6 +1126,9 @@ class SignatureController extends Controller
             'owner_id'   => Auth::id(),
             'created_by' => Auth::id(),
             'signed_at'  => now(),
+            'document_number' => $docNumberData['document_number'],
+            'sub_entity_code' => $docNumberData['sub_entity_code'],
+            'issuing_administration_id' => $docNumberData['issuing_administration_id'],
         ]);
 
         // Créer la demande de signature (pour enregistrer la zone)
