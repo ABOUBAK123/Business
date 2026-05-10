@@ -1,3 +1,15 @@
+    /**
+     * Nettoie le nom de fichier pour le téléchargement.
+     */
+    private function getSafeDownloadFilename(Document $document, ?string $ext = null): string
+    {
+        $safeTitle = (string) $document->title;
+        $safeTitle = preg_replace('/[\x00-\x1f\x7f\/\\:*?"<>|]+/', ' ', $safeTitle) ?: $safeTitle;
+        $safeTitle = preg_replace('/\s+/', ' ', $safeTitle) ?: $safeTitle;
+        $safeTitle = substr(trim($safeTitle), 0, 200) ?: 'document';
+        $ext = $ext ?: (pathinfo($safeTitle, PATHINFO_EXTENSION) ?: 'pdf');
+        return pathinfo($safeTitle, PATHINFO_EXTENSION) === $ext ? $safeTitle : ($safeTitle . '.' . $ext);
+    }
 <?php
 
 namespace App\Http\Controllers;
@@ -63,15 +75,8 @@ class QrVerificationController extends Controller
             if ($signedNormalized !== '' && Storage::disk('public')->exists($signedNormalized)) {
                 $path = $signedNormalized;
                 $sourcePath = $signedSource;
-
                 $ext  = pathinfo($sourcePath, PATHINFO_EXTENSION) ?: (pathinfo($path, PATHINFO_EXTENSION) ?: 'pdf');
-                // Nettoyer le titre des caractères invalides dans les noms de fichier
-                $safeTitle = (string) $document->title;
-                $safeTitle = preg_replace('/[\x00-\x1f\x7f\/\\\\:*?"<>|]+/', ' ', $safeTitle) ?: $safeTitle;
-                $safeTitle = preg_replace('/\s+/', ' ', $safeTitle) ?: $safeTitle;
-                $safeTitle = substr(trim($safeTitle), 0, 200) ?: 'document';
-                $name = pathinfo($safeTitle, PATHINFO_EXTENSION) === $ext ? $safeTitle : ($safeTitle . '.' . $ext);
-
+                $name = request('filename') ?: $this->getSafeDownloadFilename($document, $ext);
                 try {
                     $absPath = Storage::disk('public')->path($path);
                     if (is_file($absPath) && is_readable($absPath)) {
@@ -170,18 +175,7 @@ class QrVerificationController extends Controller
         }
 
         $ext  = pathinfo($sourcePath, PATHINFO_EXTENSION) ?: (pathinfo($path, PATHINFO_EXTENSION) ?: 'bin');
-
-        // Nettoyer le titre des caractères invalides dans les noms de fichier
-        $safeTitle = (string) $document->title;
-        // Supprimer tous les caractères de contrôle et les slashes
-        $safeTitle = preg_replace('/[\x00-\x1f\x7f\/\\\\:*?"<>|]+/', ' ', $safeTitle) ?: $safeTitle;
-        // Remplacer les espaces multiples par un seul
-        $safeTitle = preg_replace('/\s+/', ' ', $safeTitle) ?: $safeTitle;
-        // Couper à 200 caractères max
-        $safeTitle = substr(trim($safeTitle), 0, 200) ?: 'document';
-
-        $name = pathinfo($safeTitle, PATHINFO_EXTENSION) === $ext ? $safeTitle : ($safeTitle . '.' . $ext);
-
+        $name = request('filename') ?: $this->getSafeDownloadFilename($document, $ext);
         try {
             // Utiliser le chemin absolu directement pour eviter les erreurs de slash avec Storage::download()
             $absPath = Storage::disk('public')->path($path);
@@ -196,7 +190,6 @@ class QrVerificationController extends Controller
                 'normalized_path' => $path,
                 'error' => $e->getMessage(),
             ]);
-
             abort(404, 'Fichier introuvable');
         }
     }
@@ -338,16 +331,7 @@ class QrVerificationController extends Controller
             ->first();
 
         if ($document) {
-            $downloadUrl = route('qr.download', ['token' => $token], false);
-            $currentUserId = (string) (auth()->id() ?? '');
-            $isOwner = $currentUserId !== '' && (
-                (string) $document->owner_id === $currentUserId ||
-                (string) ($document->created_by ?? '') === $currentUserId
-            );
-
             $isSigned = !empty($document->signed_file_path) || (!empty($document->final_file_path) && strtolower((string) pathinfo((string) $document->final_file_path, PATHINFO_EXTENSION)) === 'pdf');
-
-            // Récupérer les infos du signataire depuis la table signatures si disponible
             $lastSignature = null;
             if ($isSigned) {
                 $lastSignature = \App\Models\Signature::with('signer')
@@ -356,7 +340,14 @@ class QrVerificationController extends Controller
                     ->orderByDesc('signed_at')
                     ->first();
             }
-
+            $currentUserId = (string) (auth()->id() ?? '');
+            $isOwner = $currentUserId !== '' && (
+                (string) $document->owner_id === $currentUserId ||
+                (string) ($document->created_by ?? '') === $currentUserId
+            );
+            $ext = $isSigned ? 'pdf' : (pathinfo((string) $document->file_path, PATHINFO_EXTENSION) ?: 'pdf');
+            $filename = $this->getSafeDownloadFilename($document, $ext);
+            $downloadUrl = route('qr.download', ['token' => $token, 'filename' => $filename], false);
             return response()->json([
                 'valid'           => true,
                 'type'            => 'document',
@@ -388,9 +379,11 @@ class QrVerificationController extends Controller
             ->first();
 
         if ($signature && $signature->document) {
-            $downloadUrl = route('qr.download', ['token' => $token], false);
-            $currentUserId = (string) (auth()->id() ?? '');
             $sigDoc = $signature->document;
+            $ext = 'pdf';
+            $filename = $this->getSafeDownloadFilename($sigDoc, $ext);
+            $downloadUrl = route('qr.download', ['token' => $token, 'filename' => $filename], false);
+            $currentUserId = (string) (auth()->id() ?? '');
             $isOwner = $currentUserId !== '' && (
                 (string) $sigDoc->owner_id === $currentUserId ||
                 (string) ($sigDoc->created_by ?? '') === $currentUserId
@@ -445,13 +438,18 @@ class QrVerificationController extends Controller
             ], 404);
         }
 
+        $ext = !empty($document->signed_file_path) || (!empty($document->final_file_path) && strtolower((string) pathinfo((string) $document->final_file_path, PATHINFO_EXTENSION)) === 'pdf')
+            ? 'pdf'
+            : (pathinfo((string) $document->file_path, PATHINFO_EXTENSION) ?: 'pdf');
+        $filename = $this->getSafeDownloadFilename($document, $ext);
         $downloadUrl = route('documents.download', [
             'document' => $document->id,
             'inline' => 1,
+            'filename' => $filename,
         ]);
 
         if (!empty((string) $document->qr_token)) {
-            $downloadUrl = route('qr.download', ['token' => (string) $document->qr_token]);
+            $downloadUrl = route('qr.download', ['token' => (string) $document->qr_token, 'filename' => $filename]);
         }
 
         $currentUserId = (string) (auth()->id() ?? '');
