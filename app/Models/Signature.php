@@ -10,7 +10,7 @@ class Signature extends Model
     use HasUuids;
     public $timestamps = false;
 
-    protected $fillable = ['document_id', 'signer_id', 'signature', 'certificate', 'signed_at', 'reason', 'location', 'is_valid', 'status', 'signature_algorithm'];
+    protected $fillable = ['document_id', 'signer_id', 'signature', 'certificate', 'signed_at', 'reason', 'location', 'is_valid', 'status', 'signature_algorithm', 'qr_code_token'];
     protected $casts = ['is_valid' => 'boolean', 'signed_at' => 'datetime', 'created_at' => 'datetime'];
     protected $hidden = ['signature'];
 

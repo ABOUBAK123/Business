@@ -681,6 +681,9 @@ class SignatureController extends Controller
             'reason'      => 'nullable|string|max:500',
         ]);
 
+        $document = Document::find($request->document_id);
+        $qrToken = $document->qr_token ?: Str::random(40);
+
         Signature::create([
             'id'          => Str::uuid(),
             'document_id' => $request->document_id,
@@ -689,9 +692,14 @@ class SignatureController extends Controller
             'reason'      => $request->reason,
             'status'      => 'valid',
             'is_valid'    => true,
+            'qr_code_token' => Str::random(40),
         ]);
 
-        Document::find($request->document_id)?->update(['status' => 'signed', 'signed_at' => now()]);
+        $document->update([
+            'status' => 'signed',
+            'signed_at' => now(),
+            'qr_token' => $qrToken,
+        ]);
 
         SignatureRequest::where('document_id', $request->document_id)
             ->where('requested_to', Auth::id())
