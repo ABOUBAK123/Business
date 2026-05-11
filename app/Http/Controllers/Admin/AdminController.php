@@ -592,12 +592,36 @@ class AdminController extends Controller
     {
         $tab = $request->get('tab', 'overview');
 
-        $stats = [
-            'users'      => User::count(),
-            'documents'  => Document::whereNull('deleted_at')->count(),
-            'signatures' => Signature::count(),
-            'workflows'  => Workflow::count(),
-        ];
+        // Périmètre d'administration de l'utilisateur connecté (null = super-admin)
+        $adminScope     = $this->resolveAdminScope();
+        $connectedUser  = auth()->user();
+        $agentSpaceCanSearchAll = $this->canSearchAgentSpaceForUser($connectedUser);
+
+        // Statistiques filtrées par périmètre
+        if ($adminScope) {
+            $scopedStatUserIds = UserDirectionAssignment::where('direction_scope_type', $adminScope['type'])
+                ->where('direction_scope_id', $adminScope['id'])
+                ->pluck('user_id');
+            $adminId   = $adminScope['id'];
+            $isEmitter = ($adminScope['type'] === 'emitter');
+            $stats = [
+                'users'      => $scopedStatUserIds->count(),
+                'documents'  => $isEmitter
+                    ? Document::whereNull('deleted_at')->where('issuing_administration_id', $adminId)->count()
+                    : Document::whereNull('deleted_at')->where('recipient_administration_id', $adminId)->count(),
+                'signatures' => $isEmitter
+                    ? Signature::whereHas('document', fn ($q) => $q->where('issuing_administration_id', $adminId))->count()
+                    : Signature::whereHas('document', fn ($q) => $q->where('recipient_administration_id', $adminId))->count(),
+                'workflows'  => Workflow::whereIn('created_by', $scopedStatUserIds)->count(),
+            ];
+        } else {
+            $stats = [
+                'users'      => User::count(),
+                'documents'  => Document::whereNull('deleted_at')->count(),
+                'signatures' => Signature::count(),
+                'workflows'  => Workflow::count(),
+            ];
+        }
 
         $settings       = collect();
         $users          = collect();
@@ -634,7 +658,6 @@ class AdminController extends Controller
         $personnelCareerEvents = collect();
         $personnelMutationRequests = collect();
         $personnelRecentActivity = collect();
-        $agentSpaceCanSearchAll = false;
         $scanLogs = collect();
         $personnelStats = [
             'employees' => 0,
@@ -650,11 +673,6 @@ class AdminController extends Controller
             'reviews' => 0,
             'careerEvents' => 0,
         ];
-
-        // Périmètre d'administration de l'utilisateur connecté (null = super-admin)
-        $adminScope = $this->resolveAdminScope();
-        $connectedUser = auth()->user();
-        $agentSpaceCanSearchAll = $this->canSearchAgentSpaceForUser($connectedUser);
 
         try {
             $settings = AppSetting::all()->keyBy('key');

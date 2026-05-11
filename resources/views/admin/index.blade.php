@@ -137,6 +137,32 @@ if ($tab !== 'personnel' && !array_key_exists($tab, $tabs)) {
 
 {{-- ══════════════════════ APERÇU ══════════════════════ --}}
 @if($tab === 'overview')
+@php
+    $overviewAdminScope = $adminScope ?? null;
+    $overviewAdminName  = null;
+    if ($overviewAdminScope) {
+        if ($overviewAdminScope['type'] === 'emitter') {
+            $overviewAdminName = \App\Models\IssuingAdministration::find($overviewAdminScope['id'])?->name;
+        } else {
+            $overviewAdminName = \App\Models\RecipientAdministration::find($overviewAdminScope['id'])?->name;
+        }
+    }
+@endphp
+@if($overviewAdminScope)
+<div class="mb-5 flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+    <i class="fas fa-building text-blue-500"></i>
+    <div>
+        <span class="text-sm font-semibold text-blue-800">Périmètre : </span>
+        <span class="text-sm text-blue-700">{{ $overviewAdminName ?? $overviewAdminScope['id'] }}</span>
+        <span class="ml-2 text-xs text-blue-500 bg-blue-100 rounded-full px-2 py-0.5">{{ $overviewAdminScope['type'] === 'emitter' ? 'Émetteur' : 'Destinataire' }}</span>
+    </div>
+</div>
+@else
+<div class="mb-5 flex items-center gap-3 bg-violet-50 border border-violet-200 rounded-xl px-4 py-3">
+    <i class="fas fa-globe text-violet-500"></i>
+    <span class="text-sm font-semibold text-violet-800">Super Admin — toutes les administrations</span>
+</div>
+@endif
 <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
     @foreach([
         ['fas fa-users',      $stats['users'],      'Utilisateurs',  'blue'],
