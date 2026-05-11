@@ -22,12 +22,16 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
+use App\Traits\GuardsPermissions;
 use Illuminate\Support\Str;
 
 class DocumentController extends Controller
 {
+    use GuardsPermissions;
+
     public function index(Request $request)
     {
+        $this->guardPermission('documents.view');
         $user = Auth::user();
         $userId = (string) ($user?->id ?? '');
         $userEmail = (string) ($user?->email ?? '');
@@ -190,6 +194,7 @@ class DocumentController extends Controller
 
     public function create()
     {
+        $this->guardPermission('documents.upload');
         return view('documents.create');
     }
 
@@ -198,8 +203,11 @@ class DocumentController extends Controller
      */
     public function uploadAjax(Request $request)
     {
+        // Toute accès au module documents suffit pour uploader ses propres fichiers
+        $this->guardPermission('documents');
         $request->validate([
-            'file'  => 'required|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,odt,ods,odp,csv|max:51200',
+            // zip est ajouté car Windows/WAMP détecte docx/xlsx/pptx comme application/zip
+            'file'  => 'required|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,odt,ods,odp,csv,zip|max:51200',
             'title' => 'nullable|string|max:500',
         ]);
 
@@ -238,9 +246,10 @@ class DocumentController extends Controller
 
     public function store(Request $request)
     {
+        $this->guardPermission('documents.upload');
         $request->validate([
             'title' => 'required|string|max:500',
-            'file'  => 'required|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,odt,ods,odp,csv|max:51200',
+            'file'  => 'required|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,odt,ods,odp,csv,zip|max:51200',
         ]);
 
         $user = Auth::user();
@@ -277,6 +286,7 @@ class DocumentController extends Controller
 
     public function show(Document $document)
     {
+        $this->guardPermission('documents.view');
         abort_if(Auth::id() !== $document->owner_id, 403);
         $document->load(['versions', 'signatures.signer', 'qrCodes']);
         return view('documents.show', compact('document'));
@@ -284,12 +294,14 @@ class DocumentController extends Controller
 
     public function edit(Document $document)
     {
+        $this->guardPermission('documents.view');
         abort_if(Auth::id() !== $document->owner_id, 403);
         return view('documents.edit', compact('document'));
     }
 
     public function update(Request $request, Document $document)
     {
+        $this->guardPermission('documents.view');
         abort_if(Auth::id() !== $document->owner_id, 403);
         $request->validate(['title' => 'required|string|max:500']);
         $document->update($request->only('title', 'description', 'status'));
@@ -298,6 +310,7 @@ class DocumentController extends Controller
 
     public function destroy(Document $document)
     {
+        $this->guardPermission('documents.delete');
         abort_if(Auth::id() !== $document->owner_id, 403);
 
         // Supprimer le fichier physique du disque
@@ -605,6 +618,7 @@ class DocumentController extends Controller
 
     public function share(Request $request, Document $document)
     {
+        $this->guardPermission('documents.share');
         abort_if(!$this->userCanManageDocument($document, Auth::id()), 403);
 
         $request->validate([

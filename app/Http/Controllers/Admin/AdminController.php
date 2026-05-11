@@ -51,10 +51,13 @@ use Illuminate\Support\Facades\Validator;
 use Illuminate\Database\QueryException;
 use Illuminate\Validation\ValidationException;
 use Maatwebsite\Excel\Facades\Excel;
+use App\Traits\GuardsPermissions;
 use Spatie\Activitylog\Models\Activity;
 
 class AdminController extends Controller
 {
+    use GuardsPermissions;
+
     public function recipientsIndex()
     {
         return redirect()->route('admin.index', ['tab' => 'recipients']);
@@ -2497,6 +2500,7 @@ class AdminController extends Controller
 
     public function updatePersonnelLeaveRequestStatus(Request $request, PersonnelLeaveRequest $leaveRequest)
     {
+        $this->guardPermission('personnel.leave.validation');
         $validated = $request->validate([
             'personnel_tab' => ['nullable', 'string'],
             'leave_subtab' => ['nullable', 'string'],
@@ -2786,6 +2790,7 @@ class AdminController extends Controller
 
     public function updatePersonnelTrainingEnrollmentStatus(Request $request, string $enrollmentId)
     {
+        $this->guardPermission('personnel.training');
         $enrollment = PersonnelTrainingEnrollment::with('employee')->findOrFail($enrollmentId);
         $this->abortIfPersonnelEmployeeOutsideScope($enrollment->employee);
 
@@ -3404,6 +3409,7 @@ class AdminController extends Controller
 
     public function updateSettings(Request $request)
     {
+        $this->guardPermission('administration');
         // Seules les clés de la liste blanche sont acceptées
         $data = array_filter(
             $request->except('_token', '_method', 'tab'),
@@ -3475,6 +3481,7 @@ class AdminController extends Controller
     /** POST /admin/smtp-settings — enregistre les réglages SMTP d'une administration. */
     public function saveAdminSmtp(Request $request)
     {
+        $this->guardPermission('administration.email-notifications');
         abort_if(!auth()->check() || auth()->user()->role !== 'admin', 403);
 
         $validated = $request->validate([
@@ -3592,6 +3599,7 @@ class AdminController extends Controller
     // ── API Signature ─────────────────────────────────────────────────────────
     public function saveSignatureProvider(Request $request)
     {
+        $this->guardPermission('administration.signature-provider');
         $administrationId = $request->input('sig_admin_id');
         $adminType        = $request->input('sig_admin_type', 'emitter');
 
@@ -3712,6 +3720,7 @@ class AdminController extends Controller
     // ── Apparence (theming) ───────────────────────────────────────────────────
     public function saveTheming(Request $request)
     {
+        $this->guardPermission('administration.theming');
         $tType = $request->input('t_type', 'emitter');
         $tId   = $request->input('t_id', '');
 
@@ -3827,6 +3836,7 @@ class AdminController extends Controller
 
     public function storeEmitter(Request $request)
     {
+        $this->guardPermission('administration.emitters');
         $request->validate([
             'name' => 'required|string|max:255',
             'code' => 'required|string|max:50|unique:issuing_administrations,code',
@@ -3864,6 +3874,7 @@ class AdminController extends Controller
 
     public function updateEmitter(Request $request, IssuingAdministration $emitter)
     {
+        $this->guardPermission('administration.emitters');
         $request->validate([
             'name' => 'required|string|max:255',
             'code' => 'required|string|max:50|unique:issuing_administrations,code,' . $emitter->id,
@@ -3900,6 +3911,7 @@ class AdminController extends Controller
 
     public function destroyEmitter(IssuingAdministration $emitter)
     {
+        $this->guardPermission('administration.emitters');
         $emitter->delete();
         return back()->with('success', 'Émetteur supprimé.')->withInput(['tab' => 'emitters']);
     }
@@ -4543,6 +4555,7 @@ class AdminController extends Controller
 
     public function storeTemplate(Request $request)
     {
+        $this->guardPermission('administration.templates');
         $request->validate([
             'name'      => 'required|string|max:255',
             'file_name' => 'nullable|string|max:255',
@@ -4686,6 +4699,7 @@ class AdminController extends Controller
 
     public function updateTemplate(Request $request, DocumentTemplate $template)
     {
+        $this->guardPermission('administration.templates');
         $request->validate([
             'name'      => 'required|string|max:255',
             'file_name' => 'nullable|string|max:255',
@@ -4710,6 +4724,7 @@ class AdminController extends Controller
 
     public function destroyTemplate(DocumentTemplate $template)
     {
+        $this->guardPermission('administration.templates');
         $template->delete();
         return back()->with('success', 'Template supprimé.')->withInput(['tab' => 'templates']);
     }
@@ -5053,6 +5068,7 @@ class AdminController extends Controller
     // ── Profils / Rôles ───────────────────────────────────────────────────────
     public function storeProfile(Request $request)
     {
+        $this->guardPermission('administration.user-profiles');
         $data = $request->validate([
             'name'                => 'required|string|max:255',
             'description'         => 'nullable|string|max:500',
@@ -5080,6 +5096,7 @@ class AdminController extends Controller
 
     public function updateProfile(Request $request, AdministrationProfile $profile)
     {
+        $this->guardPermission('administration.user-profiles');
         $data = $request->validate([
             'name'                => 'required|string|max:255',
             'description'         => 'nullable|string|max:500',
@@ -5106,6 +5123,7 @@ class AdminController extends Controller
 
     public function assignProfile(Request $request)
     {
+        $this->guardPermission('administration.user-profiles');
         $data = $request->validate([
             'user_id'    => 'required|exists:users,id',
             'profile_id' => 'nullable|exists:administration_profiles,id',
@@ -5116,6 +5134,7 @@ class AdminController extends Controller
 
     public function destroyProfile(AdministrationProfile $profile)
     {
+        $this->guardPermission('administration.user-profiles');
         $profile->delete();
         return back()->with('success', 'Profil supprimé.')->withInput(['tab' => 'user-profiles']);
     }
@@ -5154,6 +5173,7 @@ class AdminController extends Controller
     // ── Utilisateurs (onglet admin) ────────────────────────────────────────
     public function storeUserTab(Request $request)
     {
+        $this->guardPermission('administration.users');
         $data = $request->validate([
             'nom'            => 'required|string|max:100',
             'prenoms'        => 'nullable|string|max:150',
@@ -5255,6 +5275,7 @@ class AdminController extends Controller
 
     public function updateUserTab(Request $request, User $user)
     {
+        $this->guardPermission('administration.users');
         $data = $request->validate([
             'nom'            => 'required|string|max:100',
             'prenoms'        => 'nullable|string|max:150',
@@ -5347,6 +5368,7 @@ class AdminController extends Controller
 
     public function destroyUserTab(User $user)
     {
+        $this->guardPermission('administration.users');
         if ($user->avatar && str_starts_with($user->avatar, 'storage/')) {
             $oldStorage = ltrim(substr($user->avatar, strlen('storage/')), '/');
             if (Storage::disk('public')->exists($oldStorage)) {
@@ -5363,6 +5385,7 @@ class AdminController extends Controller
 
     public function toggleUserStatusTab(User $user)
     {
+        $this->guardPermission('administration.users');
         $user->update(['status' => $user->status === 'active' ? 'inactive' : 'active']);
         return redirect()->route('admin.index', ['tab' => 'users'])->with('success', 'Statut mis à jour.');
     }

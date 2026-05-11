@@ -17,6 +17,7 @@ use App\Models\WorkflowStep;
 use App\Models\Notification;
 use App\Services\NotificationService;
 use App\Services\Templates\TemplateGenerationCoreService;
+use App\Traits\GuardsPermissions;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -27,6 +28,8 @@ use Illuminate\Support\Str;
 
 class SignatureController extends Controller
 {
+    use GuardsPermissions;
+
     private ?string $lastPlatformError = null;
     private ?string $lastPlatformWorkflowId = null;
 
@@ -508,6 +511,7 @@ class SignatureController extends Controller
 
     public function index()
     {
+        $this->guardPermission('signatures.view');
         $userId = Auth::id();
 
         // Demandes de signature en attente pour moi
@@ -675,6 +679,7 @@ class SignatureController extends Controller
 
     public function store(Request $request)
     {
+        $this->guardPermission('signatures.request');
         $request->validate([
             'document_id' => 'required|exists:documents,id',
             'signature'   => 'required|string',
@@ -711,11 +716,13 @@ class SignatureController extends Controller
 
     public function show(Signature $signature)
     {
+        $this->guardPermission('signatures.view');
         return view('signatures.show', compact('signature'));
     }
 
     public function request(Request $request)
     {
+        $this->guardPermission('signatures.request');
         $request->validate([
             'document_id'  => 'required|exists:documents,id',
             'requested_to' => 'required|exists:users,id',
@@ -738,6 +745,7 @@ class SignatureController extends Controller
 
     public function decline(SignatureRequest $signatureRequest)
     {
+        $this->guardPermission('signatures.reject');
         abort_if($signatureRequest->requested_to !== Auth::id(), 403);
         $signatureRequest->update(['status' => 'declined', 'responded_at' => now()]);
         return back()->with('success', 'Demande refusée.');
@@ -822,10 +830,15 @@ class SignatureController extends Controller
             ->with('success', 'Document signé avec succès. La signature a été positionnée à la page ' . $request->zone_page . '.');
     }
 
-    public function create() { return view('signatures.create'); }
+    public function create()
+    {
+        $this->guardPermission('signatures.request');
+        return view('signatures.create');
+    }
 
     public function serveWorkflowDocument(string $executionId)
     {
+        $this->guardPermission('workflows.view');
         $execution = WorkflowExecution::with(['workflow.steps.assignee', 'document'])->find($executionId);
         abort_unless($execution && $execution->document, 404);
 
@@ -860,6 +873,7 @@ class SignatureController extends Controller
      */
     public function workflowAction(Request $request)
     {
+        $this->guardPermission('workflows.validate');
         $request->validate([
             'execution_ids'   => 'required|array',
             'execution_ids.*' => 'required|string',
@@ -1012,6 +1026,7 @@ class SignatureController extends Controller
      */
     public function workflowCreate(Request $request)
     {
+        $this->guardPermission('signatures.request');
         $request->validate([
             'name'                    => 'required|string|max:255',
             'description'             => 'nullable|string',
@@ -1092,6 +1107,7 @@ class SignatureController extends Controller
      */
     public function showUpload()
     {
+        $this->guardPermission('signatures.request');
         return view('signatures.upload');
     }
 
@@ -1100,6 +1116,7 @@ class SignatureController extends Controller
      */
     public function handleUpload(Request $request)
     {
+        $this->guardPermission('signatures.request');
         $request->validate([
             'pdf_file'    => 'required|file|mimes:pdf|max:20480',
             'signature'   => 'required|string',
@@ -1573,7 +1590,9 @@ class SignatureController extends Controller
             $recipient['consentPageId'] = $consentPageId;
         }
 
-        $platformWebhookUrl = rtrim(config('app.url'), '/') . '/api/signature/platform-webhook';
+        $webhookToken = config('services.signature_platform.webhook_secret', '');
+        $platformWebhookUrl = rtrim(config('app.url'), '/') . '/api/signature/platform-webhook'
+            . ($webhookToken !== '' ? '?token=' . urlencode($webhookToken) : '');
 
         $workflowPayload = [
             'name'            => 'e-Parapheur — ' . $document->title,
@@ -2329,6 +2348,7 @@ class SignatureController extends Controller
      */
     public function getSignatureInviteUrl(Request $request): JsonResponse
     {
+        $this->guardPermission('signatures.request');
         $request->validate([
             'execution_id' => 'required|string',
             'action_type'  => 'required|in:signature,validation',

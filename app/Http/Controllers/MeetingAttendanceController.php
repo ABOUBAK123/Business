@@ -183,6 +183,7 @@ class MeetingAttendanceController extends Controller
 
             return response()->json([
                 'already_registered' => true,
+                'can_edit'     => $this->isQrWindowValid($meeting),
                 'message'      => $message,
                 'full_name'    => $attendance->full_name,
                 'email'        => $attendance->email,
@@ -213,6 +214,66 @@ class MeetingAttendanceController extends Controller
         }
 
         return response()->json(null);
+    }
+
+    public function correctByToken(Request $request, string $token)
+    {
+        $meeting = Meeting::where('qr_token', $token)->firstOrFail();
+
+        if (!$this->isQrWindowValid($meeting)) {
+            return back()->withInput()->with('error', 'La période de modification est terminée pour cette réunion.');
+        }
+
+        $validated = $request->validate([
+            'identifier'   => 'required|string|max:255',
+            'full_name'    => 'nullable|string|max:255',
+            'email'        => 'nullable|email|max:255',
+            'phone'        => 'nullable|string|max:50',
+            'job_title'    => 'nullable|string|max:255',
+            'organization' => 'nullable|string|max:255',
+            'signature'    => 'nullable|string',
+        ]);
+
+        $identifier = trim($validated['identifier']);
+        $normalizedIdentifier = mb_strtolower($identifier, 'UTF-8');
+
+        $attendance = MeetingAttendance::query()
+            ->where('meeting_id', $meeting->id)
+            ->where(function ($query) use ($normalizedIdentifier) {
+                $query->whereRaw('LOWER(identifier) = ?', [$normalizedIdentifier])
+                    ->orWhereRaw('LOWER(email) = ?', [$normalizedIdentifier]);
+            })
+            ->orderBy('signed_at')
+            ->first();
+
+        if (!$attendance) {
+            return back()->withInput()->with('error', 'Aucune inscription trouvée pour cet identifiant.');
+        }
+
+        $signaturePath = $attendance->signature_path;
+        if (!empty($validated['signature']) && str_starts_with($validated['signature'], 'data:image/')) {
+            $raw = explode(',', $validated['signature'], 2)[1] ?? '';
+            $binary = base64_decode($raw, true);
+            if ($binary !== false) {
+                if ($signaturePath && str_starts_with($signaturePath, '/storage/')) {
+                    Storage::disk('public')->delete(ltrim(substr($signaturePath, strlen('/storage/')), '/'));
+                }
+                $fileName = 'meetings/signatures/' . Str::uuid() . '.png';
+                Storage::disk('public')->put($fileName, $binary);
+                $signaturePath = '/storage/' . $fileName;
+            }
+        }
+
+        $attendance->update([
+            'full_name'      => $validated['full_name'] ?: $attendance->full_name,
+            'email'          => $validated['email'] ?: $attendance->email,
+            'phone'          => array_key_exists('phone', $validated) ? ($validated['phone'] ?? null) : $attendance->phone,
+            'job_title'      => array_key_exists('job_title', $validated) ? ($validated['job_title'] ?? null) : $attendance->job_title,
+            'organization'   => array_key_exists('organization', $validated) ? ($validated['organization'] ?? null) : $attendance->organization,
+            'signature_path' => $signaturePath,
+        ]);
+
+        return back()->with('success', 'Vos informations ont été mises à jour avec succès.');
     }
 
     public function downloadAttendance(Request $request, Meeting $meeting)

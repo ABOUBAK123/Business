@@ -84,15 +84,20 @@ Route::get('/public/documents/{document}/onlyoffice-file', [DocumentController::
     ->name('documents.onlyofficeFile.public');
 
 // Webhook SunnyStamp (sans session, sans CSRF, appelé par la plateforme externe)
+// Le middleware verify.webhook valide le token secret embarqué dans l'URL.
 Route::post('/api/signature/platform-webhook', [SignatureController::class, 'platformWebhook'])
+    ->middleware('verify.webhook')
     ->name('signature.platform-webhook');
 
 // Alias webhooks en sous-dossier
 Route::post('/e-administration_laravel/api/signature/platform-webhook', [SignatureController::class, 'platformWebhook'])
+    ->middleware('verify.webhook')
     ->name('signature.platform-webhook.subdir');
 Route::post('/e-administration_laravel/public/api/signature/platform-webhook', [SignatureController::class, 'platformWebhook'])
+    ->middleware('verify.webhook')
     ->name('signature.platform-webhook.subdir.public');
 Route::post('/public/api/signature/platform-webhook', [SignatureController::class, 'platformWebhook'])
+    ->middleware('verify.webhook')
     ->name('signature.platform-webhook.public');
 
 // Diagnostic endpoints (sans auth, accès public pour support technique)
@@ -148,6 +153,7 @@ Route::post('/demande-acte/{administration_id}/{requested_act_id}', [PublicActRe
 Route::get('/meetings/qr/{token}', [MeetingAttendanceController::class, 'showByToken'])->name('meetings.qr.show');
 Route::post('/meetings/qr/{token}', [MeetingAttendanceController::class, 'signByToken'])->name('meetings.qr.sign');
 Route::get('/meetings/qr/{token}/lookup', [MeetingAttendanceController::class, 'lookupByToken'])->name('meetings.qr.lookup');
+Route::post('/meetings/qr/{token}/correct', [MeetingAttendanceController::class, 'correctByToken'])->name('meetings.qr.correct');
 
 // Téléchargement public d'un document via token QR
 Route::get('/qr-download/{token}', [QrVerificationController::class, 'downloadByToken'])->name('qr.download');

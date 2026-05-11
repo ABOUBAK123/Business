@@ -29,7 +29,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'public/api/signature/platform-webhook',
         ]);
         $middleware->alias([
-            'admin' => \App\Http\Middleware\EnsureAdmin::class,
+            'admin'          => \App\Http\Middleware\EnsureAdmin::class,
+            'verify.webhook' => \App\Http\Middleware\VerifySignaturePlatformWebhook::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

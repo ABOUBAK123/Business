@@ -34,6 +34,12 @@ return [
         'timeout' => env('OLLAMA_TIMEOUT', 60),
     ],
 
+    'signature_platform' => [
+        // Secret partagé pour authentifier les webhooks entrants de la plateforme de signature.
+        // Générer avec : php artisan tinker --execute="echo bin2hex(random_bytes(32));"
+        'webhook_secret' => env('SIGNATURE_WEBHOOK_SECRET'),
+    ],
+
     'slack' => [
         'notifications' => [
             'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),

@@ -14,10 +14,13 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use App\Traits\GuardsPermissions;
 use Illuminate\Support\Str;
 
 class CourrierController extends Controller
 {
+    use GuardsPermissions;
+
     private array $subtabs = [
         'enregistrement'  => ['icon' => 'fas fa-plus-circle',   'label' => 'Enregistrement'],
         'liste'           => ['icon' => 'fas fa-list',           'label' => 'Liste des courriers'],
@@ -37,20 +40,6 @@ class CourrierController extends Controller
         'traite'           => 'courrier.traite',
         'archives'         => 'courrier.archives',
     ];
-
-    private function canPermission(string $key): bool
-    {
-        $user = Auth::user();
-        if (!$user) {
-            return false;
-        }
-        return app(\App\Services\UserPermissionsService::class)->can($user, $key);
-    }
-
-    private function guardPermission(string $key): void
-    {
-        abort_if(!$this->canPermission($key), 403, 'Accès refusé.');
-    }
 
     private function canImputerAction(): bool
     {

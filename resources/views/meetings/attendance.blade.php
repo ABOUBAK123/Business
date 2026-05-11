@@ -199,6 +199,46 @@
         .qr-hidden {
             display: none;
         }
+        .qr-correction-banner {
+            background: #fffbeb;
+            border: 2px solid #f59e0b;
+            border-radius: 16px;
+            padding: 14px 16px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            font-size: 0.92rem;
+            color: #92400e;
+            font-weight: 500;
+        }
+        .qr-correction-banner .qr-correction-icon {
+            font-size: 1.4rem;
+            line-height: 1;
+            flex-shrink: 0;
+        }
+        .qr-submit-correct {
+            width: 100%;
+            border: 0;
+            border-radius: 16px;
+            padding: 16px;
+            background: #d97706;
+            color: #fff;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform .12s ease, background-color .12s ease;
+        }
+        .qr-submit-correct:hover {
+            background: #b45309;
+        }
+        .qr-submit-correct:active {
+            transform: scale(0.98);
+        }
+        .qr-field input[readonly] {
+            background: #f3f4f6;
+            color: #6b7280;
+            cursor: not-allowed;
+        }
         @media (min-width: 640px) {
             .qr-grid-2 {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -264,8 +304,15 @@
     <div class="mt-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm qr-alert qr-alert-error">{{ session('error') }}</div>
     @endif
     <div id="lookup-error" class="mt-4 p-3 rounded-lg bg-red-50 text-red-700 text-sm qr-alert qr-alert-error hidden qr-hidden"></div>
+    <div id="correction-banner" class="mt-4 qr-correction-banner hidden qr-hidden">
+        <span class="qr-correction-icon">✏️</span>
+        <div>
+            <strong>Vous êtes déjà inscrit.</strong><br>
+            Vous pouvez corriger vos informations ci-dessous pendant la durée de la réunion.
+        </div>
+    </div>
 
-    <form method="POST" class="mt-4 space-y-4 qr-form">
+    <form id="attendance-form" method="POST" action="{{ route('meetings.qr.sign', $meeting->qr_token) }}" class="mt-4 space-y-4 qr-form">
         @csrf
         <div class="qr-field">
             <label class="block text-xs font-semibold text-gray-700 mb-1">Matricule ou email</label>
@@ -307,17 +354,21 @@
             </div>
             <input type="hidden" name="signature" id="signature-data">
         </div>
-        <button class="w-full px-3 py-4 rounded-xl bg-[#2453d6] text-white text-base font-semibold hover:bg-[#1f47bb] active:scale-95 transition-transform qr-submit">Signer ma présence</button>
+        <button id="submit-btn" class="w-full px-3 py-4 rounded-xl bg-[#2453d6] text-white text-base font-semibold hover:bg-[#1f47bb] active:scale-95 transition-transform qr-submit">Signer ma présence</button>
     </form>
 </div>
 
 <script>
 (function () {
-    const form = document.querySelector('form');
+    const form = document.getElementById('attendance-form');
     const lookupUrl = '{{ route("meetings.qr.lookup", $meeting->qr_token) }}';
+    const signUrl   = '{{ route("meetings.qr.sign", $meeting->qr_token) }}';
+    const correctUrl = '{{ route("meetings.qr.correct", $meeting->qr_token) }}';
     const identifierInput = document.getElementById('field-identifier');
     const badge = document.getElementById('autofill-badge');
     const lookupError = document.getElementById('lookup-error');
+    const correctionBanner = document.getElementById('correction-banner');
+    const submitBtn = document.getElementById('submit-btn');
     const fields = ['full_name', 'email', 'phone', 'job_title', 'organization'];
     const signatureCanvas = document.getElementById('signature-pad');
     const signatureClear = document.getElementById('signature-clear');
@@ -326,6 +377,7 @@
     let debounceTimer = null;
     let isDrawing = false;
     let hasSignature = false;
+    let correctionMode = false;
 
     function resizeSignatureCanvas() {
         const ratio = Math.max(window.devicePixelRatio || 1, 1);
@@ -345,16 +397,9 @@
     function pointFromEvent(event) {
         const rect = signatureCanvas.getBoundingClientRect();
         if (event.touches && event.touches[0]) {
-            return {
-                x: event.touches[0].clientX - rect.left,
-                y: event.touches[0].clientY - rect.top
-            };
+            return { x: event.touches[0].clientX - rect.left, y: event.touches[0].clientY - rect.top };
         }
-
-        return {
-            x: event.clientX - rect.left,
-            y: event.clientY - rect.top
-        };
+        return { x: event.clientX - rect.left, y: event.clientY - rect.top };
     }
 
     function startDrawing(event) {
@@ -366,10 +411,7 @@
     }
 
     function draw(event) {
-        if (!isDrawing) {
-            return;
-        }
-
+        if (!isDrawing) return;
         const point = pointFromEvent(event);
         signatureContext.lineTo(point.x, point.y);
         signatureContext.stroke();
@@ -377,9 +419,7 @@
         event.preventDefault();
     }
 
-    function stopDrawing() {
-        isDrawing = false;
-    }
+    function stopDrawing() { isDrawing = false; }
 
     function clearSignature() {
         signatureContext.clearRect(0, 0, signatureCanvas.width, signatureCanvas.height);
@@ -400,12 +440,39 @@
         lookupError.classList.add('hidden', 'qr-hidden');
     }
 
+    function showCorrectionBanner() {
+        if (correctionBanner) correctionBanner.classList.remove('hidden', 'qr-hidden');
+    }
+
+    function hideCorrectionBanner() {
+        if (correctionBanner) correctionBanner.classList.add('hidden', 'qr-hidden');
+    }
+
+    function enterCorrectionMode() {
+        correctionMode = true;
+        form.action = correctUrl;
+        identifierInput.setAttribute('readonly', 'readonly');
+        submitBtn.textContent = 'Corriger mes informations';
+        submitBtn.classList.remove('qr-submit');
+        submitBtn.classList.add('qr-submit-correct');
+        hideLookupError();
+        showCorrectionBanner();
+    }
+
+    function exitCorrectionMode() {
+        correctionMode = false;
+        form.action = signUrl;
+        identifierInput.removeAttribute('readonly');
+        submitBtn.textContent = 'Signer ma présence';
+        submitBtn.classList.remove('qr-submit-correct');
+        submitBtn.classList.add('qr-submit');
+        hideCorrectionBanner();
+    }
+
     function fill(data) {
         fields.forEach(function (key) {
             const el = document.getElementById('field-' + key);
-            if (el && data[key]) {
-                el.value = data[key];
-            }
+            if (el && data[key] != null) el.value = data[key];
         });
         badge.classList.remove('hidden', 'qr-hidden');
     }
@@ -422,11 +489,10 @@
         clearTimeout(debounceTimer);
         badge.classList.add('hidden', 'qr-hidden');
         hideLookupError();
+        hideCorrectionBanner();
+        exitCorrectionMode();
         const val = this.value.trim();
-        if (val.length < 3) {
-            clear();
-            return;
-        }
+        if (val.length < 3) { clear(); return; }
 
         debounceTimer = setTimeout(function () {
             fetch(lookupUrl + '?identifier=' + encodeURIComponent(val))
@@ -435,7 +501,11 @@
                     if (data) {
                         fill(data);
                         if (data.already_registered) {
-                            showLookupError(data.message || 'Vous êtes déjà inscrit à cette réunion.');
+                            if (data.can_edit) {
+                                enterCorrectionMode();
+                            } else {
+                                showLookupError(data.message || 'Vous êtes déjà inscrit à cette réunion. La période de modification est terminée.');
+                            }
                         }
                     } else {
                         clear();
@@ -459,7 +529,7 @@
     signatureClear.addEventListener('click', clearSignature);
 
     form.addEventListener('submit', function (event) {
-        if (lookupError && !lookupError.classList.contains('hidden')) {
+        if (!correctionMode && lookupError && !lookupError.classList.contains('hidden')) {
             event.preventDefault();
             return;
         }

@@ -11,6 +11,7 @@ use App\Models\Notification;
 use App\Models\Document;
 use App\Models\User;
 use App\Services\NotificationService;
+use App\Traits\GuardsPermissions;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -19,6 +20,8 @@ use Illuminate\Support\Str;
 
 class WorkflowController extends Controller
 {
+    use GuardsPermissions;
+
     // ── Helpers ─────────────────────────────────────────────────────────────
 
     private function visibleWorkflowIdsForUser(string $userId)
@@ -230,6 +233,7 @@ class WorkflowController extends Controller
 
     public function index()
     {
+        $this->guardPermission('workflows.view');
         $userId = Auth::id();
         $workflows = Workflow::with(['steps.assignee', 'executions.document'])
             ->whereIn('id', $this->visibleWorkflowIdsForUser($userId))
@@ -257,6 +261,7 @@ class WorkflowController extends Controller
 
     public function create()
     {
+        $this->guardPermission('workflows.create');
         $currentAdminId = $this->resolveCurrentAdministrationId();
         $usersQuery = $this->buildSignerUsersQueryForAdministration($currentAdminId);
 
@@ -271,6 +276,7 @@ class WorkflowController extends Controller
 
     public function store(Request $request)
     {
+        $this->guardPermission('workflows.create');
         $request->validate([
             'name'        => 'required|string|max:500',
             'steps'       => 'required|array|min:1',
@@ -354,6 +360,7 @@ class WorkflowController extends Controller
 
     public function show(Workflow $workflow)
     {
+        $this->guardPermission('workflows.view');
         $this->ensureWorkflowVisibility($workflow);
         $workflow->load(['steps.assignee', 'executions.document', 'creator']);
         return view('workflows.show', compact('workflow'));
@@ -361,6 +368,7 @@ class WorkflowController extends Controller
 
     public function edit(Workflow $workflow)
     {
+        $this->guardPermission('workflows.create');
         abort_if($workflow->created_by !== Auth::id(), 403);
         $users = User::where('status', 'active')->get(['id', 'name', 'email']);
         $workflow->load('steps');
@@ -369,6 +377,7 @@ class WorkflowController extends Controller
 
     public function update(Request $request, Workflow $workflow)
     {
+        $this->guardPermission('workflows.create');
         abort_if($workflow->created_by !== Auth::id(), 403);
         $workflow->update($request->only('name', 'description', 'status'));
 
@@ -382,6 +391,7 @@ class WorkflowController extends Controller
 
     public function destroy(Workflow $workflow)
     {
+        $this->guardPermission('workflows.delete');
         abort_if($workflow->created_by !== Auth::id(), 403);
         $workflow->delete();
 
@@ -394,6 +404,7 @@ class WorkflowController extends Controller
 
     public function duplicate(Request $request, Workflow $workflow)
     {
+        $this->guardPermission('workflows.create');
         $this->ensureWorkflowVisibility($workflow);
         $workflow->load('steps');
         $copy = Workflow::create([
@@ -428,6 +439,7 @@ class WorkflowController extends Controller
 
     public function execute(Request $request, Workflow $workflow)
     {
+        $this->guardPermission('workflows.create');
         $this->ensureWorkflowVisibility($workflow);
         $request->validate(['document_id' => 'nullable|exists:documents,id']);
 
@@ -494,6 +506,7 @@ class WorkflowController extends Controller
 
     public function advance(Request $request, Workflow $workflow)
     {
+        $this->guardPermission('workflows.validate');
         $this->ensureWorkflowVisibility($workflow);
         $execution = $workflow->executions()->where('status', 'in_progress')->first();
         if (!$execution) {
@@ -530,6 +543,7 @@ class WorkflowController extends Controller
 
     public function reject(Request $request, Workflow $workflow)
     {
+        $this->guardPermission('workflows.validate');
         $this->ensureWorkflowVisibility($workflow);
         $execution = $workflow->executions()->where('status', 'in_progress')->first();
         if (!$execution) {
@@ -545,6 +559,7 @@ class WorkflowController extends Controller
 
     public function indexTemplates()
     {
+        $this->guardPermission('workflows.view');
         $templates = WorkflowTemplate::where('created_by', Auth::id())
             ->latest()->get();
 
@@ -560,6 +575,7 @@ class WorkflowController extends Controller
 
     public function storeTemplate(Request $request)
     {
+        $this->guardPermission('workflows.create');
         $request->validate([
             'name' => 'required|string|max:500',
         ]);

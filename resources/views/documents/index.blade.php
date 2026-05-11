@@ -50,7 +50,7 @@
 
 <!-- Inputs fichiers cachés -->
 <input type="file" id="fileInput" class="hidden" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.csv">
-<input type="file" id="folderInput" class="hidden" multiple webkitdirectory directory>
+<input type="file" id="folderInput" class="hidden" multiple webkitdirectory directory accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.odt,.ods,.odp,.csv">
 
 <!-- Barre d'actions supérieure -->
 <div class="flex items-center justify-between mb-4 gap-3 flex-wrap">
@@ -1167,7 +1167,12 @@ async function uploadFile(file) {
         headers: { 'X-CSRF-TOKEN': CSRF, Accept: 'application/json' },
         body: fd,
     });
-    return resp.json();
+    const data = await resp.json();
+    if (!resp.ok) {
+        const msg = data?.errors?.file?.[0] || data?.message || 'Erreur lors de l\'envoi du fichier.';
+        throw new Error(msg);
+    }
+    return data;
 }
 
 document.getElementById('folderInput').addEventListener('change', async (e) => {
@@ -1205,7 +1210,7 @@ document.getElementById('folderInput').addEventListener('change', async (e) => {
                 mime_type: data.mime_type, file_path: data.file_path,
                 file_size: data.file_size || 0, shares_count: 0,
                 status: 'draft', created_at: new Date().toISOString(), updated_at: new Date().toISOString() });
-        } catch(err) { console.error('File error:', err); }
+        } catch(err) { showToast(`${file.name} : ${err.message}`); }
         done++;
         progressBar.style.width = `${Math.round(done / total * 100)}%`;
         progressText.textContent = `${done} / ${total}`;
@@ -1242,7 +1247,7 @@ document.getElementById('fileInput').addEventListener('change', async (e) => {
                     updated_at: new Date().toISOString(),
                 });
             }
-        } catch(err) { console.error('Upload error:', err); }
+        } catch(err) { showToast(`${file.name} : ${err.message}`); }
         done++;
         progressBar.style.width = `${Math.round(done / total * 100)}%`;
         progressText.textContent = `${done} / ${total}`;

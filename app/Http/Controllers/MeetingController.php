@@ -17,12 +17,16 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use App\Traits\GuardsPermissions;
 use Illuminate\Support\Str;
 
 class MeetingController extends Controller
 {
+    use GuardsPermissions;
+
     public function index(Request $request)
     {
+        $this->guardPermission('meetings.view');
         if (!$this->isMeetingsModuleReady()) {
             return redirect()->route('dashboard')
                 ->with('error', 'Le module Reunions n\'est pas encore initialise sur ce serveur. Lancez les migrations.');
@@ -51,6 +55,7 @@ class MeetingController extends Controller
 
     public function create()
     {
+        $this->guardPermission('meetings.create');
         if (!$this->isMeetingsModuleReady()) {
             return redirect()->route('dashboard')
                 ->with('error', 'Le module Reunions n\'est pas encore initialise sur ce serveur. Lancez les migrations.');
@@ -85,6 +90,7 @@ class MeetingController extends Controller
 
     public function store(Request $request)
     {
+        $this->guardPermission('meetings.create');
         if (!$this->isMeetingsModuleReady()) {
             return redirect()->route('dashboard')
                 ->with('error', 'Le module Reunions n\'est pas encore initialise sur ce serveur. Lancez les migrations.');
@@ -233,6 +239,7 @@ class MeetingController extends Controller
 
     public function show(Meeting $meeting)
     {
+        $this->guardPermission('meetings.view');
         if (!$this->isMeetingsModuleReady()) {
             return redirect()->route('dashboard')
                 ->with('error', 'Le module Reunions n\'est pas encore initialise sur ce serveur. Lancez les migrations.');
@@ -269,6 +276,7 @@ class MeetingController extends Controller
 
     public function updateMinutes(Request $request, Meeting $meeting)
     {
+        $this->guardPermission('meetings.minutes');
         $this->abortIfMeetingOutsideScope($meeting);
 
         $currentUserId = (string) Auth::id();
@@ -297,6 +305,7 @@ class MeetingController extends Controller
 
     public function workflow(Request $request, Meeting $meeting)
     {
+        $this->guardPermission('meetings.create');
         $this->abortIfMeetingOutsideScope($meeting);
 
         $validated = $request->validate([
@@ -416,6 +425,7 @@ class MeetingController extends Controller
 
     public function reporting(Request $request)
     {
+        $this->guardPermission('meetings.view');
         if (!$this->isMeetingsModuleReady()) {
             return redirect()->route('dashboard')
                 ->with('error', 'Le module Reunions n\'est pas encore initialise sur ce serveur. Lancez les migrations.');
@@ -492,6 +502,7 @@ class MeetingController extends Controller
 
     public function exportCsv(Request $request)
     {
+        $this->guardPermission('meetings.view');
         $scope = $this->resolveCurrentUserScope();
         $type = (string) $request->get('type', 'meetings');
         if (!in_array($type, ['meetings', 'attendances', 'minutes'], true)) {
@@ -586,6 +597,7 @@ class MeetingController extends Controller
 
     public function exportSummaryPdf(Request $request)
     {
+        $this->guardPermission('meetings.view');
         $scope = $this->resolveCurrentUserScope();
         $mode = in_array($request->get('mode'), ['monthly', 'annual'], true) ? $request->get('mode') : 'monthly';
         $year = (int) ($request->get('year') ?: now()->year);
