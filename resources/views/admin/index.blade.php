@@ -10773,10 +10773,11 @@ $avContextLabels = [
 {{-- Compteurs rapides --}}
 @if((method_exists($scanLogs, 'total') ? $scanLogs->total() : $scanLogs->count()) > 0 || $avResultFilter || $avContextFilter)
 @php
-    $totalScans   = \App\Models\ClamAvScanLog::count();
-    $cleanCount   = \App\Models\ClamAvScanLog::where('result', 'clean')->count();
-    $infectedCount= \App\Models\ClamAvScanLog::where('result', 'infected')->count();
-    $errorCount   = \App\Models\ClamAvScanLog::where('result', 'error')->count();
+    $hasAvTable   = \Illuminate\Support\Facades\Schema::hasTable('clamav_scan_logs');
+    $totalScans   = $hasAvTable ? \App\Models\ClamAvScanLog::count() : 0;
+    $cleanCount   = $hasAvTable ? \App\Models\ClamAvScanLog::where('result', 'clean')->count() : 0;
+    $infectedCount= $hasAvTable ? \App\Models\ClamAvScanLog::where('result', 'infected')->count() : 0;
+    $errorCount   = $hasAvTable ? \App\Models\ClamAvScanLog::where('result', 'error')->count() : 0;
 @endphp
 <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
     <div class="bg-white rounded-2xl border border-gray-200 p-4 text-center shadow-sm">
