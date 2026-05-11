@@ -1234,6 +1234,27 @@ class CourrierController extends Controller
             ->with('success', 'Réponse rejetée. Le courrier n° ' . $courrier->numero . ' est renvoyé en traitement.');
     }
 
+    public function scanOcr(Request $request)
+    {
+        $this->guardPermission('courrier.enregistrement');
+
+        $request->validate([
+            'file' => 'required|file|max:10240|mimes:pdf,jpg,jpeg,png,tiff,bmp',
+        ], [
+            'file.required' => 'Veuillez sélectionner un fichier à analyser.',
+            'file.mimes'    => 'Formats acceptés : PDF, JPG, PNG.',
+            'file.max'      => 'Le fichier ne doit pas dépasser 10 Mo.',
+        ]);
+
+        $fields = (new \App\Services\CourrierOcrService())->extractFields($request->file('file'));
+
+        if (isset($fields['error'])) {
+            return response()->json(['ok' => false, 'message' => $fields['error']], 422);
+        }
+
+        return response()->json(['ok' => true, 'fields' => $fields]);
+    }
+
     public function store(Request $request)
     {
         $this->guardPermission('courrier.enregistrement');

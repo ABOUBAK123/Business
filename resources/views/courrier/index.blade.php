@@ -55,10 +55,57 @@
                 <i class="far fa-clipboard"></i>
                 Prochain numéro : <span class="font-bold">{{ $prochainNumero }}</span>
             </div>
-            <button type="button"
+            <button type="button" onclick="openOcrModal()"
                 class="px-4 py-2 bg-violet-600 text-white text-xs font-semibold rounded-xl hover:bg-violet-700 transition flex items-center gap-1.5">
-                <i class="fas fa-qrcode"></i> Scanner &amp; OCR
+                <i class="fas fa-magic"></i> Scanner &amp; OCR
             </button>
+        </div>
+
+        {{-- Modal OCR --}}
+        <div id="ocrModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+            <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6">
+                <div class="flex items-center gap-3 mb-4">
+                    <div class="w-11 h-11 rounded-full bg-violet-100 flex items-center justify-center flex-shrink-0">
+                        <i class="fas fa-magic text-violet-600 text-lg"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-gray-900 text-base">Remplissage automatique par OCR</h3>
+                        <p class="text-xs text-gray-500">Importez le scan du courrier — les champs seront pré-remplis</p>
+                    </div>
+                    <button onclick="closeOcrModal()" class="ml-auto text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+                </div>
+
+                {{-- Zone de dépôt --}}
+                <div id="ocrDropZone"
+                     class="border-2 border-dashed border-violet-300 rounded-xl p-8 text-center bg-violet-50 hover:bg-violet-100 transition cursor-pointer mb-4"
+                     onclick="document.getElementById('ocrFileInput').click()"
+                     ondragover="event.preventDefault();this.classList.add('border-violet-500')"
+                     ondragleave="this.classList.remove('border-violet-500')"
+                     ondrop="handleOcrDrop(event)">
+                    <i class="fas fa-cloud-upload-alt text-3xl text-violet-300 mb-2 block"></i>
+                    <p class="text-sm text-violet-700 font-medium">Cliquez ou glissez le fichier ici</p>
+                    <p class="text-xs text-gray-400 mt-1">PDF, JPG, PNG (max 10 Mo)</p>
+                    <input id="ocrFileInput" type="file" accept=".pdf,.jpg,.jpeg,.png" class="hidden" onchange="startOcr(this.files[0])">
+                </div>
+                <div id="ocrFileName" class="hidden mb-3 text-xs text-gray-600 flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+                    <i class="fas fa-file text-gray-400"></i><span id="ocrFileNameText"></span>
+                </div>
+
+                {{-- Statut --}}
+                <div id="ocrStatus" class="hidden mb-3 flex items-center gap-2 text-sm text-violet-700 bg-violet-50 border border-violet-200 rounded-xl px-4 py-3">
+                    <i class="fas fa-spinner fa-spin"></i> <span id="ocrStatusText">Analyse en cours…</span>
+                </div>
+                <div id="ocrError" class="hidden mb-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded-xl px-4 py-3"></div>
+                <div id="ocrSuccess" class="hidden mb-3 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-center gap-2">
+                    <i class="fas fa-check-circle"></i> <span>Champs pré-remplis avec succès. Vérifiez et corrigez si nécessaire.</span>
+                </div>
+
+                <div class="flex gap-3 justify-end">
+                    <button onclick="closeOcrModal()" class="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition">
+                        Fermer
+                    </button>
+                </div>
+            </div>
         </div>
 
         <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 space-y-4">
@@ -146,6 +193,95 @@
 
 @push('scripts')
 <script>
+// ── OCR Scanner ──────────────────────────────────────────────────────────────
+function openOcrModal() {
+    document.getElementById('ocrModal').classList.remove('hidden');
+    document.getElementById('ocrStatus').classList.add('hidden');
+    document.getElementById('ocrError').classList.add('hidden');
+    document.getElementById('ocrSuccess').classList.add('hidden');
+    document.getElementById('ocrFileName').classList.add('hidden');
+}
+function closeOcrModal() {
+    document.getElementById('ocrModal').classList.add('hidden');
+}
+function handleOcrDrop(e) {
+    e.preventDefault();
+    document.getElementById('ocrDropZone').classList.remove('border-violet-500');
+    const file = e.dataTransfer.files[0];
+    if (file) startOcr(file);
+}
+function startOcr(file) {
+    if (!file) return;
+
+    const allowed = ['application/pdf','image/jpeg','image/jpg','image/png'];
+    if (!allowed.includes(file.type) && !file.name.match(/\.(pdf|jpe?g|png)$/i)) {
+        showOcrError('Format non accepté. Utilisez un PDF ou une image JPG/PNG.');
+        return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+        showOcrError('Le fichier dépasse 10 Mo.');
+        return;
+    }
+
+    document.getElementById('ocrFileNameText').textContent = file.name + ' (' + (file.size/1024).toFixed(0) + ' Ko)';
+    document.getElementById('ocrFileName').classList.remove('hidden');
+    document.getElementById('ocrError').classList.add('hidden');
+    document.getElementById('ocrSuccess').classList.add('hidden');
+    document.getElementById('ocrStatus').classList.remove('hidden');
+    document.getElementById('ocrStatusText').textContent = 'Extraction du texte…';
+
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('_token', document.querySelector('meta[name="csrf-token"]')?.content ?? '');
+
+    fetch('{{ route("courrier.scan-ocr") }}', { method: 'POST', body: fd })
+        .then(async r => {
+            const data = await r.json();
+            document.getElementById('ocrStatus').classList.add('hidden');
+            if (!r.ok || !data.ok) {
+                showOcrError(data.message ?? 'Erreur lors de l\'analyse.');
+                return;
+            }
+            fillFormFields(data.fields);
+            document.getElementById('ocrSuccess').classList.remove('hidden');
+        })
+        .catch(() => {
+            document.getElementById('ocrStatus').classList.add('hidden');
+            showOcrError('Erreur réseau. Vérifiez votre connexion et réessayez.');
+        });
+}
+function showOcrError(msg) {
+    const el = document.getElementById('ocrError');
+    el.textContent = msg;
+    el.classList.remove('hidden');
+}
+function fillFormFields(fields) {
+    if (!fields) return;
+    const typeForm = document.querySelector('input[name="type_courrier"]')?.value;
+
+    if (fields.objet)         setField('input[name="objet"]', fields.objet);
+    if (fields.date_emission) setField('input[name="date_emission"]', fields.date_emission);
+    if (fields.numero_emission) setField('input[name="numero_emission"]', fields.numero_emission);
+    if (fields.urgence)       setSelect('select[name="urgence"]', fields.urgence);
+
+    if (typeForm === 'arrive' && fields.expediteur)
+        setField('textarea[name="expediteur"]', fields.expediteur);
+    if (typeForm === 'depart' && fields.destinataire)
+        setField('textarea[name="destinataire"]', fields.destinataire);
+}
+function setField(selector, value) {
+    const el = document.querySelector(selector);
+    if (el && value) { el.value = value; el.dispatchEvent(new Event('input')); }
+}
+function setSelect(selector, value) {
+    const el = document.querySelector(selector);
+    if (el && value) { el.value = value; el.dispatchEvent(new Event('change')); }
+}
+document.getElementById('ocrModal')?.addEventListener('click', function(e) {
+    if (e.target === this) closeOcrModal();
+});
+// ─────────────────────────────────────────────────────────────────────────────
+
 function updateFileList(input) {
     const list = document.getElementById('file-list');
     list.innerHTML = '';

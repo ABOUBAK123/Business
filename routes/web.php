@@ -181,6 +181,7 @@ Route::middleware('auth')->group(function () {
         Route::get('/archives',         [CourrierController::class, 'archives'])->name('archives');
         Route::get('/visualiser',       [CourrierController::class, 'visualiser'])->name('visualiser');
         Route::post('/store',           [CourrierController::class, 'store'])->name('store');
+        Route::post('/scan-ocr',        [CourrierController::class, 'scanOcr'])->name('scan-ocr');
         Route::post('/imputer',         [CourrierController::class, 'imputer'])->name('imputer');
         Route::post('/traiter',         [CourrierController::class, 'traiter'])->name('traiter');
         Route::post('/{courrier}/ok-traitement', [CourrierController::class, 'okTraitement'])->name('ok-traitement');
