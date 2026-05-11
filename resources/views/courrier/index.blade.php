@@ -249,7 +249,16 @@ function startOcr(file) {
                 return;
             }
             if (!r.ok || !data.ok) {
-                showOcrError(data.message ?? 'Erreur lors de l\'analyse (HTTP ' + r.status + ').');
+                let errMsg = '';
+                if (data.errors) {
+                    errMsg = Object.values(data.errors).flat().join(' ');
+                } else {
+                    errMsg = data.message ?? 'Erreur lors de l\'analyse (HTTP ' + r.status + ').';
+                }
+                if (errMsg.includes('failed to upload') || errMsg.includes('upload')) {
+                    errMsg = 'Le fichier est trop volumineux pour le serveur (limite PHP dépassée). Utilisez un fichier de moins de 10 Mo.';
+                }
+                showOcrError(errMsg);
                 return;
             }
             fillFormFields(data.fields);
