@@ -295,8 +295,8 @@
 
 <!-- Modal partage -->
 <div id="shareModal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-    <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-orange-300">
-        <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+    <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl border border-orange-300 flex flex-col max-h-[90vh]">
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between flex-shrink-0">
             <div>
                 <h3 class="text-sm font-semibold text-gray-800">Partager le fichier</h3>
                 <p class="text-xs text-gray-500 mt-0.5" id="shareDocTitle"></p>
@@ -304,7 +304,7 @@
             <button onclick="closeShareModal()" class="h-8 w-8 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 text-xl">&times;</button>
         </div>
 
-        <div class="px-5 pt-4">
+        <div class="px-5 pt-4 pb-2 overflow-y-auto flex-1">
             <!-- Modes -->
             <div class="inline-flex rounded-lg bg-white p-1 mb-4 gap-1 border border-gray-100 flex-wrap">
                 <button onclick="setShareMode('internal')" id="sm-internal"
@@ -444,7 +444,7 @@
             <div id="shareStatus" class="hidden mt-3 rounded-lg px-3 py-2 text-xs"></div>
         </div>
 
-        <div class="px-5 py-4 mt-2 border-t border-gray-100 flex justify-end gap-2">
+        <div class="px-5 py-4 border-t border-gray-100 flex justify-end gap-2 flex-shrink-0">
             <button onclick="closeShareModal()" class="px-3 py-2 text-xs font-semibold rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50">Annuler</button>
             <button onclick="submitShare()" class="px-3 py-2 text-xs font-semibold rounded-lg bg-[#2453d6] text-white hover:bg-[#1f47bb]">Partager</button>
         </div>
