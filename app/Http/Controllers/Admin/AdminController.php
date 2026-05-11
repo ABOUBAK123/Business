@@ -660,17 +660,23 @@ class AdminController extends Controller
             $settings = AppSetting::all()->keyBy('key');
 
             // ── Journal antivirus ─────────────────────────────────────────────
-            if ($tab === 'antivirus' && Schema::hasTable('clamav_scan_logs')) {
-                $avResultFilter = request('av_result', '');
-                $avContextFilter = request('av_context', '');
-                $avQuery = ClamAvScanLog::with('user')->orderByDesc('scanned_at');
-                if ($avResultFilter !== '') {
-                    $avQuery->where('result', $avResultFilter);
+            if ($tab === 'antivirus') {
+                try {
+                    if (Schema::hasTable('clamav_scan_logs')) {
+                        $avResultFilter  = request('av_result', '');
+                        $avContextFilter = request('av_context', '');
+                        $avQuery = ClamAvScanLog::with('user')->orderByDesc('scanned_at');
+                        if ($avResultFilter !== '') {
+                            $avQuery->where('result', $avResultFilter);
+                        }
+                        if ($avContextFilter !== '') {
+                            $avQuery->where('context', $avContextFilter);
+                        }
+                        $scanLogs = $avQuery->paginate(50, ['*'], 'av_page');
+                    }
+                } catch (\Throwable $avEx) {
+                    Log::warning('Admin antivirus tab query failed', ['error' => $avEx->getMessage()]);
                 }
-                if ($avContextFilter !== '') {
-                    $avQuery->where('context', $avContextFilter);
-                }
-                $scanLogs = $avQuery->paginate(50, ['*'], 'av_page');
             }
 
             // ── Utilisateurs ─────────────────────────────────────────────────

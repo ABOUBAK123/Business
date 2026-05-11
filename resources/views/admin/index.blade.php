@@ -10771,7 +10771,7 @@ $avContextLabels = [
 </div>
 
 {{-- Compteurs rapides --}}
-@if($scanLogs->total() > 0 || $avResultFilter || $avContextFilter)
+@if((method_exists($scanLogs, 'total') ? $scanLogs->total() : $scanLogs->count()) > 0 || $avResultFilter || $avContextFilter)
 @php
     $totalScans   = \App\Models\ClamAvScanLog::count();
     $cleanCount   = \App\Models\ClamAvScanLog::where('result', 'clean')->count();
@@ -10902,7 +10902,7 @@ $avContextLabels = [
             </tbody>
         </table>
     </div>
-    @if($scanLogs->hasPages())
+    @if(method_exists($scanLogs, 'hasPages') && $scanLogs->hasPages())
     <div class="px-4 py-3 border-t border-gray-100">
         {{ $scanLogs->appends(request()->except('av_page'))->links() }}
     </div>
