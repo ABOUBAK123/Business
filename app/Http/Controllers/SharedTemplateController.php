@@ -253,6 +253,7 @@ class SharedTemplateController extends Controller
          * ══════════════════════════════════════════════════════════ */
         $qrToken   = Str::random(40);
         $verifyUrl = route('qr.public', ['token' => $qrToken]);
+        \Log::info('QR URL générée pour template partagé', ['url' => $verifyUrl]);
 
         // Position QR prioritaire: paramètre OnlyOffice/API Signature (signature_qr_position)
         // Fallback: anciens paramètres qr_image_* (en mm)
