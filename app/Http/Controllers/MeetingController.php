@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use App\Services\ClamAvScanner;
 use App\Traits\GuardsPermissions;
 use Illuminate\Support\Str;
 
@@ -159,6 +160,7 @@ class MeetingController extends Controller
 
         $attachments = [];
         foreach ((array) $request->file('attachments', []) as $file) {
+            ClamAvScanner::scan($file);
             $path = $file->store('meetings/attachments', 'public');
             $attachments[] = [
                 'name' => $file->getClientOriginalName(),
@@ -171,6 +173,7 @@ class MeetingController extends Controller
         $minutesTemplatePath = null;
         if ($request->hasFile('minutes_template_file')) {
             $tplFile = $request->file('minutes_template_file');
+            ClamAvScanner::scan($tplFile);
             $tplStorePath = $tplFile->storeAs(
                 'meetings/templates/' . Str::uuid(),
                 $tplFile->getClientOriginalName(),

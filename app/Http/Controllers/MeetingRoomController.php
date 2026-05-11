@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\MeetingRoom;
+use App\Services\ClamAvScanner;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -74,6 +75,7 @@ class MeetingRoomController extends Controller
 
         $photoPath = null;
         if ($request->hasFile('photo')) {
+            ClamAvScanner::scan($request->file('photo'));
             $photoPath = '/storage/' . $request->file('photo')->store('meetings/rooms', 'public');
         }
 
@@ -122,6 +124,7 @@ class MeetingRoomController extends Controller
                 }
             }
 
+            ClamAvScanner::scan($request->file('photo'));
             $photoPath = '/storage/' . $request->file('photo')->store('meetings/rooms', 'public');
         }
 

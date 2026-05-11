@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Services\ClamAvScanner;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
@@ -58,6 +59,7 @@ class ProfileController extends Controller
         }
 
         $file = $request->file('avatar');
+        ClamAvScanner::scan($file);
 
         // Forcer l'extension depuis le MIME réel (jamais depuis le nom client)
         $mimeToExt = [

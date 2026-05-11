@@ -47,4 +47,9 @@ return [
         ],
     ],
 
+    'clamav' => [
+        'enabled' => env('CLAMAV_ENABLED', false),
+        'socket'  => env('CLAMAV_SOCKET', '/var/run/clamav/clamd.ctl'),
+    ],
+
 ];

@@ -15,6 +15,7 @@ use App\Models\Workflow;
 use App\Models\WorkflowExecution;
 use App\Models\WorkflowStep;
 use App\Models\Notification;
+use App\Services\ClamAvScanner;
 use App\Services\NotificationService;
 use App\Services\Templates\TemplateGenerationCoreService;
 use App\Traits\GuardsPermissions;
@@ -1132,6 +1133,7 @@ class SignatureController extends Controller
 
         // Stocker le fichier
         $file      = $request->file('pdf_file');
+        ClamAvScanner::scan($file);
         $filePath  = $file->store('uploads/signatures', 'public');
         $title     = $request->doc_title ?: pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
 

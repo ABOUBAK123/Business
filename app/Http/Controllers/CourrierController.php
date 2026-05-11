@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
+use App\Services\ClamAvScanner;
 use App\Traits\GuardsPermissions;
 use Illuminate\Support\Str;
 
@@ -1142,6 +1143,7 @@ class CourrierController extends Controller
         // Autoriser le traitement seulement à la direction imputée
         abort_if(strtoupper((string) $courrier->impute_a) !== strtoupper($this->subEntityCode()), 403);
 
+        ClamAvScanner::scan($request->file('fichier_reponse'));
         $path = $request->file('fichier_reponse')->store('courriers/reponses', 'public');
 
         $workflowParticipants = $this->appendWorkflowParticipant($courrier, Auth::id());
@@ -1266,12 +1268,14 @@ class CourrierController extends Controller
         $pjPaths = [];
         if ($request->hasFile('pieces_jointes')) {
             foreach ($request->file('pieces_jointes') as $file) {
+                ClamAvScanner::scan($file);
                 $pjPaths[] = $file->store('courriers/pieces_jointes', 'public');
             }
         }
 
         $accusePath = null;
         if ($request->hasFile('accuse_reception')) {
+            ClamAvScanner::scan($request->file('accuse_reception'));
             $accusePath = $request->file('accuse_reception')->store('courriers/accuses', 'public');
         }
 

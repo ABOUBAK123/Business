@@ -7,6 +7,7 @@ use App\Models\IssuingAdministration;
 use App\Models\RecipientAdministration;
 use App\Models\RequestedAct;
 use App\Models\SubEntity;
+use App\Services\ClamAvScanner;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 
@@ -236,6 +237,7 @@ class PublicActRequestController extends Controller
                     ->withInput();
             }
 
+            ClamAvScanner::scan($file);
             $path = $file->store('act-requests', 'public');
             $isRequiredDocument = array_key_exists($selectedLabel, $requiredLookup);
             if ($isRequiredDocument) {

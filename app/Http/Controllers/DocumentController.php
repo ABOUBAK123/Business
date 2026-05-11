@@ -12,6 +12,7 @@ use App\Models\RecipientAdministration;
 use App\Models\User;
 use App\Models\UserDirectionAssignment;
 use App\Models\AppSetting;
+use App\Services\ClamAvScanner;
 use App\Services\NotificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -211,6 +212,7 @@ class DocumentController extends Controller
         ]);
 
         $file   = $request->file('file');
+        ClamAvScanner::scan($file);
         $title  = $request->title ?: pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
         $path   = $file->store('documents', 'public');
 
@@ -252,6 +254,7 @@ class DocumentController extends Controller
         ]);
 
         $file     = $request->file('file');
+        ClamAvScanner::scan($file);
         $path     = $file->store('documents', 'public');
         $document = Document::create([
             'title'      => $request->title,
