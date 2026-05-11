@@ -1143,7 +1143,7 @@ class CourrierController extends Controller
         // Autoriser le traitement seulement à la direction imputée
         abort_if(strtoupper((string) $courrier->impute_a) !== strtoupper($this->subEntityCode()), 403);
 
-        ClamAvScanner::scan($request->file('fichier_reponse'));
+        ClamAvScanner::scan($request->file('fichier_reponse'), 'courriers');
         $path = $request->file('fichier_reponse')->store('courriers/reponses', 'public');
 
         $workflowParticipants = $this->appendWorkflowParticipant($courrier, Auth::id());
@@ -1268,14 +1268,14 @@ class CourrierController extends Controller
         $pjPaths = [];
         if ($request->hasFile('pieces_jointes')) {
             foreach ($request->file('pieces_jointes') as $file) {
-                ClamAvScanner::scan($file);
+                ClamAvScanner::scan($file, 'courriers');
                 $pjPaths[] = $file->store('courriers/pieces_jointes', 'public');
             }
         }
 
         $accusePath = null;
         if ($request->hasFile('accuse_reception')) {
-            ClamAvScanner::scan($request->file('accuse_reception'));
+            ClamAvScanner::scan($request->file('accuse_reception'), 'courriers');
             $accusePath = $request->file('accuse_reception')->store('courriers/accuses', 'public');
         }
 

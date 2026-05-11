@@ -160,7 +160,7 @@ class MeetingController extends Controller
 
         $attachments = [];
         foreach ((array) $request->file('attachments', []) as $file) {
-            ClamAvScanner::scan($file);
+            ClamAvScanner::scan($file, 'reunions');
             $path = $file->store('meetings/attachments', 'public');
             $attachments[] = [
                 'name' => $file->getClientOriginalName(),
@@ -173,7 +173,7 @@ class MeetingController extends Controller
         $minutesTemplatePath = null;
         if ($request->hasFile('minutes_template_file')) {
             $tplFile = $request->file('minutes_template_file');
-            ClamAvScanner::scan($tplFile);
+            ClamAvScanner::scan($tplFile, 'reunions');
             $tplStorePath = $tplFile->storeAs(
                 'meetings/templates/' . Str::uuid(),
                 $tplFile->getClientOriginalName(),

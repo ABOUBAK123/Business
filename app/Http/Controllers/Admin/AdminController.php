@@ -36,6 +36,7 @@ use App\Models\SignatureProviderConfig;
 use App\Models\AdministrationSmtpSetting;
 use App\Models\PersonnelEmployee;
 use App\Models\PersonnelEmployeeDocument;
+use App\Models\ClamAvScanLog;
 use App\Services\ClamAvScanner;
 use App\Services\NotificationService;
 use App\Services\Templates\TemplateGenerationCoreService;
@@ -634,6 +635,7 @@ class AdminController extends Controller
         $personnelMutationRequests = collect();
         $personnelRecentActivity = collect();
         $agentSpaceCanSearchAll = false;
+        $scanLogs = collect();
         $personnelStats = [
             'employees' => 0,
             'documents' => 0,
@@ -656,6 +658,20 @@ class AdminController extends Controller
 
         try {
             $settings = AppSetting::all()->keyBy('key');
+
+            // ── Journal antivirus ─────────────────────────────────────────────
+            if ($tab === 'antivirus' && Schema::hasTable('clamav_scan_logs')) {
+                $avResultFilter = request('av_result', '');
+                $avContextFilter = request('av_context', '');
+                $avQuery = ClamAvScanLog::with('user')->orderByDesc('scanned_at');
+                if ($avResultFilter !== '') {
+                    $avQuery->where('result', $avResultFilter);
+                }
+                if ($avContextFilter !== '') {
+                    $avQuery->where('context', $avContextFilter);
+                }
+                $scanLogs = $avQuery->paginate(50, ['*'], 'av_page');
+            }
 
             // ── Utilisateurs ─────────────────────────────────────────────────
             $usersQuery = User::latest();
@@ -1033,7 +1049,8 @@ class AdminController extends Controller
             'personnelEmployees', 'personnelEmployeeDirectory', 'selectedPersonnelEmployee', 'personnelStats',
             'personnelLeaveTypes', 'personnelLeaveRequests', 'personnelLeaveApprovers', 'personnelJobReferences', 'leaveGlobalVisibility', 'personnelTrainings', 'personnelTrainingEnrollments',
             'personnelEmployeeSkills', 'personnelGoals', 'personnelPerformanceReviews', 'personnelCareerEvents', 'personnelMutationRequests', 'personnelRecentActivity',
-            'agentSpaceCanSearchAll'
+            'agentSpaceCanSearchAll',
+            'scanLogs'
         ));
     }
 
@@ -1316,7 +1333,7 @@ class AdminController extends Controller
         if ($request->hasFile('attachments')) {
             foreach ((array) $request->file('attachments') as $file) {
                 if ($file && $file->isValid()) {
-                    ClamAvScanner::scan($file);
+                    ClamAvScanner::scan($file, 'rh-mutations');
                     $path = $file->store('personnel/mutation-attachments', 'public');
 
                     $metadata['mutation_request']['attachments'][] = [
@@ -1540,7 +1557,7 @@ class AdminController extends Controller
         ], fn($v) => $v !== null && $v !== '');
 
         if ($request->hasFile('employee_photo')) {
-            ClamAvScanner::scan($request->file('employee_photo'));
+            ClamAvScanner::scan($request->file('employee_photo'), 'rh-employes');
             $photoPath = $request->file('employee_photo')->store('personnel-photos', 'public');
             $metadata['photo_path'] = $photoPath;
         }
@@ -1602,7 +1619,7 @@ class AdminController extends Controller
         ], fn($v) => $v !== null && $v !== '');
 
         if ($request->hasFile('employee_photo')) {
-            ClamAvScanner::scan($request->file('employee_photo'));
+            ClamAvScanner::scan($request->file('employee_photo'), 'rh-employes');
             $oldPhotoPath = data_get($employee->metadata, 'photo_path');
             if ($oldPhotoPath && Storage::disk('public')->exists($oldPhotoPath)) {
                 Storage::disk('public')->delete($oldPhotoPath);
@@ -2070,7 +2087,7 @@ class AdminController extends Controller
         }
 
         $file = $request->file('document');
-        ClamAvScanner::scan($file);
+        ClamAvScanner::scan($file, 'rh-documents');
         $storedName = Str::uuid() . '_' . preg_replace('/[^A-Za-z0-9._-]/', '_', $file->getClientOriginalName());
         $path = $file->storeAs('personnel-documents/' . $employee->id, $storedName, 'local');
 
@@ -2156,7 +2173,7 @@ class AdminController extends Controller
 
         if ($request->hasFile('justification_zip')) {
             $file = $request->file('justification_zip');
-            ClamAvScanner::scan($file);
+            ClamAvScanner::scan($file, 'rh-conges');
             $storedName = Str::uuid() . '_' . preg_replace('/[^A-Za-z0-9._-]/', '_', $file->getClientOriginalName());
             $path = $file->storeAs('personnel-leave-type-zips/' . $validated['administration_type'] . '/' . $validated['administration_id'], $storedName, 'local');
             $payload['justification_zip_disk'] = 'local';
@@ -2230,7 +2247,7 @@ class AdminController extends Controller
             }
 
             $file = $request->file('justification_zip');
-            ClamAvScanner::scan($file);
+            ClamAvScanner::scan($file, 'rh-conges');
             $storedName = Str::uuid() . '_' . preg_replace('/[^A-Za-z0-9._-]/', '_', $file->getClientOriginalName());
             $path = $file->storeAs('personnel-leave-type-zips/' . $leaveType->administration_type . '/' . $leaveType->administration_id, $storedName, 'local');
             $payload['justification_zip_disk'] = 'local';
@@ -2481,7 +2498,7 @@ class AdminController extends Controller
 
         if ($request->hasFile('attachment')) {
             $file = $request->file('attachment');
-            ClamAvScanner::scan($file);
+            ClamAvScanner::scan($file, 'rh-conges');
             $storedName = Str::uuid() . '_' . preg_replace('/[^A-Za-z0-9._-]/', '_', $file->getClientOriginalName());
             $path = $file->storeAs('personnel-leaves/' . $employee->id, $storedName, 'local');
             $payload['attachment_disk'] = 'local';
@@ -2778,7 +2795,7 @@ class AdminController extends Controller
 
         if ($request->hasFile('certificate')) {
             $file = $request->file('certificate');
-            ClamAvScanner::scan($file);
+            ClamAvScanner::scan($file, 'rh-formations');
             $storedName = Str::uuid() . '_' . preg_replace('/[^A-Za-z0-9._-]/', '_', $file->getClientOriginalName());
             $path = $file->storeAs('personnel-training/' . $employee->id, $storedName, 'local');
             $payload['certificate_disk'] = 'local';
@@ -3168,7 +3185,7 @@ class AdminController extends Controller
         try {
 
         $file      = $request->file('file');
-        ClamAvScanner::scan($file);
+        ClamAvScanner::scan($file, 'templates');
         $ext       = strtolower($file->getClientOriginalExtension());
         $origName  = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
         $safeSlug  = preg_replace('/[^a-zA-Z0-9_\-]/', '_', $origName);
@@ -3774,7 +3791,7 @@ class AdminController extends Controller
 
         foreach ($fileFields as $inputName => $suffix) {
             if ($request->hasFile($inputName) && $request->file($inputName)->isValid()) {
-                ClamAvScanner::scan($request->file($inputName));
+                ClamAvScanner::scan($request->file($inputName), 'apparence');
                 $path = $request->file($inputName)->store("theming/{$tType}/{$tId}", 'public');
                 AppSetting::updateOrCreate(
                     ['key' => $prefix . $suffix],
@@ -3856,7 +3873,7 @@ class AdminController extends Controller
         $logoPath = null;
         if ($request->hasFile('logo_file')) {
             $file = $request->file('logo_file');
-            ClamAvScanner::scan($file);
+            ClamAvScanner::scan($file, 'emetteurs');
             $filename = uniqid('logo_') . '.' . $file->getClientOriginalExtension();
             $logoDir = public_path('images/logos');
             if (!is_dir($logoDir)) {
@@ -3895,7 +3912,7 @@ class AdminController extends Controller
         $logoPath = $emitter->logo;
         if ($request->hasFile('logo_file')) {
             $file = $request->file('logo_file');
-            ClamAvScanner::scan($file);
+            ClamAvScanner::scan($file, 'emetteurs');
             $filename = uniqid('logo_') . '.' . $file->getClientOriginalExtension();
             $logoDir = public_path('images/logos');
             if (!is_dir($logoDir)) {
@@ -3980,7 +3997,7 @@ class AdminController extends Controller
         $logoPath = null;
         if ($request->hasFile('logo_file')) {
             $file = $request->file('logo_file');
-            ClamAvScanner::scan($file);
+            ClamAvScanner::scan($file, 'destinataires');
             $filename = uniqid('logo_') . '.' . $file->getClientOriginalExtension();
             $file->move(public_path('images/logos'), $filename);
             $logoPath = 'images/logos/' . $filename;
@@ -4022,7 +4039,7 @@ class AdminController extends Controller
         $logoPath = $recipient->logo;
         if ($request->hasFile('logo_file')) {
             $file = $request->file('logo_file');
-            ClamAvScanner::scan($file);
+            ClamAvScanner::scan($file, 'destinataires');
             $filename = uniqid('logo_') . '.' . $file->getClientOriginalExtension();
             $file->move(public_path('images/logos'), $filename);
             $logoPath = 'images/logos/' . $filename;
@@ -5209,7 +5226,7 @@ class AdminController extends Controller
             $fullName = trim(($data['prenoms'] ?? '') . ' ' . $data['nom']);
             $avatarPath = null;
             if ($request->hasFile('avatar')) {
-                ClamAvScanner::scan($request->file('avatar'));
+                ClamAvScanner::scan($request->file('avatar'), 'utilisateurs');
                 $storedPath = $request->file('avatar')->store('avatars', 'public');
                 $avatarPath = 'storage/' . ltrim($storedPath, '/');
             }
@@ -5356,7 +5373,7 @@ class AdminController extends Controller
                 $old = public_path($user->avatar);
                 if (file_exists($old)) @unlink($old);
             }
-            ClamAvScanner::scan($request->file('avatar'));
+            ClamAvScanner::scan($request->file('avatar'), 'utilisateurs');
             $storedPath = $request->file('avatar')->store('avatars', 'public');
             $update['avatar'] = 'storage/' . ltrim($storedPath, '/');
         }

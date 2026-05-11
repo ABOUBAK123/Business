@@ -59,7 +59,7 @@ class ProfileController extends Controller
         }
 
         $file = $request->file('avatar');
-        ClamAvScanner::scan($file);
+        ClamAvScanner::scan($file, 'profil');
 
         // Forcer l'extension depuis le MIME réel (jamais depuis le nom client)
         $mimeToExt = [

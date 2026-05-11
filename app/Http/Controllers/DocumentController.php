@@ -212,7 +212,7 @@ class DocumentController extends Controller
         ]);
 
         $file   = $request->file('file');
-        ClamAvScanner::scan($file);
+        ClamAvScanner::scan($file, 'documents');
         $title  = $request->title ?: pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
         $path   = $file->store('documents', 'public');
 
@@ -254,7 +254,7 @@ class DocumentController extends Controller
         ]);
 
         $file     = $request->file('file');
-        ClamAvScanner::scan($file);
+        ClamAvScanner::scan($file, 'documents');
         $path     = $file->store('documents', 'public');
         $document = Document::create([
             'title'      => $request->title,

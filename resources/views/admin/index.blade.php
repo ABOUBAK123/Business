@@ -34,6 +34,7 @@ $allTabs = [
     'user-profiles'      => ['fas fa-user-shield',       'Rôles',                 '#64748b', 'administration.user-profiles'],
     'instructions'       => ['fas fa-list-check',        'Instructions',          '#0891b2', 'administration.instructions'],
     'courrier-archiving' => ['fas fa-archive',           'Archivage courrier',    '#78716c', 'administration.courrier-archiving'],
+    'antivirus'          => ['fas fa-shield-virus',       'Antivirus',             '#dc2626', null],
 ];
 $permSvcAdmin = app(\App\Services\UserPermissionsService::class);
 $permSetAdmin = $permSvcAdmin->permissionsSet(auth()->user());
@@ -10724,5 +10725,190 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 @endpush
+
+{{-- ══════════════════════ ANTIVIRUS ══════════════════════ --}}
+@if($tab === 'antivirus')
+@php
+$avEnabled = config('services.clamav.enabled', false);
+$avResultFilter = request('av_result', '');
+$avContextFilter = request('av_context', '');
+$avContextLabels = [
+    'documents'    => 'Documents',
+    'courriers'    => 'Courriers',
+    'signatures'   => 'Signatures',
+    'reunions'     => 'Réunions',
+    'profil'       => 'Profil',
+    'actes-publics'=> 'Actes publics',
+    'rh-mutations' => 'RH — Mutations',
+    'rh-employes'  => 'RH — Employés',
+    'rh-documents' => 'RH — Documents',
+    'rh-conges'    => 'RH — Congés',
+    'rh-formations'=> 'RH — Formations',
+    'templates'    => 'Templates',
+    'apparence'    => 'Apparence',
+    'emetteurs'    => 'Émetteurs',
+    'destinataires'=> 'Destinataires',
+    'utilisateurs' => 'Utilisateurs',
+];
+@endphp
+
+{{-- Statut ClamAV --}}
+<div class="mb-6 flex items-center gap-3 px-5 py-4 rounded-2xl border
+    {{ $avEnabled ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200' }}">
+    <i class="fas fa-shield-virus text-xl {{ $avEnabled ? 'text-green-600' : 'text-amber-500' }}"></i>
+    <div>
+        <p class="font-semibold text-sm {{ $avEnabled ? 'text-green-800' : 'text-amber-800' }}">
+            Antivirus ClamAV — {{ $avEnabled ? 'Activé' : 'Désactivé (mode développement)' }}
+        </p>
+        <p class="text-xs {{ $avEnabled ? 'text-green-600' : 'text-amber-600' }} mt-0.5">
+            @if($avEnabled)
+                Chaque fichier uploadé est scanné avant enregistrement. Les résultats sont consignés ci-dessous.
+            @else
+                Activez <code class="bg-amber-100 px-1 rounded font-mono">CLAMAV_ENABLED=true</code> dans <code class="bg-amber-100 px-1 rounded font-mono">.env</code> sur le serveur Ubuntu de production pour activer les scans.
+            @endif
+        </p>
+    </div>
+</div>
+
+{{-- Compteurs rapides --}}
+@if($scanLogs->total() > 0 || $avResultFilter || $avContextFilter)
+@php
+    $totalScans   = \App\Models\ClamAvScanLog::count();
+    $cleanCount   = \App\Models\ClamAvScanLog::where('result', 'clean')->count();
+    $infectedCount= \App\Models\ClamAvScanLog::where('result', 'infected')->count();
+    $errorCount   = \App\Models\ClamAvScanLog::where('result', 'error')->count();
+@endphp
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white rounded-2xl border border-gray-200 p-4 text-center shadow-sm">
+        <p class="text-2xl font-bold text-gray-800">{{ number_format($totalScans) }}</p>
+        <p class="text-xs text-gray-500 mt-1">Fichiers scannés</p>
+    </div>
+    <div class="bg-white rounded-2xl border border-green-200 p-4 text-center shadow-sm">
+        <p class="text-2xl font-bold text-green-600">{{ number_format($cleanCount) }}</p>
+        <p class="text-xs text-gray-500 mt-1">Propres</p>
+    </div>
+    <div class="bg-white rounded-2xl border border-red-200 p-4 text-center shadow-sm">
+        <p class="text-2xl font-bold text-red-600">{{ number_format($infectedCount) }}</p>
+        <p class="text-xs text-gray-500 mt-1">Infectés</p>
+    </div>
+    <div class="bg-white rounded-2xl border border-amber-200 p-4 text-center shadow-sm">
+        <p class="text-2xl font-bold text-amber-600">{{ number_format($errorCount) }}</p>
+        <p class="text-xs text-gray-500 mt-1">Erreurs</p>
+    </div>
+</div>
+@endif
+
+{{-- Filtres --}}
+<form method="GET" action="{{ route('admin.index') }}" class="flex flex-wrap gap-3 mb-5 items-end">
+    <input type="hidden" name="tab" value="antivirus">
+    <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Résultat</label>
+        <select name="av_result" class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-300 focus:border-blue-400">
+            <option value="">Tous les résultats</option>
+            <option value="clean"    {{ $avResultFilter === 'clean'    ? 'selected' : '' }}>✓ Propre</option>
+            <option value="infected" {{ $avResultFilter === 'infected' ? 'selected' : '' }}>✗ Infecté</option>
+            <option value="error"    {{ $avResultFilter === 'error'    ? 'selected' : '' }}>⚠ Erreur</option>
+        </select>
+    </div>
+    <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Module</label>
+        <select name="av_context" class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-300 focus:border-blue-400">
+            <option value="">Tous les modules</option>
+            @foreach($avContextLabels as $val => $lbl)
+            <option value="{{ $val }}" {{ $avContextFilter === $val ? 'selected' : '' }}>{{ $lbl }}</option>
+            @endforeach
+        </select>
+    </div>
+    <button type="submit" class="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition">
+        <i class="fas fa-filter mr-1"></i> Filtrer
+    </button>
+    @if($avResultFilter || $avContextFilter)
+    <a href="{{ route('admin.index', ['tab' => 'antivirus']) }}" class="px-4 py-2 bg-gray-100 text-gray-600 text-sm font-semibold rounded-lg hover:bg-gray-200 transition">
+        <i class="fas fa-times mr-1"></i> Réinitialiser
+    </a>
+    @endif
+</form>
+
+{{-- Tableau des résultats --}}
+<div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+    @if($scanLogs->isEmpty())
+    <div class="py-16 text-center text-gray-400">
+        <i class="fas fa-shield-virus text-4xl mb-3"></i>
+        <p class="text-sm font-medium">Aucun scan enregistré{{ $avResultFilter || $avContextFilter ? ' pour ces filtres' : '' }}.</p>
+        @if(!$avEnabled)
+        <p class="text-xs mt-1">Activez ClamAV sur le serveur pour commencer à scanner les fichiers.</p>
+        @endif
+    </div>
+    @else
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 border-b border-gray-200">
+                <tr>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Date</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Fichier</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Taille</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Module</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Résultat</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Menace</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Utilisateur</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">IP</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+            @foreach($scanLogs as $log)
+            @php
+                $resultConfig = match($log->result) {
+                    'infected' => ['bg-red-100 text-red-700',   'fas fa-bug',          'Infecté'],
+                    'error'    => ['bg-amber-100 text-amber-700','fas fa-exclamation-triangle', 'Erreur'],
+                    default    => ['bg-green-100 text-green-700','fas fa-check-circle', 'Propre'],
+                };
+                [$resultClass, $resultIcon, $resultLabel] = $resultConfig;
+                $sizeFormatted = $log->file_size
+                    ? ($log->file_size >= 1048576
+                        ? number_format($log->file_size / 1048576, 1) . ' Mo'
+                        : number_format($log->file_size / 1024, 0) . ' Ko')
+                    : '—';
+                $contextLabel = $avContextLabels[$log->context] ?? ($log->context ?? '—');
+                $userName = $log->user?->full_name ?: ($log->user?->name ?: ($log->user?->email ?? '—'));
+            @endphp
+            <tr class="{{ $log->result === 'infected' ? 'bg-red-50' : '' }} hover:bg-gray-50 transition">
+                <td class="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
+                    {{ $log->scanned_at?->format('d/m/Y H:i:s') ?? '—' }}
+                </td>
+                <td class="px-4 py-3 max-w-[200px]">
+                    <span class="block truncate font-medium text-gray-800" title="{{ $log->file_name }}">
+                        {{ $log->file_name }}
+                    </span>
+                    @if($log->mime_type)
+                    <span class="text-xs text-gray-400">{{ $log->mime_type }}</span>
+                    @endif
+                </td>
+                <td class="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">{{ $sizeFormatted }}</td>
+                <td class="px-4 py-3 text-xs">
+                    <span class="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full font-medium">{{ $contextLabel }}</span>
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap">
+                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold {{ $resultClass }}">
+                        <i class="{{ $resultIcon }}"></i> {{ $resultLabel }}
+                    </span>
+                </td>
+                <td class="px-4 py-3 text-xs text-red-700 font-mono">
+                    {{ $log->threat ?? '—' }}
+                </td>
+                <td class="px-4 py-3 text-xs text-gray-600">{{ $userName }}</td>
+                <td class="px-4 py-3 text-xs text-gray-400 font-mono">{{ $log->ip_address ?? '—' }}</td>
+            </tr>
+            @endforeach
+            </tbody>
+        </table>
+    </div>
+    @if($scanLogs->hasPages())
+    <div class="px-4 py-3 border-t border-gray-100">
+        {{ $scanLogs->appends(request()->except('av_page'))->links() }}
+    </div>
+    @endif
+    @endif
+</div>
+@endif
 
 @endsection

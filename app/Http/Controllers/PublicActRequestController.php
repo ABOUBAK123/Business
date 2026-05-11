@@ -237,7 +237,7 @@ class PublicActRequestController extends Controller
                     ->withInput();
             }
 
-            ClamAvScanner::scan($file);
+            ClamAvScanner::scan($file, 'actes-publics');
             $path = $file->store('act-requests', 'public');
             $isRequiredDocument = array_key_exists($selectedLabel, $requiredLookup);
             if ($isRequiredDocument) {

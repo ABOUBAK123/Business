@@ -2,55 +2,91 @@
 
 namespace App\Services;
 
+use App\Models\ClamAvScanLog;
 use Illuminate\Http\UploadedFile;
-use Illuminate\Validation\ValidationException;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class ClamAvScanner
 {
     /**
-     * Scanne un fichier uploadé via ClamAV.
-     * Lance une ValidationException si le fichier est infecté.
+     * Scanne un fichier uploadé via ClamAV et enregistre le résultat.
+     * Lance une ValidationException si le fichier est infecté ou si le démon est en erreur.
      * Ne fait rien si CLAMAV_ENABLED=false (dev local).
+     *
+     * @param  string  $context  Module d'origine (ex: 'documents', 'courriers', 'rh-employes')
      */
-    public static function scan(UploadedFile $file): void
+    public static function scan(UploadedFile $file, string $context = ''): void
     {
         if (! config('services.clamav.enabled', false)) {
             return;
         }
 
-        $socket  = config('services.clamav.socket', '/var/run/clamav/clamd.ctl');
         $tmpPath = $file->getPathname();
+        $cmd     = ['clamdscan', '--no-summary', '--fdpass', $tmpPath];
+        $result  = self::execCommand($cmd);
 
-        // clamdscan lit le fichier temporaire PHP directement
-        $cmd    = ['clamdscan', '--no-summary', '--fdpass', $tmpPath];
-        $result = self::execCommand($cmd);
+        $logData = [
+            'id'             => (string) Str::uuid(),
+            'file_name'      => $file->getClientOriginalName(),
+            'file_size'      => $file->getSize(),
+            'mime_type'      => $file->getMimeType(),
+            'context'        => $context ?: null,
+            'scanned_by'     => Auth::id() ? (string) Auth::id() : null,
+            'ip_address'     => request()->ip(),
+            'scanner_output' => mb_substr($result['output'], 0, 2000),
+        ];
+
+        if ($result['code'] === 0) {
+            ClamAvScanLog::create(array_merge($logData, [
+                'result' => 'clean',
+                'threat' => null,
+            ]));
+            return;
+        }
 
         if ($result['code'] === 1) {
+            $threat = self::extractThreatName($result['output']);
+            ClamAvScanLog::create(array_merge($logData, [
+                'result' => 'infected',
+                'threat' => $threat,
+            ]));
             Log::warning('ClamAV: fichier infecté rejeté', [
-                'original_name' => $file->getClientOriginalName(),
-                'output'        => $result['output'],
+                'file'    => $file->getClientOriginalName(),
+                'context' => $context,
+                'threat'  => $threat,
             ]);
             throw ValidationException::withMessages([
                 'file' => 'Le fichier a été rejeté car il contient un contenu malveillant détecté par l\'antivirus.',
             ]);
         }
 
-        if ($result['code'] === 2) {
-            Log::error('ClamAV: erreur de scan', [
-                'original_name' => $file->getClientOriginalName(),
-                'output'        => $result['output'],
-            ]);
-            // En cas d'erreur du démon ClamAV, bloquer par défaut (fail-closed)
-            throw ValidationException::withMessages([
-                'file' => 'Impossible de vérifier la sécurité du fichier. Veuillez réessayer ou contacter l\'administrateur.',
-            ]);
-        }
+        // code === 2 : erreur du démon
+        ClamAvScanLog::create(array_merge($logData, [
+            'result' => 'error',
+            'threat' => null,
+        ]));
+        Log::error('ClamAV: erreur de scan', [
+            'file'    => $file->getClientOriginalName(),
+            'context' => $context,
+            'output'  => $result['output'],
+        ]);
+        throw ValidationException::withMessages([
+            'file' => 'Impossible de vérifier la sécurité du fichier. Veuillez réessayer ou contacter l\'administrateur.',
+        ]);
     }
 
-    /**
-     * Exécute une commande et retourne son code de sortie + sa sortie standard.
-     */
+    private static function extractThreatName(string $output): ?string
+    {
+        // Ligne ClamAV: "/tmp/phpXXXXX: Eicar-Signature FOUND"
+        if (preg_match('/:\s+(.+)\s+FOUND/i', $output, $m)) {
+            return trim($m[1]);
+        }
+        return null;
+    }
+
     private static function execCommand(array $cmd): array
     {
         $descriptors = [

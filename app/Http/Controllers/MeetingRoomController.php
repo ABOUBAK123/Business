@@ -75,7 +75,7 @@ class MeetingRoomController extends Controller
 
         $photoPath = null;
         if ($request->hasFile('photo')) {
-            ClamAvScanner::scan($request->file('photo'));
+            ClamAvScanner::scan($request->file('photo'), 'reunions');
             $photoPath = '/storage/' . $request->file('photo')->store('meetings/rooms', 'public');
         }
 
@@ -124,7 +124,7 @@ class MeetingRoomController extends Controller
                 }
             }
 
-            ClamAvScanner::scan($request->file('photo'));
+            ClamAvScanner::scan($request->file('photo'), 'reunions');
             $photoPath = '/storage/' . $request->file('photo')->store('meetings/rooms', 'public');
         }
 
