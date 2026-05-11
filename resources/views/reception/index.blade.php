@@ -50,6 +50,7 @@
                     <th class="text-left px-5 py-3 font-semibold text-gray-600">Expéditeur</th>
                     <th class="text-left px-5 py-3 font-semibold text-gray-600">Demandeur</th>
                     <th class="text-left px-5 py-3 font-semibold text-gray-600">Téléphone</th>
+                    <th class="text-left px-5 py-3 font-semibold text-gray-600">RIB</th>
                     <th class="text-left px-5 py-3 font-semibold text-gray-600">Statut</th>
                     <th class="text-left px-5 py-3 font-semibold text-gray-600">Reçu le</th>
                     <th class="px-5 py-3"></th>
@@ -86,6 +87,9 @@
                     </td>
                     <td class="px-5 py-4 text-gray-600 text-xs">
                         {{ $shareInfo?->applicant_phone ?? '—' }}
+                    </td>
+                    <td class="px-5 py-4 text-gray-700 text-xs font-mono">
+                        {{ $shareInfo?->applicant_rib ?? '—' }}
                     </td>
                     <td class="px-5 py-4">
                         <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold

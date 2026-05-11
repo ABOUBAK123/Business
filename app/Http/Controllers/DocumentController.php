@@ -648,6 +648,7 @@ class DocumentController extends Controller
             'applicant_matricule'          => $request->input('applicantMatricule'),
             'applicant_email'              => $request->input('applicantEmail'),
             'applicant_phone'              => $request->input('applicantPhone'),
+            'applicant_rib'               => $request->input('applicantRib') ? strtoupper(trim((string) $request->input('applicantRib'))) : null,
             'tracking_number'              => strtoupper(trim((string) $request->input('trackingNumber', ''))),
         ];
 
@@ -774,6 +775,11 @@ class DocumentController extends Controller
             $recipientAdministration = RecipientAdministration::find($recipientAdministrationId);
             if (!$recipientAdministration) {
                 return response()->json(['ok' => false, 'message' => 'Administration destinataire introuvable.'], 422);
+            }
+
+            $adminSector = strtolower((string) ($recipientAdministration->metadata['sector'] ?? ''));
+            if ($adminSector === 'banques' && empty(trim((string) $request->input('applicantRib', '')))) {
+                return response()->json(['ok' => false, 'message' => 'Le RIB est obligatoire pour les établissements bancaires.'], 422);
             }
 
             // Trace de partage administration (audit)

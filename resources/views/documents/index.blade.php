@@ -416,6 +416,14 @@
                     <input type="tel" id="shareApplicantPhone" placeholder="Ex: 0700000000"
                            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                 </div>
+                <div id="shareRibWrapper" class="hidden">
+                    <label class="block text-xs font-semibold text-gray-700 mb-1">
+                        RIB <span class="text-red-500">*</span>
+                    </label>
+                    <input type="text" id="shareApplicantRib" placeholder="Ex: CI12345 00001 00000000000 00"
+                           class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono tracking-wide">
+                    <p class="text-xs text-gray-400 mt-1">Obligatoire pour les établissements bancaires.</p>
+                </div>
             </div>
 
             <!-- Délai de validité -->
@@ -533,6 +541,14 @@ function resetRecipientSectorFilter() {
         sectorOptions.map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
 }
 
+function toggleRibField() {
+    const sector = (document.getElementById('shareAdminSector').value || '').toLowerCase();
+    const wrapper = document.getElementById('shareRibWrapper');
+    const isBanque = sector === 'banques';
+    wrapper.classList.toggle('hidden', !isBanque);
+    if (!isBanque) document.getElementById('shareApplicantRib').value = '';
+}
+
 function filterRecipientAdministrations() {
     const sector = (document.getElementById('shareAdminSector').value || '').trim().toLowerCase();
     const select = document.getElementById('shareAdminId');
@@ -552,6 +568,7 @@ function filterRecipientAdministrations() {
             select.value = '';
         }
     }
+    toggleRibField();
 }
 
 async function lookupShareByTrackingNumber() {
@@ -1283,6 +1300,8 @@ function openShareModal(id) {
     document.getElementById('shareMatricule').value = '';
     document.getElementById('shareApplicantEmail').value = '';
     document.getElementById('shareApplicantPhone').value = '';
+    document.getElementById('shareApplicantRib').value = '';
+    document.getElementById('shareRibWrapper').classList.add('hidden');
     document.getElementById('shareTrackingNumber').value = '';
     document.getElementById('shareTrackingStatus').classList.add('hidden');
     document.getElementById('shareHasDelay').checked = false;
@@ -1367,14 +1386,18 @@ async function submitShare() {
         const mat = document.getElementById('shareMatricule').value.trim();
         const email = document.getElementById('shareApplicantEmail').value.trim();
         const phone = document.getElementById('shareApplicantPhone').value.trim();
+        const sector = (document.getElementById('shareAdminSector').value || '').toLowerCase();
+        const rib = document.getElementById('shareApplicantRib').value.trim();
         if (!trackingNumber || !adminId || !fullName || !mat || !email) { show('Tous les champs sont obligatoires.', false); return; }
         if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { show('Adresse email invalide.', false); return; }
+        if (sector === 'banques' && !rib) { show('Le RIB est obligatoire pour les établissements bancaires.', false); return; }
         payload.trackingNumber = trackingNumber;
         payload.recipientAdministrationId = adminId;
         payload.applicantFullName = fullName;
         payload.applicantMatricule = mat;
         payload.applicantEmail = email;
         if (phone) payload.applicantPhone = phone;
+        if (rib) payload.applicantRib = rib;
     }
 
     await post(ROUTES.share(shareDocId), payload).then(data => {
