@@ -56,13 +56,55 @@ class CourrierOcrService
         $escaped  = escapeshellarg($path);
         $devNull  = PHP_OS_FAMILY === 'Windows' ? '2>nul' : '2>/dev/null';
 
+        // Try pdftotext (text-based PDF)
         $output = @shell_exec("pdftotext -layout {$escaped} - {$devNull}");
         if (!empty(trim((string) $output))) {
             return (string) $output;
         }
 
+        // Try ghostscript text extraction
         $output = @shell_exec("gs -dBATCH -dNOPAUSE -sDEVICE=txtwrite -sOutputFile=- {$escaped} {$devNull}");
-        return (string) ($output ?? '');
+        if (!empty(trim((string) $output))) {
+            return (string) $output;
+        }
+
+        // PDF is image-based (scanned): convert pages to PNG then run tesseract
+        return $this->extractFromScannedPdf($path, $devNull);
+    }
+
+    private function extractFromScannedPdf(string $path, string $devNull): string
+    {
+        $tmpDir  = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'ocr_' . uniqid();
+        @mkdir($tmpDir, 0700, true);
+
+        try {
+            $escapedPdf = escapeshellarg($path);
+            $outPattern = escapeshellarg($tmpDir . DIRECTORY_SEPARATOR . 'page_%04d.png');
+
+            // Convert PDF pages to PNG at 200 DPI
+            @shell_exec("gs -dBATCH -dNOPAUSE -sDEVICE=png16m -r200 -sOutputFile={$outPattern} {$escapedPdf} {$devNull}");
+
+            $pages = glob($tmpDir . DIRECTORY_SEPARATOR . '*.png') ?: [];
+            sort($pages);
+
+            $text = '';
+            foreach (array_slice($pages, 0, 5) as $page) {
+                $escapedPage = escapeshellarg($page);
+                $out = @shell_exec("tesseract {$escapedPage} stdout -l fra {$devNull}");
+                if (empty(trim((string) $out))) {
+                    $out = @shell_exec("tesseract {$escapedPage} stdout {$devNull}");
+                }
+                $text .= (string) $out;
+            }
+
+            return $text;
+        } finally {
+            // Clean up temp files
+            foreach (glob($tmpDir . DIRECTORY_SEPARATOR . '*') ?: [] as $f) {
+                @unlink($f);
+            }
+            @rmdir($tmpDir);
+        }
     }
 
     private function extractFromImage(string $path): string

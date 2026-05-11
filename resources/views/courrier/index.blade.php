@@ -261,8 +261,14 @@ function startOcr(file) {
                 showOcrError(errMsg);
                 return;
             }
-            fillFormFields(data.fields);
-            document.getElementById('ocrSuccess').classList.remove('hidden');
+            const filled = fillFormFields(data.fields);
+            if (filled === 0) {
+                showOcrError('Aucun champ reconnu. Le texte du document n\'a pas pu être lu (PDF scanné non lisible ou format non standard). Remplissez les champs manuellement.');
+            } else {
+                document.getElementById('ocrSuccess').querySelector('span').textContent =
+                    filled + ' champ' + (filled > 1 ? 's' : '') + ' pré-rempli' + (filled > 1 ? 's' : '') + ' avec succès. Vérifiez et corrigez si nécessaire.';
+                document.getElementById('ocrSuccess').classList.remove('hidden');
+            }
         })
         .catch(err => {
             document.getElementById('ocrStatus').classList.add('hidden');
@@ -275,26 +281,31 @@ function showOcrError(msg) {
     el.classList.remove('hidden');
 }
 function fillFormFields(fields) {
-    if (!fields) return;
+    if (!fields) return 0;
     const typeForm = document.querySelector('input[name="type_courrier"]')?.value;
+    let count = 0;
 
-    if (fields.objet)         setField('input[name="objet"]', fields.objet);
-    if (fields.date_emission) setField('input[name="date_emission"]', fields.date_emission);
-    if (fields.numero_emission) setField('input[name="numero_emission"]', fields.numero_emission);
-    if (fields.urgence)       setSelect('select[name="urgence"]', fields.urgence);
+    if (fields.objet)           count += setField('input[name="objet"]', fields.objet);
+    if (fields.date_emission)   count += setField('input[name="date_emission"]', fields.date_emission);
+    if (fields.numero_emission) count += setField('input[name="numero_emission"]', fields.numero_emission);
+    if (fields.urgence && fields.urgence !== 'normale') count += setSelect('select[name="urgence"]', fields.urgence);
 
     if (typeForm === 'arrive' && fields.expediteur)
-        setField('textarea[name="expediteur"]', fields.expediteur);
+        count += setField('textarea[name="expediteur"]', fields.expediteur);
     if (typeForm === 'depart' && fields.destinataire)
-        setField('textarea[name="destinataire"]', fields.destinataire);
+        count += setField('textarea[name="destinataire"]', fields.destinataire);
+
+    return count;
 }
 function setField(selector, value) {
     const el = document.querySelector(selector);
-    if (el && value) { el.value = value; el.dispatchEvent(new Event('input')); }
+    if (el && value) { el.value = value; el.dispatchEvent(new Event('input')); return 1; }
+    return 0;
 }
 function setSelect(selector, value) {
     const el = document.querySelector(selector);
-    if (el && value) { el.value = value; el.dispatchEvent(new Event('change')); }
+    if (el && value) { el.value = value; el.dispatchEvent(new Event('change')); return 1; }
+    return 0;
 }
 document.getElementById('ocrModal')?.addEventListener('click', function(e) {
     if (e.target === this) closeOcrModal();
