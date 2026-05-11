@@ -89,7 +89,7 @@ class NotificationService
                 type: 'workflow',
                 title: 'Etape de workflow assignee',
                 message: sprintf('Vous etes assigne a une etape du workflow "%s" par %s.', $workflow->name ?? 'Sans nom', $actorName),
-                actionUrl: route('workflows.show', $workflow),
+                actionUrl: route('workflows.index') . '#en-cours',
                 workflowId: (string) ($workflow->id ?? null)
             );
         }
@@ -110,7 +110,7 @@ class NotificationService
             type: 'workflow',
             title: 'Workflow demarre',
             message: sprintf('Le workflow "%s" a ete lance par %s.', $workflow->name ?? 'Sans nom', $actorName),
-            actionUrl: route('workflows.show', $workflow),
+            actionUrl: route('workflows.index') . '#en-cours',
             workflowId: (string) ($workflow->id ?? null)
         );
     }
@@ -135,7 +135,7 @@ class NotificationService
             type: 'workflow',
             title: 'Etape suivante du workflow',
             message: sprintf('Le workflow "%s" a avance a votre etape par %s.', $workflow->name ?? 'Sans nom', $actorName),
-            actionUrl: route('workflows.show', $workflow),
+            actionUrl: route('workflows.index') . '#en-cours',
             workflowId: (string) ($workflow->id ?? null)
         );
     }

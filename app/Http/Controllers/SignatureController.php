@@ -179,7 +179,7 @@ class SignatureController extends Controller
                     type: 'workflow',
                     title: 'Workflow terminé',
                     message: sprintf('Le workflow "%s" est terminé après la dernière étape de signature.', $workflow->name ?? 'Sans nom'),
-                    actionUrl: route('signatures.index'),
+                    actionUrl: route('workflows.index') . '#termine',
                     workflowId: (string) ($workflow->id ?? null),
                     executionId: (string) $execution->id
                 );
@@ -944,7 +944,7 @@ class SignatureController extends Controller
                             $rejectedAt->format('d/m/Y à H:i'),
                             $rejectReason
                         ),
-                        actionUrl: route('signatures.index'),
+                        actionUrl: route('workflows.index') . '#rejete',
                         workflowId: (string) ($wf->id ?? null),
                         executionId: (string) $execution->id
                     );
@@ -988,7 +988,7 @@ class SignatureController extends Controller
                         message: $isSignatureStep
                             ? sprintf('Le workflow "%s" est terminé et le document a été signé.', $wf->name ?? 'Sans nom')
                             : sprintf('Le workflow "%s" est terminé après validation finale.', $wf->name ?? 'Sans nom'),
-                        actionUrl: route('signatures.index'),
+                        actionUrl: route('workflows.index') . '#termine',
                         workflowId: (string) ($wf->id ?? null),
                         executionId: (string) $execution->id
                     );
