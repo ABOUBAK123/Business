@@ -63,19 +63,20 @@ class ClamAvScanner
             ]);
         }
 
-        // code === 2 : erreur du démon
-        ClamAvScanLog::create(array_merge($logData, [
-            'result' => 'error',
-            'threat' => null,
-        ]));
-        Log::error('ClamAV: erreur de scan', [
+        // code === 2 : erreur du démon — on laisse passer mais on loggue
+        Log::error('ClamAV: erreur de scan (daemon inaccessible ?)', [
             'file'    => $file->getClientOriginalName(),
             'context' => $context,
             'output'  => $result['output'],
         ]);
-        throw ValidationException::withMessages([
-            'file' => 'Impossible de vérifier la sécurité du fichier. Veuillez réessayer ou contacter l\'administrateur.',
-        ]);
+        try {
+            ClamAvScanLog::create(array_merge($logData, [
+                'result' => 'error',
+                'threat' => null,
+            ]));
+        } catch (\Throwable $e) {
+            Log::warning('ClamAV: impossible de sauvegarder le log', ['error' => $e->getMessage()]);
+        }
     }
 
     private static function extractThreatName(string $output): ?string
