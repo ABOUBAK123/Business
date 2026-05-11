@@ -234,20 +234,30 @@ function startOcr(file) {
     fd.append('file', file);
     fd.append('_token', document.querySelector('meta[name="csrf-token"]')?.content ?? '');
 
-    fetch('{{ route("courrier.scan-ocr") }}', { method: 'POST', body: fd })
+    fetch('{{ route("courrier.scan-ocr") }}', {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': fd.get('_token') },
+            body: fd
+        })
         .then(async r => {
-            const data = await r.json();
             document.getElementById('ocrStatus').classList.add('hidden');
+            let data;
+            try {
+                data = await r.json();
+            } catch (e) {
+                showOcrError('Erreur serveur (HTTP ' + r.status + '). Consultez les logs Laravel.');
+                return;
+            }
             if (!r.ok || !data.ok) {
-                showOcrError(data.message ?? 'Erreur lors de l\'analyse.');
+                showOcrError(data.message ?? 'Erreur lors de l\'analyse (HTTP ' + r.status + ').');
                 return;
             }
             fillFormFields(data.fields);
             document.getElementById('ocrSuccess').classList.remove('hidden');
         })
-        .catch(() => {
+        .catch(err => {
             document.getElementById('ocrStatus').classList.add('hidden');
-            showOcrError('Erreur réseau. Vérifiez votre connexion et réessayez.');
+            showOcrError('Erreur réseau : ' + (err.message ?? 'connexion impossible.'));
         });
 }
 function showOcrError(msg) {

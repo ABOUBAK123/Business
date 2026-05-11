@@ -53,30 +53,29 @@ class CourrierOcrService
 
     private function extractFromPdf(string $path): string
     {
-        $escaped = escapeshellarg($path);
+        $escaped  = escapeshellarg($path);
+        $devNull  = PHP_OS_FAMILY === 'Windows' ? '2>nul' : '2>/dev/null';
 
-        // pdftotext (poppler-utils) — disponible sur Ubuntu
-        $output = @shell_exec("pdftotext -layout {$escaped} - 2>/dev/null");
+        $output = @shell_exec("pdftotext -layout {$escaped} - {$devNull}");
         if (!empty(trim((string) $output))) {
             return (string) $output;
         }
 
-        // Fallback: ghostscript si pdftotext absent
-        $output = @shell_exec("gs -dBATCH -dNOPAUSE -sDEVICE=txtwrite -sOutputFile=- {$escaped} 2>/dev/null");
+        $output = @shell_exec("gs -dBATCH -dNOPAUSE -sDEVICE=txtwrite -sOutputFile=- {$escaped} {$devNull}");
         return (string) ($output ?? '');
     }
 
     private function extractFromImage(string $path): string
     {
         $escaped = escapeshellarg($path);
+        $devNull = PHP_OS_FAMILY === 'Windows' ? '2>nul' : '2>/dev/null';
 
-        // Tesseract OCR — langue française prioritaire, fallback anglais
-        $output = @shell_exec("tesseract {$escaped} stdout -l fra 2>/dev/null");
+        $output = @shell_exec("tesseract {$escaped} stdout -l fra {$devNull}");
         if (!empty(trim((string) $output))) {
             return (string) $output;
         }
 
-        $output = @shell_exec("tesseract {$escaped} stdout 2>/dev/null");
+        $output = @shell_exec("tesseract {$escaped} stdout {$devNull}");
         return (string) ($output ?? '');
     }
 
