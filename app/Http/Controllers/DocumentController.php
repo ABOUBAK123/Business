@@ -1096,6 +1096,7 @@ class DocumentController extends Controller
 
     public function createNew(Request $request)
     {
+        $this->guardPermission('documents');
         $title  = $request->input('title', 'Nouveau document');
         $type   = $request->input('type', 'file');
         $folder = $request->input('folder');
@@ -1165,14 +1166,22 @@ class DocumentController extends Controller
         }
 
         return response()->json([
-            'id'          => $doc->id,
-            'title'       => $doc->title,
-            'description' => $doc->description,
-            'file_path'   => $doc->file_path,
-            'mime_type'   => $doc->mime_type,
-            'status'      => $doc->status,
-            'created_at'  => $doc->created_at->toISOString(),
-            'updated_at'  => $doc->updated_at->toISOString(),
+            'id'               => $doc->id,
+            'owner_id'         => $doc->owner_id,
+            'is_owner'         => true,
+            'can_share'        => true,
+            'share_permission' => 'modification',
+            'can_edit_content' => true,
+            'title'            => $doc->title,
+            'description'      => $doc->description,
+            'file_path'        => $doc->file_path,
+            'final_file_path'  => $doc->final_file_path,
+            'file_size'        => $doc->file_size,
+            'mime_type'        => $doc->mime_type,
+            'status'           => $doc->status,
+            'shares_count'     => 0,
+            'created_at'       => $doc->created_at->toISOString(),
+            'updated_at'       => $doc->updated_at->toISOString(),
         ]);
     }
 

@@ -1145,13 +1145,23 @@ async function handleMenuAction(action) {
         title = title.trim();
     }
 
-    const data = await post(ROUTES.createNew, { title, type, folder: activeFolderTab });
+    let data;
+    try {
+        data = await post(ROUTES.createNew, { title, type, folder: activeFolderTab });
+    } catch(err) {
+        showToast(err.message || 'Erreur lors de la création.');
+        return;
+    }
+    if (!data?.id) {
+        showToast(data?.message || 'Erreur lors de la création.');
+        return;
+    }
     allDocs.unshift(data);
     renderTable();
 
     // Ouvrir immédiatement dans l'éditeur si c'est un fichier Office
     const e = (title || '').split('.').pop().toLowerCase();
-    if (['docx','xlsx','pptx'].includes(e) && data.id) {
+    if (['docx','xlsx','pptx'].includes(e)) {
         openInOnlyOffice(data.id);
     }
 }
@@ -1187,8 +1197,9 @@ document.getElementById('folderInput').addEventListener('change', async (e) => {
     for (const folderName of folderNames) {
         try {
             const data = await post(ROUTES.createNew, { title: folderName, type: 'folder', folder: null });
-            allDocs.unshift(data);
-        } catch(err) { console.error('Dossier error:', err); }
+            if (data?.id) allDocs.unshift(data);
+            else showToast(data?.message || `Erreur création dossier « ${folderName} »`);
+        } catch(err) { showToast(err.message || `Erreur création dossier « ${folderName} »`); }
     }
 
     const total = files.length;
