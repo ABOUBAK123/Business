@@ -2622,7 +2622,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     await refreshWorkflows({silent: true});
     renderTiles();
-    setFilter('Tous');
+    const _hashFilterMap = { '#termine': 'Terminé', '#en-cours': 'En cours', '#rejete': 'Rejeté', '#en-attente': 'En attente' };
+    setFilter(_hashFilterMap[window.location.hash] || 'Tous');
 
     // Rafraîchir automatiquement le tableau créateur pour suivre l'évolution
     setInterval(() => refreshWorkflows({silent: true}), 15000);

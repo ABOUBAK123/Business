@@ -524,7 +524,7 @@ class WorkflowController extends Controller
                 type: 'workflow_assigned',
                 title: 'Workflow terminé',
                 message: 'Le workflow « ' . $workflow->name . ' » a été complété avec succès.',
-                actionUrl: route('workflows.show', $workflow),
+                actionUrl: route('workflows.index') . '#termine',
                 workflowId: $workflow->id,
             );
         } else {
