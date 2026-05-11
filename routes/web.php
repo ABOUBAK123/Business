@@ -193,6 +193,9 @@ Route::middleware('auth')->group(function () {
     Route::post('/documents/new', [DocumentController::class, 'createNew'])->name('documents.new');
     Route::post('/documents/onlyoffice-config', [DocumentController::class, 'onlyofficeConfig'])->name('documents.onlyofficeConfig');
     Route::post('/documents/share/lookup-tracking', [DocumentController::class, 'lookupActRequestByTracking'])->name('documents.share.lookupTracking');
+    Route::get('/documents/trash', [DocumentController::class, 'trash'])->name('documents.trash');
+    Route::post('/documents/{id}/restore', [DocumentController::class, 'restore'])->name('documents.restore');
+    Route::delete('/documents/{id}/force-delete', [DocumentController::class, 'forceDelete'])->name('documents.forceDelete');
     Route::resource('documents', DocumentController::class);
     Route::get('/documents/{document}/download', [DocumentController::class, 'download'])->name('documents.download');
     Route::post('/documents/{document}/favorite', [DocumentController::class, 'toggleFavorite'])->name('documents.favorite');

@@ -104,6 +104,9 @@
     </button>
     <input type="text" id="labelSearch" oninput="applyFilters()" placeholder="Code étiquette (ex: ETQ-RH-001)"
            class="hidden ml-auto w-full sm:w-72 border border-gray-300 rounded-lg px-3 py-1.5 text-xs">
+    <a href="{{ route('documents.trash') }}" class="ml-auto px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-50 text-red-600 hover:bg-red-100 flex items-center gap-1.5">
+        <i class="fas fa-trash-alt"></i> Corbeille
+    </a>
 </div>
 
 <!-- Barre de progression upload -->

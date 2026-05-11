@@ -308,21 +308,69 @@ class DocumentController extends Controller
         $this->guardPermission('documents.delete');
         abort_if(Auth::id() !== $document->owner_id, 403);
 
-        // Supprimer le fichier physique du disque
-        if ($document->file_path) {
-            $relativePath = ltrim(str_replace('/storage/', '', $document->file_path), '/');
-            if (\Storage::disk('public')->exists($relativePath)) {
-                \Storage::disk('public')->delete($relativePath);
-            }
-        }
-
+        // Déplacer en corbeille (soft delete) sans supprimer le fichier physique
         $document->delete();
 
         if (request()->wantsJson() || request()->ajax()) {
             return response()->json(['ok' => true]);
         }
 
-        return redirect()->route('documents.index')->with('success', 'Document supprimé.');
+        return redirect()->route('documents.index')->with('success', 'Document déplacé vers la corbeille.');
+    }
+
+    public function trash()
+    {
+        $this->guardPermission('documents.view');
+
+        $documents = Document::onlyTrashed()
+            ->where('owner_id', Auth::id())
+            ->orderByDesc('deleted_at')
+            ->get();
+
+        return view('documents.trash', compact('documents'));
+    }
+
+    public function restore(string $id)
+    {
+        $this->guardPermission('documents.delete');
+
+        $document = Document::onlyTrashed()
+            ->where('owner_id', Auth::id())
+            ->findOrFail($id);
+
+        $document->restore();
+
+        if (request()->wantsJson() || request()->ajax()) {
+            return response()->json(['ok' => true]);
+        }
+
+        return redirect()->route('documents.trash')->with('success', 'Document restauré avec succès.');
+    }
+
+    public function forceDelete(string $id)
+    {
+        $this->guardPermission('documents.delete');
+
+        $document = Document::onlyTrashed()
+            ->where('owner_id', Auth::id())
+            ->findOrFail($id);
+
+        foreach (['file_path', 'signed_file_path', 'final_file_path'] as $field) {
+            if (!empty($document->$field)) {
+                $rel = ltrim(str_replace('/storage/', '', (string) $document->$field), '/');
+                if (Storage::disk('public')->exists($rel)) {
+                    Storage::disk('public')->delete($rel);
+                }
+            }
+        }
+
+        $document->forceDelete();
+
+        if (request()->wantsJson() || request()->ajax()) {
+            return response()->json(['ok' => true]);
+        }
+
+        return redirect()->route('documents.trash')->with('success', 'Document supprimé définitivement.');
     }
 
     public function download(Request $request, Document $document)
