@@ -8139,6 +8139,14 @@ function toggleOoSecret() {
                 class="js-user-edit-link text-blue-600 hover:bg-blue-50 rounded p-1.5 transition" title="Modifier">
                 <i class="fas fa-pen text-xs"></i>
               </a>
+              {{-- Notifier par email --}}
+              <form method="POST" action="{{ route('admin.users-tab.notify-account', $u) }}" class="inline">
+                @csrf
+                <button type="submit" class="text-amber-600 hover:bg-amber-50 rounded p-1.5 transition"
+                  title="Notifier la création de compte par email">
+                  <i class="fas fa-envelope text-xs"></i>
+                </button>
+              </form>
               {{-- Toggle statut --}}
               <form method="POST" action="{{ route('admin.users-tab.toggle-status', $u) }}" class="inline">
                 @csrf

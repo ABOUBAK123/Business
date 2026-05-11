@@ -5260,6 +5260,8 @@ class AdminController extends Controller
                 ]);
             }
 
+            $this->sendAccountCreationEmail($user);
+
             return redirect()->route('admin.index', ['tab' => 'users'])->with('success', 'Utilisateur créé avec succès.');
         } catch (\Throwable $e) {
             Log::error('storeUserTab failed', [
@@ -5813,5 +5815,46 @@ class AdminController extends Controller
         }
 
         return $slug;
+    }
+
+    // ── Notification création de compte ──────────────────────────────────────
+
+    public function notifyUserAccount(User $user): \Illuminate\Http\RedirectResponse
+    {
+        $this->guardPermission('administration.users');
+        $this->sendAccountCreationEmail($user);
+        return redirect()->back()->with('success', "Notification de compte envoyée à {$user->email}.");
+    }
+
+    private function sendAccountCreationEmail(User $user): void
+    {
+        try {
+            $appName = config('app.name', 'E-Parapheur');
+            $appUrl  = rtrim(config('app.url', url('/')), '/');
+            $displayName = trim((string) ($user->full_name ?? $user->name ?? '')) ?: $user->email;
+
+            $body = "Bonjour {$displayName},\n\n"
+                . "Votre compte utilisateur sur la plateforme {$appName} a été créé avec succès.\n\n"
+                . "═══════════════════════════════\n"
+                . "INFORMATIONS DE CONNEXION\n"
+                . "═══════════════════════════════\n"
+                . "  • Identifiant (email) : {$user->email}\n"
+                . "  • Lien d'accès        : {$appUrl}\n"
+                . "═══════════════════════════════\n\n"
+                . "Pour obtenir votre mot de passe, veuillez contacter l'administrateur de la plateforme.\n\n"
+                . "Cordialement,\n"
+                . "L'équipe {$appName}";
+
+            \Illuminate\Support\Facades\Mail::raw($body, function ($message) use ($user, $appName) {
+                $message->to($user->email, $user->full_name ?: $user->name)
+                        ->subject("Création de votre compte — {$appName}");
+            });
+        } catch (\Throwable $e) {
+            Log::warning('sendAccountCreationEmail failed', [
+                'user_id' => (string) $user->id,
+                'email'   => $user->email,
+                'error'   => $e->getMessage(),
+            ]);
+        }
     }
 }
