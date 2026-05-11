@@ -81,7 +81,30 @@ class CourrierOcrService
 
     private function extractFieldsWithLlm(string $text): array
     {
-        // Tronquer pour ne pas dépasser le contexte du modèle
+        // Essayer Ollama d'abord, fallback regex si indisponible
+        if ($this->isOllamaAvailable()) {
+            $result = $this->extractWithOllama($text);
+            if (!isset($result['error'])) {
+                return $result;
+            }
+        }
+
+        // Fallback : extraction par expressions régulières
+        return $this->extractWithRegex($text);
+    }
+
+    private function isOllamaAvailable(): bool
+    {
+        try {
+            $response = Http::timeout(3)->get("{$this->ollamaUrl}");
+            return $response->successful();
+        } catch (\Throwable) {
+            return false;
+        }
+    }
+
+    private function extractWithOllama(string $text): array
+    {
         $textTruncated = mb_substr($text, 0, 3000);
 
         $prompt = <<<PROMPT
@@ -111,13 +134,10 @@ PROMPT;
             ]);
 
             if (!$response->successful()) {
-                Log::warning('CourrierOcr: Ollama unavailable', ['status' => $response->status()]);
-                return ['error' => 'Le service d\'analyse IA est indisponible. Remplissez les champs manuellement.'];
+                return ['error' => 'Ollama indisponible'];
             }
 
             $raw = (string) $response->json('response', '');
-
-            // Extraire le premier bloc JSON valide de la réponse
             if (preg_match('/\{[^{}]*\}/s', $raw, $m)) {
                 $data = json_decode($m[0], true);
                 if (is_array($data)) {
@@ -125,13 +145,93 @@ PROMPT;
                 }
             }
 
-            Log::warning('CourrierOcr: no JSON in Ollama response', ['raw' => mb_substr($raw, 0, 300)]);
-            return ['error' => 'L\'analyse n\'a pas retourné de résultat structuré. Remplissez les champs manuellement.'];
+            return ['error' => 'Réponse Ollama non structurée'];
 
         } catch (\Throwable $e) {
-            Log::error('CourrierOcr: LLM error', ['error' => $e->getMessage()]);
-            return ['error' => 'Erreur lors de l\'analyse du document.'];
+            Log::warning('CourrierOcr: Ollama error', ['error' => $e->getMessage()]);
+            return ['error' => 'Ollama error'];
         }
+    }
+
+    private function extractWithRegex(string $text): array
+    {
+        $data = [
+            'objet'           => null,
+            'expediteur'      => null,
+            'destinataire'    => null,
+            'date_emission'   => null,
+            'numero_emission' => null,
+            'urgence'         => 'normale',
+        ];
+
+        // ── Objet ──────────────────────────────────────────────────────────────
+        if (preg_match('/(?:^|\n)\s*Objet\s*[:\/]\s*(.+)/im', $text, $m)) {
+            $data['objet'] = mb_substr(trim($m[1]), 0, 500);
+        } elseif (preg_match('/(?:^|\n)\s*(?:RE|Object|Sujet|Réf\.?\s*:)\s*[:\/]?\s*(.+)/im', $text, $m)) {
+            $data['objet'] = mb_substr(trim($m[1]), 0, 500);
+        }
+
+        // ── Numéro de référence ────────────────────────────────────────────────
+        if (preg_match('/(?:N[°º\/]|Réf\.?|Référence|Ref\.?)\s*:?\s*([A-Z0-9\/\-\._ ]{3,40})/im', $text, $m)) {
+            $data['numero_emission'] = mb_substr(trim($m[1]), 0, 100);
+        }
+
+        // ── Date ──────────────────────────────────────────────────────────────
+        $data['date_emission'] = $this->extractDate($text);
+
+        // ── Expéditeur ────────────────────────────────────────────────────────
+        foreach (['Expéditeur', 'De', 'From', 'Émetteur', 'L\'émetteur', 'Signataire'] as $lbl) {
+            if (preg_match('/(?:^|\n)\s*' . preg_quote($lbl, '/') . '\s*[:]\s*(.+)/im', $text, $m)) {
+                $data['expediteur'] = mb_substr(trim($m[1]), 0, 300);
+                break;
+            }
+        }
+
+        // ── Destinataire ──────────────────────────────────────────────────────
+        foreach (['Destinataire', 'À', 'A', 'Monsieur', 'Madame', 'To'] as $lbl) {
+            if (preg_match('/(?:^|\n)\s*' . preg_quote($lbl, '/') . '\s*[:]\s*(.+)/im', $text, $m)) {
+                $data['destinataire'] = mb_substr(trim($m[1]), 0, 300);
+                break;
+            }
+        }
+
+        // ── Urgence ───────────────────────────────────────────────────────────
+        if (preg_match('/très\s*urgent|TRÈS\s*URGENT|tres\s*urgent|PRIORITAIRE\s*URGENT/i', $text)) {
+            $data['urgence'] = 'tres_urgent';
+        } elseif (preg_match('/\bURGENT\b|\bURGENCE\b|\bPRIORITAIRE\b/i', $text)) {
+            $data['urgence'] = 'urgent';
+        }
+
+        return $this->sanitizeFields($data);
+    }
+
+    private function extractDate(string $text): ?string
+    {
+        $moisFr = [
+            'janvier' => '01', 'février' => '02', 'fevrier' => '02', 'mars' => '03',
+            'avril' => '04', 'mai' => '05', 'juin' => '06', 'juillet' => '07',
+            'août' => '08', 'aout' => '08', 'septembre' => '09', 'octobre' => '10',
+            'novembre' => '11', 'décembre' => '12', 'decembre' => '12',
+        ];
+
+        // Format: DD/MM/YYYY ou DD-MM-YYYY
+        if (preg_match('/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})\b/', $text, $m)) {
+            return sprintf('%04d-%02d-%02d', $m[3], $m[2], $m[1]);
+        }
+
+        // Format: YYYY-MM-DD
+        if (preg_match('/\b(20\d{2})-(\d{2})-(\d{2})\b/', $text, $m)) {
+            return $m[0];
+        }
+
+        // Format littéral: "le 12 mars 2026" ou "12 mars 2026"
+        $moisPattern = implode('|', array_keys($moisFr));
+        if (preg_match('/\b(?:le\s+)?(\d{1,2})\s+(' . $moisPattern . ')\s+(20\d{2})\b/i', $text, $m)) {
+            $mois = strtolower($m[2]);
+            return sprintf('%04d-%02d-%02d', $m[3], $moisFr[$mois] ?? '01', (int) $m[1]);
+        }
+
+        return null;
     }
 
     private function sanitizeFields(array $data): array
