@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ClamAvScanLog extends Model
 {
+    protected $table     = 'clamav_scan_logs';
     public $incrementing = false;
     protected $keyType   = 'string';
     public $timestamps   = false;
