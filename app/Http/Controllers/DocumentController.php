@@ -13,7 +13,6 @@ use App\Models\User;
 use App\Models\UserDirectionAssignment;
 use App\Models\AppSetting;
 use App\Services\NotificationService;
-use App\Services\Templates\TemplateGenerationCoreService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
@@ -252,10 +251,6 @@ class DocumentController extends Controller
             'file'  => 'required|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,odt,ods,odp,csv,zip|max:51200',
         ]);
 
-        $user = Auth::user();
-        $service = new TemplateGenerationCoreService();
-        $docNumberData = $service->generateDocumentNumber($user);
-
         $file     = $request->file('file');
         $path     = $file->store('documents', 'public');
         $document = Document::create([
@@ -268,9 +263,6 @@ class DocumentController extends Controller
             'status'     => 'draft',
             'owner_id'   => Auth::id(),
             'created_by' => Auth::id(),
-            'document_number' => $docNumberData['document_number'],
-            'sub_entity_code' => $docNumberData['sub_entity_code'],
-            'issuing_administration_id' => $docNumberData['issuing_administration_id'],
         ]);
 
         DocumentVersion::create([
@@ -1101,10 +1093,6 @@ class DocumentController extends Controller
         $type   = $request->input('type', 'file');
         $folder = $request->input('folder');
 
-        $user = Auth::user();
-        $service = new TemplateGenerationCoreService();
-        $docNumberData = $service->generateDocumentNumber($user);
-
         $filePath = '';
         $mimeType = 'application/octet-stream';
 
@@ -1132,7 +1120,6 @@ class DocumentController extends Controller
             if (file_exists($blankSource)) {
                 Storage::disk('public')->put($storedPath, file_get_contents($blankSource));
             } else {
-                // Créer un fichier vierge minimal si pas de template disponible
                 Storage::disk('public')->put($storedPath, '');
             }
 
@@ -1149,9 +1136,6 @@ class DocumentController extends Controller
             'status'      => 'draft',
             'owner_id'    => Auth::id(),
             'created_by'  => Auth::id(),
-            'document_number' => $docNumberData['document_number'],
-            'sub_entity_code' => $docNumberData['sub_entity_code'],
-            'issuing_administration_id' => $docNumberData['issuing_administration_id'],
         ]);
 
         if ($type !== 'folder' && $filePath) {
