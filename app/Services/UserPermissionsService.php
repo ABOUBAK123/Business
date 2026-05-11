@@ -87,6 +87,7 @@ class UserPermissionsService
             'administration.courrier-archiving' => 'Archivage courrier',
             'administration.instructions'        => 'Instructions',
             'administration.user-profiles'      => 'Rôles & profils',
+            'administration.antivirus'          => 'Journal Antivirus',
         ]],
         'qrcode'                  => ['label' => 'Vérification QR',        'children' => []],
         'personnel'               => ['label' => 'Gestion du personnel',   'children' => [

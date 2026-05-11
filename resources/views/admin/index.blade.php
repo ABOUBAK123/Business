@@ -34,7 +34,7 @@ $allTabs = [
     'user-profiles'      => ['fas fa-user-shield',       'Rôles',                 '#64748b', 'administration.user-profiles'],
     'instructions'       => ['fas fa-list-check',        'Instructions',          '#0891b2', 'administration.instructions'],
     'courrier-archiving' => ['fas fa-archive',           'Archivage courrier',    '#78716c', 'administration.courrier-archiving'],
-    'antivirus'          => ['fas fa-shield-virus',       'Antivirus',             '#dc2626', null],
+    'antivirus'          => ['fas fa-shield-virus',       'Antivirus',             '#dc2626', 'administration.antivirus'],
 ];
 $permSvcAdmin = app(\App\Services\UserPermissionsService::class);
 $permSetAdmin = $permSvcAdmin->permissionsSet(auth()->user());
@@ -9648,6 +9648,7 @@ $permissionTree = [
       'administration.courrier-archiving' => 'Archivage courrier',
       'administration.instructions'        => 'Instructions',
         'administration.user-profiles'      => 'Profils & Rôles',
+        'administration.antivirus'          => 'Journal Antivirus',
     ]],
     'personnel'        => ['label' => 'Gestion du personnel', 'children' => [
         'personnel.dashboard'  => 'Tableau de bord',
