@@ -133,7 +133,7 @@ class ReceptionController extends Controller
                     ->whereIn('document_id', $sharedDocIds)
                     ->whereNotNull('applicant_full_name')
                     ->orderByDesc('created_at')
-                    ->get(['document_id', 'applicant_full_name', 'applicant_phone', 'applicant_email', 'tracking_number'])
+                    ->get(['document_id', 'applicant_full_name', 'applicant_phone', 'applicant_email', 'applicant_rib', 'tracking_number'])
                     ->keyBy('document_id');
             } catch (\Throwable $e) {
                 Log::warning('Reception: cannot load applicant info', ['message' => $e->getMessage()]);
