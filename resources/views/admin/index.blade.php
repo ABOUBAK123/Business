@@ -8665,6 +8665,21 @@ function openUserEditModal(data) {
       if (hiddenType && !hiddenType.value && data.scope_type) hiddenType.value = data.scope_type;
       if (hiddenId && !hiddenId.value && data.scope_id) hiddenId.value = data.scope_id;
     }
+    // Peupler e-sub-entity pour les admins à scope fixe
+    var eScopeType = (hiddenType && hiddenType.value) ? hiddenType.value : data.scope_type;
+    var eScopeId   = (hiddenId   && hiddenId.value)   ? hiddenId.value   : data.scope_id;
+    var eSubSel = document.getElementById('e-sub-entity');
+    if (eSubSel && eScopeType && eScopeId) {
+      eSubSel.innerHTML = '<option value="">Direction sous tutelle</option>';
+      __subEntities.filter(function(s){ return s.scope_type === eScopeType && s.scope_id === eScopeId; })
+        .forEach(function(s){ eSubSel.innerHTML += '<option value="' + s.id + '">' + s.name + '</option>'; });
+      if (data.sub_code) {
+        for (var si = 0; si < eSubSel.options.length; si++) {
+          var ese = __subEntities.find(function(s){ return s.id === eSubSel.options[si].value; });
+          if (ese && ese.code === data.sub_code) { eSubSel.selectedIndex = si; break; }
+        }
+      }
+    }
   }
   openUserModal('edit');
 }
@@ -8725,6 +8740,28 @@ document.addEventListener('DOMContentLoaded', function() {
       openUserEditModal(bootData);
     } catch (e) {
       console.error('Impossible d\'ouvrir automatiquement le modal utilisateur:', e);
+    }
+  }
+
+  // Peupler c-sub-entity pour les admins à scope fixe (pas de select c-admin-id)
+  if (!document.getElementById('c-admin-id')) {
+    var createModal = document.getElementById('modal-user-create');
+    if (createModal) {
+      var cHiddenType = createModal.querySelector('input[name="administration_type"]');
+      var cHiddenId   = createModal.querySelector('input[name="administration_id"]');
+      if (cHiddenType && cHiddenId && cHiddenType.value && cHiddenId.value) {
+        var cSubSel = document.getElementById('c-sub-entity');
+        if (cSubSel) {
+          cSubSel.innerHTML = '<option value="">Direction sous tutelle</option>';
+          var cFiltered = __subEntities.filter(function(s){
+            return s.scope_type === cHiddenType.value && s.scope_id === cHiddenId.value;
+          });
+          cFiltered.forEach(function(s){
+            cSubSel.innerHTML += '<option value="' + s.id + '">' + s.name + '</option>';
+          });
+          cSubSel.disabled = false;
+        }
+      }
     }
   }
 });
