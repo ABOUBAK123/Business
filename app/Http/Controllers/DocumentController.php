@@ -850,6 +850,28 @@ class DocumentController extends Controller
                 ->get(['id', 'email']);
 
             foreach ($targetUsers as $targetUser) {
+                // Créer un share individuel pour que le document apparaisse dans /reception
+                // même si le profil n'est pas parfaitement configuré côté requête
+                $alreadyShared = DocumentShare::where('document_id', $document->id)
+                    ->where('recipient_name', 'user:' . $targetUser->id)
+                    ->exists();
+
+                if (!$alreadyShared) {
+                    DocumentShare::create($this->filterDocumentSharePayload([
+                        'document_id'                 => $document->id,
+                        'shared_by'                   => Auth::id(),
+                        'mode'                        => 'admin',
+                        'permission'                  => 'lecture',
+                        'has_delay'                   => $hasDelay,
+                        'delay_value'                 => $delayValue > 0 ? $delayValue : null,
+                        'delay_unit'                  => $delayValue > 0 ? $delayUnit : null,
+                        'expires_at'                  => $expiresAt,
+                        'recipient_name'              => 'user:' . $targetUser->id,
+                        'recipient_email'             => $targetUser->email,
+                        'recipient_administration_id' => $recipientAdministration->id,
+                    ]));
+                }
+
                 $this->createShareNotification([
                     'recipient_id' => $targetUser->id,
                     'title' => 'Document recu (administration)',
