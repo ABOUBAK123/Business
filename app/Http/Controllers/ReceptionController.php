@@ -140,15 +140,26 @@ class ReceptionController extends Controller
             }
         }
 
-        // Récupérer les sous-entités de l'administration destinataire
+        // Récupérer les entités sous tutelle filles de la direction de l'utilisateur connecté
         $subEntities = collect();
         if ($profile && $profile->administration_type === 'recipient' && $profile->administration_id) {
             try {
-                $subEntities = SubEntity::where('scope_type', 'recipient')
-                    ->where('scope_id', $profile->administration_id)
-                    ->where('is_active', true)
-                    ->orderBy('name')
-                    ->get(['id', 'code', 'name']);
+                // Direction de l'utilisateur connecté
+                $userSubEntityCode = UserDirectionAssignment::where('user_id', $userId)
+                    ->whereNotNull('sub_entity_code')
+                    ->value('sub_entity_code');
+
+                if ($userSubEntityCode) {
+                    // Entités filles : parent_code = code de la direction de l'utilisateur
+                    $subEntities = SubEntity::where('scope_type', 'recipient')
+                        ->where('scope_id', $profile->administration_id)
+                        ->whereRaw('UPPER(parent_code) = ?', [strtoupper(trim($userSubEntityCode))])
+                        ->where('is_active', true)
+                        ->orderBy('name')
+                        ->get(['id', 'code', 'name']);
+                }
+                // Si l'utilisateur n'a pas de direction assignée : $subEntities reste vide
+                // → le bouton "Transmettre" n'apparaîtra pas dans la vue
             } catch (\Throwable $e) {
                 Log::warning('Reception: cannot load sub_entities', ['message' => $e->getMessage()]);
             }
@@ -187,15 +198,24 @@ class ReceptionController extends Controller
 
         $subEntityCode = strtoupper(trim((string) $request->input('sub_entity_code')));
 
-        // Valider que ce sub_entity_code appartient à l'administration destinataire
-        $subEntity = SubEntity::where('scope_type', 'recipient')
+        // Vérifier que l'entité cible est une fille de la direction de l'utilisateur
+        $userSubEntityCode = UserDirectionAssignment::where('user_id', $user->id)
+            ->whereNotNull('sub_entity_code')
+            ->value('sub_entity_code');
+
+        $subEntityQuery = SubEntity::where('scope_type', 'recipient')
             ->where('scope_id', $recipientAdminId)
             ->whereRaw('UPPER(code) = ?', [$subEntityCode])
-            ->where('is_active', true)
-            ->first();
+            ->where('is_active', true);
+
+        if ($userSubEntityCode) {
+            $subEntityQuery->whereRaw('UPPER(parent_code) = ?', [strtoupper(trim($userSubEntityCode))]);
+        }
+
+        $subEntity = $subEntityQuery->first();
 
         if (!$subEntity) {
-            return response()->json(['ok' => false, 'message' => 'Entité sous tutelle introuvable.'], 422);
+            return response()->json(['ok' => false, 'message' => 'Entité sous tutelle introuvable ou non autorisée.'], 422);
         }
 
         // Trouver les users actifs de cette entité, dans la même administration destinataire
