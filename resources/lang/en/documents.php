@@ -14,4 +14,15 @@ return [
     'download_document' => 'Download Document',
     'sign_document' => 'Sign Document',
     'view_document' => 'View Document',
+
+    'status_draft'             => 'Draft',
+    'status_active'            => 'Active',
+    'status_signed'            => 'Signed',
+    'status_archived'          => 'Archived',
+    'status_pending_signature' => 'Pending Signature',
+    'status_sent'              => 'Sent',
+    'status_rejected'          => 'Rejected',
+    'status_approved'          => 'Approved',
+    'status_processing'        => 'Processing',
+    'status_completed'         => 'Completed',
 ];

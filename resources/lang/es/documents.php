@@ -14,4 +14,15 @@ return [
     'download_document' => 'Descargar Documento',
     'sign_document' => 'Firmar Documento',
     'view_document' => 'Ver Documento',
+
+    'status_draft'             => 'Borrador',
+    'status_active'            => 'Activo',
+    'status_signed'            => 'Firmado',
+    'status_archived'          => 'Archivado',
+    'status_pending_signature' => 'Pendiente de firma',
+    'status_sent'              => 'Enviado',
+    'status_rejected'          => 'Rechazado',
+    'status_approved'          => 'Aprobado',
+    'status_processing'        => 'En proceso',
+    'status_completed'         => 'Completado',
 ];

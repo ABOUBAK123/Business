@@ -92,9 +92,25 @@
                         {{ $shareInfo?->applicant_rib ?? '—' }}
                     </td>
                     <td class="px-5 py-4">
-                        <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold
-                            {{ $doc->status === 'signed' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700' }}">
-                            {{ ucfirst($doc->status) }}
+                        @php
+                            $statusClass = match($doc->status) {
+                                'signed'            => 'bg-green-100 text-green-700',
+                                'approved'          => 'bg-emerald-100 text-emerald-700',
+                                'completed'         => 'bg-teal-100 text-teal-700',
+                                'sent'              => 'bg-blue-100 text-blue-700',
+                                'active'            => 'bg-indigo-100 text-indigo-700',
+                                'pending_signature' => 'bg-amber-100 text-amber-700',
+                                'processing'        => 'bg-orange-100 text-orange-700',
+                                'draft'             => 'bg-gray-100 text-gray-600',
+                                'archived'          => 'bg-slate-100 text-slate-600',
+                                'rejected'          => 'bg-red-100 text-red-700',
+                                default             => 'bg-blue-100 text-blue-700',
+                            };
+                        @endphp
+                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold {{ $statusClass }}">
+                            {{ __('documents.status_' . $doc->status, [], app()->getLocale()) !== 'documents.status_' . $doc->status
+                                ? __('documents.status_' . $doc->status)
+                                : ucfirst(str_replace('_', ' ', $doc->status)) }}
                         </span>
                     </td>
                     <td class="px-5 py-4 text-gray-500 text-xs">{{ $doc->created_at?->format('d/m/Y H:i') }}</td>
