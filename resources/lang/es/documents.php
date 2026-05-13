@@ -25,4 +25,7 @@ return [
     'status_approved'          => 'Aprobado',
     'status_processing'        => 'En proceso',
     'status_completed'         => 'Completado',
+
+    'reception_status_recu'    => 'Recibido',
+    'reception_status_transmis'=> 'Transmitido',
 ];

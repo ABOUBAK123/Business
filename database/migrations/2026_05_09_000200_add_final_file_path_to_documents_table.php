@@ -9,9 +9,11 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('documents', function (Blueprint $table) {
-            $table->string('final_file_path', 1000)->nullable()->after('signed_file_path');
-        });
+        if (!Schema::hasColumn('documents', 'final_file_path')) {
+            Schema::table('documents', function (Blueprint $table) {
+                $table->string('final_file_path', 1000)->nullable()->after('signed_file_path');
+            });
+        }
 
         DB::table('documents')
             ->whereNull('final_file_path')

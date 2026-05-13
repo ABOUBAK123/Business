@@ -25,4 +25,7 @@ return [
     'status_approved'          => 'موافق عليه',
     'status_processing'        => 'قيد المعالجة',
     'status_completed'         => 'مكتمل',
+
+    'reception_status_recu'    => 'مُستلَم',
+    'reception_status_transmis'=> 'مُحوَّل',
 ];

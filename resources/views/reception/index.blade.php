@@ -53,6 +53,7 @@
                     <th class="text-left px-5 py-3 font-semibold text-gray-600">RIB</th>
                     <th class="text-left px-5 py-3 font-semibold text-gray-600">Statut</th>
                     <th class="text-left px-5 py-3 font-semibold text-gray-600">Reçu le</th>
+                    <th class="text-left px-5 py-3 font-semibold text-gray-600">Statut réception</th>
                     <th class="px-5 py-3"></th>
                 </tr>
             </thead>
@@ -114,19 +115,42 @@
                         </span>
                     </td>
                     <td class="px-5 py-4 text-gray-500 text-xs">{{ $doc->created_at?->format('d/m/Y H:i') }}</td>
+                    @php
+                        $recStatus = $receptionStatuses[$doc->id]->reception_status ?? null;
+                        $isTransmis = $recStatus === 'transmis';
+                        $isRecu     = $recStatus === 'recu';
+                        $recLabel   = $recStatus ? __('documents.reception_status_' . $recStatus) : null;
+                    @endphp
+                    <td class="px-5 py-4">
+                        @if($recLabel)
+                        <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold
+                            {{ $isTransmis ? 'bg-green-100 text-green-700' : 'bg-sky-100 text-sky-700' }}">
+                            <i class="fas {{ $isTransmis ? 'fa-share' : 'fa-check' }} mr-1 text-[10px]"></i>
+                            {{ $recLabel }}
+                        </span>
+                        @else
+                        <span class="text-gray-300 text-xs">—</span>
+                        @endif
+                    </td>
                     <td class="px-5 py-4 text-right">
                         <div class="flex items-center justify-end gap-2">
                         @if($doc->file_path)
                         <a href="{{ route('documents.download', $doc) }}"
+                            onclick="markDocReceived('{{ $doc->id }}')"
                             class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded-lg transition">
                             <i class="fas fa-download text-xs"></i> Télécharger
                         </a>
                         @endif
                         @if($subEntities->isNotEmpty())
                         <button type="button"
+                            id="forward-btn-{{ $doc->id }}"
                             onclick="openForwardModal('{{ $doc->id }}', '{{ addslashes($doc->title) }}')"
-                            class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-100 hover:bg-indigo-200 text-indigo-700 text-xs font-medium rounded-lg transition">
-                            <i class="fas fa-share text-xs"></i> Transmettre
+                            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition
+                                {{ $isTransmis
+                                    ? 'bg-green-100 hover:bg-green-200 text-green-700 border border-green-200'
+                                    : 'bg-indigo-100 hover:bg-indigo-200 text-indigo-700' }}">
+                            <i class="fas fa-share text-xs"></i>
+                            {{ $isTransmis ? __('documents.reception_status_transmis') : __('buttons.forward', [], null, 'Transmettre') }}
                         </button>
                         @endif
                         </div>
@@ -188,6 +212,19 @@
 <script>
 let _forwardDocId = null;
 
+async function markDocReceived(docId) {
+    try {
+        await fetch(`/reception/${docId}/mark-received`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+                'Accept': 'application/json',
+            },
+        });
+    } catch (e) { /* silent */ }
+}
+
 function openForwardModal(docId, docTitle) {
     _forwardDocId = docId;
     document.getElementById('forwardDocTitle').textContent = docTitle;
@@ -233,6 +270,15 @@ async function submitForward() {
         const data = await res.json();
         if (data.ok) {
             showForwardMsg(data.message, true);
+            const fwdBtn = document.getElementById('forward-btn-' + _forwardDocId);
+            if (fwdBtn) {
+                fwdBtn.className = fwdBtn.className
+                    .replace(/bg-indigo-\d+/g, 'bg-green-100')
+                    .replace(/hover:bg-indigo-\d+/g, 'hover:bg-green-200')
+                    .replace(/text-indigo-\d+/g, 'text-green-700');
+                fwdBtn.innerHTML = '<i class="fas fa-share text-xs"></i> {{ __("documents.reception_status_transmis") }}';
+                fwdBtn.classList.add('border', 'border-green-200');
+            }
             setTimeout(closeForwardModal, 1800);
         } else {
             showForwardMsg(data.message ?? 'Erreur lors de la transmission.', false);

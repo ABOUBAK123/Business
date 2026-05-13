@@ -165,7 +165,66 @@ class ReceptionController extends Controller
             }
         }
 
-        return view('reception.index', compact('documents', 'search', 'sharesInfo', 'subEntities'));
+        // Récupérer le reception_status par document pour l'utilisateur connecté
+        $receptionStatuses = collect();
+        if ($sharedDocIds->isNotEmpty() && Schema::hasColumn('document_shares', 'reception_status')) {
+            try {
+                $receptionStatuses = DocumentShare::query()
+                    ->whereIn('document_id', $sharedDocIds)
+                    ->where(function ($q) use ($userId, $userEmail, $subEntityCodes, $recipientAdminIds) {
+                        $q->where('recipient_name', 'user:' . $userId);
+                        if (!empty($userEmail)) {
+                            $q->orWhere('recipient_email', $userEmail);
+                        }
+                        foreach ($subEntityCodes as $code) {
+                            $q->orWhere('recipient_name', 'sub_entity:' . $code);
+                        }
+                        if ($recipientAdminIds->isNotEmpty()) {
+                            $q->orWhereIn('recipient_administration_id', $recipientAdminIds);
+                        }
+                    })
+                    ->whereNotNull('reception_status')
+                    ->orderByRaw("CASE reception_status WHEN 'transmis' THEN 1 WHEN 'recu' THEN 2 ELSE 3 END")
+                    ->get(['document_id', 'reception_status'])
+                    ->keyBy('document_id');
+            } catch (\Throwable $e) {
+                Log::warning('Reception: cannot load reception_status', ['message' => $e->getMessage()]);
+            }
+        }
+
+        return view('reception.index', compact('documents', 'search', 'sharesInfo', 'subEntities', 'receptionStatuses'));
+    }
+
+    /**
+     * Marque le document comme reçu (téléchargé) pour l'utilisateur connecté.
+     */
+    public function markReceived(Request $request, Document $document)
+    {
+        $user   = Auth::user();
+        $userId = $user?->id;
+
+        $share = DocumentShare::where('document_id', $document->id)
+            ->where('recipient_name', 'user:' . $userId)
+            ->first();
+
+        if (!$share) {
+            $profile          = $user?->profile;
+            $recipientAdminId = ($profile && $profile->administration_type === 'recipient')
+                ? $profile->administration_id
+                : null;
+            if ($recipientAdminId) {
+                $share = DocumentShare::where('document_id', $document->id)
+                    ->where('recipient_administration_id', $recipientAdminId)
+                    ->first();
+            }
+        }
+
+        if ($share && in_array($share->reception_status, [null, ''], true)) {
+            $share->reception_status = 'recu';
+            $share->save();
+        }
+
+        return response()->json(['ok' => true]);
     }
 
     public function forward(Request $request, Document $document)
@@ -264,6 +323,22 @@ class ReceptionController extends Controller
                 ]);
 
                 $created++;
+            }
+        }
+
+        // Mettre à jour le reception_status à 'transmis' pour le share de l'utilisateur
+        if (Schema::hasColumn('document_shares', 'reception_status')) {
+            $userShare = DocumentShare::where('document_id', $document->id)
+                ->where('recipient_name', 'user:' . $user->id)
+                ->first();
+            if (!$userShare) {
+                $userShare = DocumentShare::where('document_id', $document->id)
+                    ->where('recipient_administration_id', $recipientAdminId)
+                    ->first();
+            }
+            if ($userShare) {
+                $userShare->reception_status = 'transmis';
+                $userShare->save();
             }
         }
 

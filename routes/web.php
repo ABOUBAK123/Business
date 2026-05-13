@@ -257,6 +257,7 @@ Route::middleware('auth')->group(function () {
     // Réception
     Route::get('/reception', [ReceptionController::class, 'index'])->name('reception.index');
     Route::post('/reception/{document}/forward', [ReceptionController::class, 'forward'])->name('reception.forward');
+    Route::post('/reception/{document}/mark-received', [ReceptionController::class, 'markReceived'])->name('reception.mark-received');
 
     // Templates partagés
     Route::get('/shared-templates', [SharedTemplateController::class, 'index'])->name('shared-templates.index');

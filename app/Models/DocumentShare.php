@@ -13,7 +13,7 @@ class DocumentShare extends Model
         'document_id', 'shared_by', 'mode', 'recipient_name', 'recipient_email',
         'recipient_administration_id', 'applicant_full_name', 'applicant_matricule',
         'applicant_email', 'applicant_phone', 'applicant_rib', 'tracking_number', 'permission', 'has_delay', 'delay_value', 'delay_unit',
-        'expires_at',
+        'expires_at', 'reception_status',
     ];
 
     protected $casts = ['expires_at' => 'datetime', 'has_delay' => 'boolean'];

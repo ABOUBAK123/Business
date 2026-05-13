@@ -25,4 +25,7 @@ return [
     'status_approved'          => 'Approved',
     'status_processing'        => 'Processing',
     'status_completed'         => 'Completed',
+
+    'reception_status_recu'    => 'Received',
+    'reception_status_transmis'=> 'Forwarded',
 ];
