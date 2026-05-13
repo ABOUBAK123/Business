@@ -1428,27 +1428,120 @@ $_oc = [
   <div class="space-y-3">
     @forelse($myLeaveRequests as $lr)
     @php
-      $lrDays = $lr->approved_days ?? $lr->requested_days;
-      $badge  = $leaveBadge[$lr->status] ?? 'bg-gray-100 text-gray-500';
-      $label  = $leaveStatusLabels[$lr->status] ?? $lr->status;
+      $lrDays    = $lr->approved_days ?? $lr->requested_days;
+      $badge     = $leaveBadge[$lr->status] ?? 'bg-gray-100 text-gray-500';
+      $label     = $leaveStatusLabels[$lr->status] ?? $lr->status;
+
+      // Workflow circuit
+      $wfMeta    = is_array($lr->metadata) ? $lr->metadata : [];
+      $wf        = is_array($wfMeta['approval_workflow'] ?? null) ? $wfMeta['approval_workflow'] : null;
+      $wfSteps   = $wf ? (array) ($wf['steps']   ?? []) : [];
+      $wfHistory = $wf ? (array) ($wf['history']  ?? []) : [];
+      $wfCurIdx  = $wf ? (int)   ($wf['current_step_index'] ?? 0) : 0;
+
+      // Build step-status map from history
+      $wfStepInfo = [];
+      foreach ($wfHistory as $h) {
+          $si = (int) ($h['step_index'] ?? -1);
+          if ($si >= 0 && !isset($wfStepInfo[$si])) {
+              $wfStepInfo[$si] = [
+                  'status'  => $h['status'] ?? '',
+                  'comment' => $h['comment'] ?? '',
+                  'at'      => $h['acted_at'] ?? '',
+              ];
+          }
+      }
     @endphp
-    <div class="rounded-xl border border-gray-200 px-4 py-3 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-      <div>
-        <div class="text-sm font-bold text-gray-800">{{ $lr->leaveType?->name ?? 'Type supprimé' }}</div>
-        @if($lr->start_date && $lr->end_date)
-        <div class="text-xs text-gray-500 mt-0.5">
-          Du {{ $lr->start_date->format('d/m/Y') }} au {{ $lr->end_date->format('d/m/Y') }}
+    <div class="rounded-xl border border-gray-200 px-4 py-3">
+      {{-- Header row: info + statut badge --}}
+      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+        <div>
+          <div class="text-sm font-bold text-gray-800">{{ $lr->leaveType?->name ?? 'Type supprimé' }}</div>
+          @if($lr->start_date && $lr->end_date)
+          <div class="text-xs text-gray-500 mt-0.5">
+            Du {{ $lr->start_date->format('d/m/Y') }} au {{ $lr->end_date->format('d/m/Y') }}
+          </div>
+          @endif
+          <div class="text-xs text-gray-400 mt-0.5">
+            Durée : {{ $lrDays ? number_format((float) $lrDays, 0) . ' jour(s)' : '-' }}
+            &nbsp;·&nbsp; Demandé le : {{ $lr->created_at->format('d/m/Y') }}
+          </div>
+          @if($lr->reason)
+          <div class="text-xs text-gray-400 mt-0.5 italic">"{{ Str::limit($lr->reason, 80) }}"</div>
+          @endif
         </div>
-        @endif
-        <div class="text-xs text-gray-400 mt-0.5">
-          Durée : {{ $lrDays ? number_format((float) $lrDays, 0) . ' jour(s)' : '-' }}
-          &nbsp;·&nbsp; Demandé le : {{ $lr->created_at->format('d/m/Y') }}
-        </div>
-        @if($lr->reason)
-        <div class="text-xs text-gray-400 mt-0.5 italic">"{{ Str::limit($lr->reason, 80) }}"</div>
-        @endif
+        <span class="inline-block flex-shrink-0 text-xs font-semibold px-3 py-1 rounded-full {{ $badge }}">{{ $label }}</span>
       </div>
-      <span class="inline-block flex-shrink-0 text-xs font-semibold px-3 py-1 rounded-full {{ $badge }}">{{ $label }}</span>
+
+      {{-- Circuit de validation horizontal --}}
+      @if(!empty($wfSteps))
+      <div class="mt-3 pt-3 border-t border-gray-100">
+        <div class="text-[11px] text-gray-400 font-medium mb-2 flex items-center gap-1">
+          <i class="fas fa-project-diagram text-[9px]"></i> Circuit de validation
+        </div>
+        <div class="flex items-start overflow-x-auto pb-1 gap-0">
+          @foreach($wfSteps as $si => $step)
+          @php
+            $info       = $wfStepInfo[$si] ?? null;
+            $isApproved = $info && $info['status'] === 'approved';
+            $isRejected = $info && $info['status'] === 'rejected';
+            $isCurrent  = !$info && $si === $wfCurIdx && $lr->status === 'pending';
+            // Final approval: last step approved = fully approved
+            $isFinalApproved = $isApproved && $lr->status === 'approved' && $loop->last;
+
+            if ($isApproved) {
+                $circleClass = 'bg-green-500 border-green-500 text-white shadow-green-200';
+                $iconClass   = 'fas fa-check';
+                $connColor   = 'bg-green-400';
+            } elseif ($isRejected) {
+                $circleClass = 'bg-red-500 border-red-500 text-white shadow-red-200';
+                $iconClass   = 'fas fa-times';
+                $connColor   = 'bg-gray-200';
+            } elseif ($isCurrent) {
+                $circleClass = 'bg-amber-400 border-amber-400 text-white shadow-amber-200';
+                $iconClass   = 'fas fa-hourglass-half';
+                $connColor   = 'bg-gray-200';
+            } else {
+                $circleClass = 'bg-white border-gray-300 text-gray-400';
+                $iconClass   = 'far fa-circle';
+                $connColor   = 'bg-gray-200';
+            }
+
+            $profileLabel = trim((string) ($step['profile'] ?? '')) ?: ('Étape ' . ($si + 1));
+            $isDrh = ($step['kind'] ?? '') === 'drh_final';
+            $hasMotif = $isRejected && !empty($info['comment']);
+          @endphp
+
+          {{-- Nœud --}}
+          <div class="flex flex-col items-center flex-shrink-0" style="min-width:68px">
+            <div class="w-9 h-9 rounded-full border-2 {{ $circleClass }} flex items-center justify-center text-xs shadow-sm">
+              <i class="{{ $iconClass }}"></i>
+            </div>
+            <div class="text-[10px] text-center mt-1 font-medium text-gray-600 leading-tight" style="max-width:64px">
+              {{ Str::limit($profileLabel, 22) }}
+            </div>
+            @if($isDrh)
+            <div class="text-[9px] text-indigo-500 font-semibold -mt-0.5">DRH</div>
+            @endif
+            @if($hasMotif)
+            <button type="button"
+              onclick="openMotifPopup({{ json_encode($info['comment']) }}, {{ json_encode($profileLabel) }}, {{ json_encode($info['at']) }})"
+              class="mt-1 text-[10px] px-2 py-0.5 rounded-full bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 transition font-semibold whitespace-nowrap">
+              <i class="fas fa-comment-alt text-[8px]"></i> Motif
+            </button>
+            @endif
+          </div>
+
+          {{-- Connecteur (pas après le dernier) --}}
+          @if(!$loop->last)
+          <div class="flex-shrink-0 self-start" style="margin-top:16px; width:28px">
+            <div class="h-0.5 w-full {{ $connColor }} rounded"></div>
+          </div>
+          @endif
+          @endforeach
+        </div>
+      </div>
+      @endif
     </div>
     @empty
     <div class="rounded-xl bg-gray-50 border border-dashed border-gray-300 px-4 py-6 text-center text-sm text-gray-500">
@@ -1458,6 +1551,55 @@ $_oc = [
     @endforelse
   </div>
 </div>
+
+{{-- ── Modal motif de rejet ── --}}
+<div id="motif-popup" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm">
+    <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+      <h3 class="text-sm font-bold text-gray-800 flex items-center gap-2">
+        <i class="fas fa-comment-alt text-red-500"></i>
+        Motif du rejet &mdash; <span id="motif-profile-name" class="text-red-600 ml-1"></span>
+      </h3>
+      <button type="button" onclick="closeMotifPopup()" class="text-gray-400 hover:text-gray-600 transition">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <div class="px-6 py-5 space-y-2">
+      <p id="motif-comment-text" class="text-sm text-gray-700 leading-relaxed"></p>
+      <p id="motif-date-text" class="text-xs text-gray-400"></p>
+    </div>
+    <div class="px-6 py-3 border-t border-gray-100 flex justify-end">
+      <button type="button" onclick="closeMotifPopup()"
+        class="px-4 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+        Fermer
+      </button>
+    </div>
+  </div>
+</div>
+@push('scripts')
+<script>
+function openMotifPopup(comment, profile, date) {
+    document.getElementById('motif-comment-text').textContent = comment || 'Aucun motif renseigné.';
+    document.getElementById('motif-profile-name').textContent = profile || '';
+    var d = '';
+    if (date) {
+        try { d = 'Le ' + new Date(date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }); } catch(e) { d = date; }
+    }
+    document.getElementById('motif-date-text').textContent = d;
+    var modal = document.getElementById('motif-popup');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+function closeMotifPopup() {
+    var modal = document.getElementById('motif-popup');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+document.getElementById('motif-popup').addEventListener('click', function(e) {
+    if (e.target === this) closeMotifPopup();
+});
+</script>
+@endpush
 
 {{-- ── Special absences / permissions section ── --}}
 @php
