@@ -200,31 +200,60 @@ class ReceptionController extends Controller
      */
     public function markReceived(Request $request, Document $document)
     {
-        $user   = Auth::user();
-        $userId = $user?->id;
+        $user      = Auth::user();
+        $userId    = $user?->id;
+        $profile   = $user?->profile;
+        $userEmail = (string) ($user?->email ?? '');
 
+        // Codes de direction de l'utilisateur (mêmes conditions que index())
+        $subEntityCodes = collect();
+        if (Schema::hasTable('user_direction_assignments')) {
+            try {
+                $subEntityCodes = UserDirectionAssignment::where('user_id', $userId)
+                    ->whereNotNull('sub_entity_code')
+                    ->pluck('sub_entity_code')
+                    ->map(fn ($c) => strtoupper(trim((string) $c)))
+                    ->filter()
+                    ->values();
+            } catch (\Throwable $e) { /* ignore */ }
+        }
+
+        $recipientAdminIds = collect();
+        if ($profile && $profile->administration_type === 'recipient' && $profile->administration_id) {
+            $recipientAdminIds = collect([$profile->administration_id]);
+        }
+
+        // Trouver le share avec les mêmes conditions que index()
         $share = DocumentShare::where('document_id', $document->id)
-            ->where('recipient_name', 'user:' . $userId)
+            ->where(function ($q) use ($userId, $userEmail, $subEntityCodes, $recipientAdminIds) {
+                $q->where('recipient_name', 'user:' . $userId);
+                if ($userEmail !== '') {
+                    $q->orWhere('recipient_email', $userEmail);
+                }
+                foreach ($subEntityCodes as $code) {
+                    $q->orWhere('recipient_name', 'sub_entity:' . $code);
+                }
+                if ($recipientAdminIds->isNotEmpty()) {
+                    $q->orWhereIn('recipient_administration_id', $recipientAdminIds);
+                }
+            })
+            // Priorité : share personnel > sub_entity > administration
+            ->orderByRaw("CASE
+                WHEN recipient_name = ? THEN 0
+                WHEN recipient_name LIKE 'sub_entity:%' THEN 1
+                ELSE 2 END", ['user:' . $userId])
             ->first();
 
         if (!$share) {
-            $profile          = $user?->profile;
-            $recipientAdminId = ($profile && $profile->administration_type === 'recipient')
-                ? $profile->administration_id
-                : null;
-            if ($recipientAdminId) {
-                $share = DocumentShare::where('document_id', $document->id)
-                    ->where('recipient_administration_id', $recipientAdminId)
-                    ->first();
-            }
+            return response()->json(['ok' => false, 'reception_status' => null]);
         }
 
-        if ($share && in_array($share->reception_status, [null, ''], true)) {
+        if (in_array($share->reception_status, [null, ''], true)) {
             $share->reception_status = 'recu';
             $share->save();
         }
 
-        return response()->json(['ok' => true, 'reception_status' => $share?->reception_status ?? 'recu']);
+        return response()->json(['ok' => true, 'reception_status' => $share->reception_status]);
     }
 
     public function forward(Request $request, Document $document)
@@ -327,15 +356,34 @@ class ReceptionController extends Controller
         }
 
         // Mettre à jour le reception_status à 'transmis' pour le share de l'utilisateur
+        // (mêmes conditions que index() et markReceived())
         if (Schema::hasColumn('document_shares', 'reception_status')) {
+            $userEmail     = (string) ($user->email ?? '');
+            $userSubCodes  = UserDirectionAssignment::where('user_id', $user->id)
+                ->whereNotNull('sub_entity_code')
+                ->pluck('sub_entity_code')
+                ->map(fn ($c) => strtoupper(trim((string) $c)))
+                ->filter()->values();
+
             $userShare = DocumentShare::where('document_id', $document->id)
-                ->where('recipient_name', 'user:' . $user->id)
+                ->where(function ($q) use ($user, $userEmail, $userSubCodes, $recipientAdminId) {
+                    $q->where('recipient_name', 'user:' . $user->id);
+                    if ($userEmail !== '') {
+                        $q->orWhere('recipient_email', $userEmail);
+                    }
+                    foreach ($userSubCodes as $code) {
+                        $q->orWhere('recipient_name', 'sub_entity:' . $code);
+                    }
+                    if ($recipientAdminId) {
+                        $q->orWhere('recipient_administration_id', $recipientAdminId);
+                    }
+                })
+                ->orderByRaw("CASE
+                    WHEN recipient_name = ? THEN 0
+                    WHEN recipient_name LIKE 'sub_entity:%' THEN 1
+                    ELSE 2 END", ['user:' . $user->id])
                 ->first();
-            if (!$userShare) {
-                $userShare = DocumentShare::where('document_id', $document->id)
-                    ->where('recipient_administration_id', $recipientAdminId)
-                    ->first();
-            }
+
             if ($userShare) {
                 $userShare->reception_status = 'transmis';
                 $userShare->save();
