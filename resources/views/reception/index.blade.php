@@ -121,7 +121,7 @@
                         $isRecu     = $recStatus === 'recu';
                         $recLabel   = $recStatus ? __('documents.reception_status_' . $recStatus) : null;
                     @endphp
-                    <td class="px-5 py-4">
+                    <td id="rec-status-cell-{{ $doc->id }}" class="px-5 py-4">
                         @if($recLabel)
                         <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold
                             {{ $isTransmis ? 'bg-green-100 text-green-700' : 'bg-sky-100 text-sky-700' }}">
@@ -150,7 +150,7 @@
                                     ? 'bg-green-100 hover:bg-green-200 text-green-700 border border-green-200'
                                     : 'bg-indigo-100 hover:bg-indigo-200 text-indigo-700' }}">
                             <i class="fas fa-share text-xs"></i>
-                            {{ $isTransmis ? __('documents.reception_status_transmis') : __('buttons.forward', [], null, 'Transmettre') }}
+                            {{ $isTransmis ? __('documents.reception_status_transmis') : __('buttons.forward') }}
                         </button>
                         @endif
                         </div>
@@ -210,11 +210,27 @@
 </div>
 
 <script>
+const _recLabels = {
+    recu:     '{{ __("documents.reception_status_recu") }}',
+    transmis: '{{ __("documents.reception_status_transmis") }}',
+    forward:  '{{ __("buttons.forward") }}',
+};
+
 let _forwardDocId = null;
+
+function setRecStatusBadge(docId, status) {
+    const cell = document.getElementById('rec-status-cell-' + docId);
+    if (!cell) return;
+    const isTransmis = status === 'transmis';
+    const label = isTransmis ? _recLabels.transmis : _recLabels.recu;
+    const icon  = isTransmis ? 'fa-share' : 'fa-check';
+    const cls   = isTransmis ? 'bg-green-100 text-green-700' : 'bg-sky-100 text-sky-700';
+    cell.innerHTML = `<span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold ${cls}"><i class="fas ${icon} mr-1 text-[10px]"></i>${label}</span>`;
+}
 
 async function markDocReceived(docId) {
     try {
-        await fetch(`/reception/${docId}/mark-received`, {
+        const res = await fetch(`/reception/${docId}/mark-received`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -222,6 +238,10 @@ async function markDocReceived(docId) {
                 'Accept': 'application/json',
             },
         });
+        const data = await res.json();
+        if (data.ok && data.reception_status) {
+            setRecStatusBadge(docId, data.reception_status);
+        }
     } catch (e) { /* silent */ }
 }
 
@@ -246,7 +266,6 @@ function closeForwardModal() {
 
 async function submitForward() {
     const subEntityCode = document.getElementById('forwardSubEntityCode').value;
-    const msg = document.getElementById('forwardMsg');
     const btn = document.getElementById('forwardSubmitBtn');
 
     if (!subEntityCode) {
@@ -255,7 +274,7 @@ async function submitForward() {
     }
 
     btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Transmission...';
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> ...';
 
     try {
         const res = await fetch(`/reception/${_forwardDocId}/forward`, {
@@ -270,14 +289,11 @@ async function submitForward() {
         const data = await res.json();
         if (data.ok) {
             showForwardMsg(data.message, true);
+            setRecStatusBadge(_forwardDocId, 'transmis');
             const fwdBtn = document.getElementById('forward-btn-' + _forwardDocId);
             if (fwdBtn) {
-                fwdBtn.className = fwdBtn.className
-                    .replace(/bg-indigo-\d+/g, 'bg-green-100')
-                    .replace(/hover:bg-indigo-\d+/g, 'hover:bg-green-200')
-                    .replace(/text-indigo-\d+/g, 'text-green-700');
-                fwdBtn.innerHTML = '<i class="fas fa-share text-xs"></i> {{ __("documents.reception_status_transmis") }}';
-                fwdBtn.classList.add('border', 'border-green-200');
+                fwdBtn.className = 'inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition bg-green-100 hover:bg-green-200 text-green-700 border border-green-200';
+                fwdBtn.innerHTML = `<i class="fas fa-share text-xs"></i> ${_recLabels.transmis}`;
             }
             setTimeout(closeForwardModal, 1800);
         } else {
@@ -287,7 +303,7 @@ async function submitForward() {
         showForwardMsg('Erreur réseau. Veuillez réessayer.', false);
     } finally {
         btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-share"></i> Transmettre';
+        btn.innerHTML = `<i class="fas fa-share"></i> ${_recLabels.forward}`;
     }
 }
 

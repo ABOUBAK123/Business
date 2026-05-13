@@ -224,7 +224,7 @@ class ReceptionController extends Controller
             $share->save();
         }
 
-        return response()->json(['ok' => true]);
+        return response()->json(['ok' => true, 'reception_status' => $share?->reception_status ?? 'recu']);
     }
 
     public function forward(Request $request, Document $document)

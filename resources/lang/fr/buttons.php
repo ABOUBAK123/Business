@@ -16,6 +16,7 @@ return [
     'next' => 'Suivant',
     'previous' => 'Précédent',
     'download' => 'Télécharger',
+    'forward'  => 'Transmettre',
     'upload' => 'Télécharger',
     'save_password' => 'Enregistrer le mot de passe',
     'change_password' => 'Changer le mot de passe',

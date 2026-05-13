@@ -16,6 +16,7 @@ return [
     'next' => 'التالي',
     'previous' => 'السابق',
     'download' => 'تحميل',
+    'forward'  => 'إحالة',
     'upload' => 'رفع',
     'save_password' => 'حفظ كلمة المرور',
     'change_password' => 'تغيير كلمة المرور',
