@@ -77,12 +77,24 @@
                     <p class="text-sm font-medium text-gray-800 truncate">{{ $doc->title }}</p>
                     <p class="text-xs text-gray-400">{{ $doc->created_at->diffForHumans() }}</p>
                 </div>
-                <span class="text-xs px-2 py-1 rounded-full
-                    @if($doc->status === 'signed') bg-green-100 text-green-700
-                    @elseif($doc->status === 'draft') bg-gray-100 text-gray-600
-                    @else bg-yellow-100 text-yellow-700 @endif">
-                    {{ ucfirst($doc->status) }}
-                </span>
+                @php
+                    $dClass = match($doc->status) {
+                        'signed'            => 'bg-green-100 text-green-700',
+                        'approved'          => 'bg-emerald-100 text-emerald-700',
+                        'completed'         => 'bg-teal-100 text-teal-700',
+                        'sent'              => 'bg-blue-100 text-blue-700',
+                        'active'            => 'bg-indigo-100 text-indigo-700',
+                        'pending_signature' => 'bg-amber-100 text-amber-700',
+                        'processing'        => 'bg-orange-100 text-orange-700',
+                        'draft'             => 'bg-gray-100 text-gray-600',
+                        'archived'          => 'bg-slate-100 text-slate-600',
+                        'rejected'          => 'bg-red-100 text-red-700',
+                        default             => 'bg-yellow-100 text-yellow-700',
+                    };
+                    $dKey = 'documents.status_' . $doc->status;
+                    $dLabel = __($dKey) !== $dKey ? __($dKey) : ucfirst(str_replace('_', ' ', $doc->status));
+                @endphp
+                <span class="text-xs px-2 py-1 rounded-full {{ $dClass }}">{{ $dLabel }}</span>
             </div>
             @empty
             <div class="p-8 text-center text-gray-400 text-sm">
