@@ -237,6 +237,7 @@ async function markDocReceived(docId) {
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
                 'Accept': 'application/json',
             },
+            keepalive: true,
         });
         const data = await res.json();
         if (data.ok && data.reception_status) {
