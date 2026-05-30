@@ -13,8 +13,8 @@ return new class extends Migration
     {
         Schema::create('sale_return_items', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('sale_return_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('article_id')->constrained()->cascadeOnDelete();
+            $table->unsignedBigInteger('sale_return_id')->index();
+            $table->unsignedBigInteger('article_id')->index();
             $table->string('designation');
             $table->string('unit')->default('pce');
             $table->decimal('quantity', 10, 2);

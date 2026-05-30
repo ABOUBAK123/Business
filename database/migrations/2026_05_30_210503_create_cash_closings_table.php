@@ -14,8 +14,8 @@ return new class extends Migration
         Schema::create('cash_closings', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('tenant_id')->index();
-            $table->foreignId('branch_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->unsignedBigInteger('branch_id')->index();
+            $table->unsignedBigInteger('user_id')->index();
             $table->date('date');
             $table->decimal('opening_cash', 12, 2)->default(0);
             $table->decimal('closing_cash', 12, 2)->default(0);

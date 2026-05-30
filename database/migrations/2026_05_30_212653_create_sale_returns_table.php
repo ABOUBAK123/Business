@@ -14,10 +14,10 @@ return new class extends Migration
         Schema::create('sale_returns', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('tenant_id')->index();
-            $table->foreignId('branch_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('sale_id')->nullable()->constrained()->nullOnDelete();
-            $table->foreignId('customer_id')->nullable()->constrained()->nullOnDelete();
+            $table->unsignedBigInteger('branch_id')->index();
+            $table->unsignedBigInteger('user_id')->index();
+            $table->unsignedBigInteger('sale_id')->nullable()->index();
+            $table->unsignedBigInteger('customer_id')->nullable()->index();
             $table->string('return_number')->unique();
             $table->string('reason');
             $table->string('refund_method')->default('cash'); // cash | credit | exchange

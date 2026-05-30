@@ -13,8 +13,8 @@ return new class extends Migration
     {
         Schema::create('inventory_lines', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('inventory_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('article_id')->constrained()->cascadeOnDelete();
+            $table->unsignedBigInteger('inventory_id')->index();
+            $table->unsignedBigInteger('article_id')->index();
             $table->decimal('theoretical_qty', 10, 2)->default(0);
             $table->decimal('counted_qty', 10, 2)->nullable();
             $table->decimal('gap', 10, 2)->default(0); // counted - theoretical

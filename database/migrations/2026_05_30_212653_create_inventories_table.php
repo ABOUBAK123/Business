@@ -14,8 +14,8 @@ return new class extends Migration
         Schema::create('inventories', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('tenant_id')->index();
-            $table->foreignId('branch_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
+            $table->unsignedBigInteger('branch_id')->index();
+            $table->unsignedBigInteger('user_id')->index();
             $table->date('date');
             $table->string('status')->default('draft'); // draft | completed
             $table->text('notes')->nullable();
