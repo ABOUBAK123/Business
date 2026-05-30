@@ -13,6 +13,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\TenantRegistrationController;
+use App\Http\Controllers\ArticleImportController;
 use App\Http\Controllers\CashClosingController;
 use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\SaleReturnController;
@@ -81,6 +82,12 @@ Route::middleware(['auth', 'tenant.active'])->group(function () {
     Route::get('stock', [StockManagementController::class, 'index'])->name('stock.index');
     Route::post('stock/{article}/replenish', [StockManagementController::class, 'replenish'])->name('stock.replenish');
 
+    // Import articles CSV
+    Route::get('articles/import', [ArticleImportController::class, 'showForm'])->name('articles.import');
+    Route::get('articles/import/template', [ArticleImportController::class, 'downloadTemplate'])->name('articles.import.template');
+    Route::post('articles/import/preview', [ArticleImportController::class, 'preview'])->name('articles.import.preview');
+    Route::post('articles/import/store', [ArticleImportController::class, 'import'])->name('articles.import.store');
+
     // Articles & QR Codes
     Route::get('articles/labels', [ArticleController::class, 'labels'])->name('articles.labels');
     Route::resource('articles', ArticleController::class);
@@ -115,6 +122,7 @@ Route::middleware(['auth', 'tenant.active'])->group(function () {
     Route::post('sales', [SaleController::class, 'store'])->name('sales.store');
     Route::get('sales/{sale}', [SaleController::class, 'show'])->name('sales.show');
     Route::get('sales/{sale}/receipt', [SaleController::class, 'receipt'])->name('sales.receipt');
+    Route::get('sales/{sale}/invoice', [SaleController::class, 'invoice'])->name('sales.invoice');
     Route::get('api/articles/search', [SaleController::class, 'searchArticle'])->name('articles.search');
     Route::post('api/sales/scan-qr', [SaleController::class, 'scanQr'])->name('sales.scan-qr');
 

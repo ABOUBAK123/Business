@@ -168,6 +168,13 @@ class SaleController extends Controller
         return view('sales.receipt', compact('sale'));
     }
 
+    public function invoice(Sale $sale)
+    {
+        $sale->load(['branch', 'user', 'customer', 'items.article', 'branch.tenant']);
+        $tenant = $sale->branch?->tenant ?? app('currentTenant');
+        return view('sales.invoice', compact('sale', 'tenant'));
+    }
+
     public function searchArticle(Request $request)
     {
         $branchId = $request->branch_id;

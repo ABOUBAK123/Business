@@ -61,7 +61,10 @@
                             <a href="{{ route('sales.show', $sale) }}" class="text-gray-400 hover:text-blue-600" title="Détail">
                                 <i class="fas fa-eye"></i>
                             </a>
-                            <a href="{{ route('sales.receipt', $sale) }}" class="text-gray-400 hover:text-green-600" title="Reçu">
+                            <a href="{{ route('sales.invoice', $sale) }}" target="_blank" class="text-gray-400 hover:text-blue-700" title="Facture PDF">
+                                <i class="fas fa-file-pdf"></i>
+                            </a>
+                            <a href="{{ route('sales.receipt', $sale) }}" class="text-gray-400 hover:text-green-600" title="Reçu thermique">
                                 <i class="fas fa-receipt"></i>
                             </a>
                         </div>

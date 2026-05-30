@@ -12,6 +12,10 @@
                     <h2 class="text-xl font-bold font-mono text-blue-700">{{ $sale->invoice_number }}</h2>
                 </div>
                 <div class="flex gap-2">
+                    <a href="{{ route('sales.invoice', $sale) }}" target="_blank"
+                       class="flex items-center gap-1 bg-blue-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-blue-700">
+                        <i class="fas fa-file-pdf"></i> Facture PDF
+                    </a>
                     <a href="{{ route('sales.receipt', $sale) }}" target="_blank"
                        class="flex items-center gap-1 border border-gray-200 text-gray-600 px-3 py-1.5 rounded-lg text-sm hover:bg-gray-50">
                         <i class="fas fa-print"></i> Reçu

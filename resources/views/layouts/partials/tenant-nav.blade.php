@@ -41,6 +41,10 @@
     @endif
 </a>
 
+<a href="{{ route('articles.import') }}"
+   class="flex items-center gap-3 px-3 py-2 rounded-lg text-blue-100 hover:bg-white/10 {{ request()->routeIs('articles.import*') ? 'bg-white/20 font-semibold' : '' }}">
+    <i class="fas fa-file-csv w-4"></i> Import CSV/Excel
+</a>
 <a href="{{ route('articles.labels') }}"
    class="flex items-center gap-3 px-3 py-2 rounded-lg text-blue-100 hover:bg-white/10 {{ request()->routeIs('articles.labels') ? 'bg-white/20 font-semibold' : '' }}">
     <i class="fas fa-qrcode w-4"></i> Étiquettes QR
