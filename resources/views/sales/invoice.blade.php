@@ -254,7 +254,9 @@
             @endphp
             <span class="payment-tag {{ ($pm['method'] ?? '') === 'credit' ? 'credit' : '' }}">
                 {{ $methodLabel }}
-                @if(isset($pm['amount']))— {{ number_format($pm['amount'], 0, ',', ' ') }} FCFA@endif
+                @if(isset($pm['amount']))
+                &mdash; {{ number_format($pm['amount'], 0, ',', ' ') }} FCFA
+                @endif
             </span>
             @endforeach
         </div>
