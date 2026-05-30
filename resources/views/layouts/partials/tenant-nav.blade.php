@@ -48,6 +48,14 @@
 
 <div class="pt-3 pb-1 px-3 text-blue-400 text-xs uppercase tracking-wider">Gestion</div>
 
+<a href="{{ route('returns.index') }}"
+   class="flex items-center gap-3 px-3 py-2 rounded-lg text-blue-100 hover:bg-white/10 {{ request()->routeIs('returns.*') ? 'bg-white/20 font-semibold' : '' }}">
+    <i class="fas fa-undo w-4"></i> Retours & avoirs
+</a>
+<a href="{{ route('inventory.index') }}"
+   class="flex items-center gap-3 px-3 py-2 rounded-lg text-blue-100 hover:bg-white/10 {{ request()->routeIs('inventory.*') ? 'bg-white/20 font-semibold' : '' }}">
+    <i class="fas fa-clipboard-check w-4"></i> Inventaire physique
+</a>
 <a href="{{ route('customers.index') }}"
    class="flex items-center gap-3 px-3 py-2 rounded-lg text-blue-100 hover:bg-white/10 {{ request()->routeIs('customers.*') ? 'bg-white/20 font-semibold' : '' }}">
     <i class="fas fa-users w-4"></i> Clients

@@ -14,6 +14,8 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\TenantRegistrationController;
 use App\Http\Controllers\CashClosingController;
+use App\Http\Controllers\InventoryController;
+use App\Http\Controllers\SaleReturnController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\SuperAdmin\CommissionerManagementController;
 use App\Http\Controllers\SuperAdmin\SettingController;
@@ -86,6 +88,20 @@ Route::middleware(['auth', 'tenant.active'])->group(function () {
     Route::post('articles/bulk-qr', [ArticleController::class, 'bulkQr'])->name('articles.bulk-qr');
     Route::get('articles/generate-code', [ArticleController::class, 'generateCode'])->name('articles.generate-code');
     Route::post('articles/{article}/stock', [ArticleController::class, 'updateStock'])->name('articles.stock');
+
+    // Inventaire physique
+    Route::get('inventory', [InventoryController::class, 'index'])->name('inventory.index');
+    Route::get('inventory/new', [InventoryController::class, 'create'])->name('inventory.create');
+    Route::post('inventory', [InventoryController::class, 'store'])->name('inventory.store');
+    Route::get('inventory/{inventory}', [InventoryController::class, 'show'])->name('inventory.show');
+    Route::post('inventory/{inventory}/lines', [InventoryController::class, 'saveLine'])->name('inventory.save-lines');
+    Route::post('inventory/{inventory}/finalize', [InventoryController::class, 'finalize'])->name('inventory.finalize');
+
+    // Retours & avoirs
+    Route::get('returns', [SaleReturnController::class, 'index'])->name('returns.index');
+    Route::get('returns/new', [SaleReturnController::class, 'create'])->name('returns.create');
+    Route::post('returns', [SaleReturnController::class, 'store'])->name('returns.store');
+    Route::get('returns/{return}', [SaleReturnController::class, 'show'])->name('returns.show');
 
     // Clôture de caisse
     Route::get('cash', [CashClosingController::class, 'index'])->name('cash.index');
