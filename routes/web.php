@@ -13,6 +13,7 @@ use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SaleController;
 use App\Http\Controllers\TenantRegistrationController;
+use App\Http\Controllers\CashClosingController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\SuperAdmin\CommissionerManagementController;
 use App\Http\Controllers\SuperAdmin\SettingController;
@@ -79,11 +80,18 @@ Route::middleware(['auth', 'tenant.active'])->group(function () {
     Route::post('stock/{article}/replenish', [StockManagementController::class, 'replenish'])->name('stock.replenish');
 
     // Articles & QR Codes
+    Route::get('articles/labels', [ArticleController::class, 'labels'])->name('articles.labels');
     Route::resource('articles', ArticleController::class);
     Route::get('articles/{article}/qr', [ArticleController::class, 'printQr'])->name('articles.qr');
     Route::post('articles/bulk-qr', [ArticleController::class, 'bulkQr'])->name('articles.bulk-qr');
     Route::get('articles/generate-code', [ArticleController::class, 'generateCode'])->name('articles.generate-code');
     Route::post('articles/{article}/stock', [ArticleController::class, 'updateStock'])->name('articles.stock');
+
+    // Clôture de caisse
+    Route::get('cash', [CashClosingController::class, 'index'])->name('cash.index');
+    Route::get('cash/new', [CashClosingController::class, 'create'])->name('cash.create');
+    Route::post('cash', [CashClosingController::class, 'store'])->name('cash.store');
+    Route::get('cash/{cash}', [CashClosingController::class, 'show'])->name('cash.show');
 
     // Sales (POS)
     Route::get('sales', [SaleController::class, 'index'])->name('sales.index');

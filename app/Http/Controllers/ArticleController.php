@@ -14,6 +14,12 @@ use SimpleSoftwareIO\QrCode\Facades\QrCode;
 
 class ArticleController extends Controller
 {
+    public function labels()
+    {
+        $articles = Article::where('is_active', true)->orderBy('designation')->get();
+        return view('articles.labels', compact('articles'));
+    }
+
     public function index(Request $request)
     {
         $query = Article::with(['category', 'mainQrCode']);
