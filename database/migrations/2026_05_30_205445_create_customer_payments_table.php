@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('customer_payments', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('tenant_id')->constrained()->cascadeOnDelete();
+            $table->unsignedBigInteger('tenant_id')->index();
             $table->foreignId('customer_id')->constrained()->cascadeOnDelete();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
             $table->decimal('amount', 12, 2);

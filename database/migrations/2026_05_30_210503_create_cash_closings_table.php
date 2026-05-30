@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('cash_closings', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('tenant_id')->constrained()->cascadeOnDelete();
+            $table->unsignedBigInteger('tenant_id')->index();
             $table->foreignId('branch_id')->constrained()->cascadeOnDelete();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
             $table->date('date');
