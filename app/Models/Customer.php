@@ -25,6 +25,16 @@ class Customer extends Model
         return $this->hasMany(Sale::class);
     }
 
+    public function payments(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(CustomerPayment::class);
+    }
+
+    public function getAvailableCreditAttribute(): float
+    {
+        return max(0, (float) $this->credit_limit - (float) $this->credit_balance);
+    }
+
     public function hasAvailableCredit(float $amount): bool
     {
         return ($this->credit_limit - $this->credit_balance) >= $amount;

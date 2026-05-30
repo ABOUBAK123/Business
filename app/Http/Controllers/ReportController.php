@@ -137,6 +137,81 @@ class ReportController extends Controller
         return view('reports.top-articles', compact('topByQuantity', 'topByRevenue', 'branches'));
     }
 
+    public function financial(Request $request)
+    {
+        $branchIds = $this->getBranchIds(auth()->user());
+        $from = $request->date_from ?? now()->startOfMonth()->toDateString();
+        $to   = $request->date_to   ?? now()->toDateString();
+
+        if ($request->branch_id) {
+            $branchIds = array_intersect($branchIds, [$request->branch_id]);
+        }
+
+        $range = [$from . ' 00:00:00', $to . ' 23:59:59'];
+
+        // CA et métriques globales
+        $totals = Sale::whereIn('branch_id', $branchIds)
+            ->whereBetween('created_at', $range)
+            ->selectRaw('
+                COALESCE(SUM(total_ttc),0)       as ca_ttc,
+                COALESCE(SUM(subtotal_ht),0)     as ca_ht,
+                COALESCE(SUM(tax_amount),0)      as total_tva,
+                COALESCE(SUM(discount_amount),0) as total_remise,
+                COUNT(*)                          as nb_ventes
+            ')->first();
+
+        // Coût des ventes (quantité × prix achat HT)
+        $coutVentes = SaleItem::join('sales', 'sales.id', '=', 'sale_items.sale_id')
+            ->join('articles', 'articles.id', '=', 'sale_items.article_id')
+            ->whereIn('sales.branch_id', $branchIds)
+            ->whereBetween('sales.created_at', $range)
+            ->sum(DB::raw('sale_items.quantity * articles.purchase_price_ht'));
+
+        $margeBrute = $totals->ca_ht - $coutVentes;
+        $tauxMarge  = $totals->ca_ht > 0 ? ($margeBrute / $totals->ca_ht) * 100 : 0;
+
+        // Ventes par jour
+        $byDay = Sale::whereIn('branch_id', $branchIds)
+            ->whereBetween('created_at', $range)
+            ->selectRaw('DATE(created_at) as date, SUM(total_ttc) as ca, COUNT(*) as nb')
+            ->groupBy('date')->orderBy('date')->get();
+
+        // Ventes par catégorie
+        $byCategory = SaleItem::join('sales', 'sales.id', '=', 'sale_items.sale_id')
+            ->join('articles', 'articles.id', '=', 'sale_items.article_id')
+            ->leftJoin('categories', 'categories.id', '=', 'articles.category_id')
+            ->whereIn('sales.branch_id', $branchIds)
+            ->whereBetween('sales.created_at', $range)
+            ->selectRaw('COALESCE(categories.name,"Sans catégorie") as category, SUM(sale_items.total_ttc) as ca, SUM(sale_items.quantity) as qty')
+            ->groupBy('category')->orderByDesc('ca')->get();
+
+        // Ventes par vendeur
+        $byUser = Sale::with('user')->whereIn('branch_id', $branchIds)
+            ->whereBetween('created_at', $range)
+            ->selectRaw('user_id, SUM(total_ttc) as ca, COUNT(*) as nb')
+            ->groupBy('user_id')->orderByDesc('ca')->get();
+
+        // Ventes par mode de paiement
+        $byPayment = DB::table('sales')
+            ->whereIn('branch_id', $branchIds)
+            ->whereBetween('created_at', $range)
+            ->selectRaw("JSON_UNQUOTE(JSON_EXTRACT(payment_methods, '\$[0].method')) as method, SUM(total_ttc) as ca, COUNT(*) as nb")
+            ->groupBy('method')->orderByDesc('ca')->get();
+
+        // Crédit en cours (ventes non réglées)
+        $creditEnCours = Sale::whereIn('branch_id', $branchIds)
+            ->whereIn('payment_status', ['credit', 'partial'])
+            ->sum(DB::raw('total_ttc - amount_paid'));
+
+        $branches = Branch::whereIn('id', $this->getBranchIds(auth()->user()))->get();
+
+        return view('reports.financial', compact(
+            'totals', 'coutVentes', 'margeBrute', 'tauxMarge',
+            'byDay', 'byCategory', 'byUser', 'byPayment',
+            'creditEnCours', 'branches', 'from', 'to'
+        ));
+    }
+
     private function getBranchIds($user): array
     {
         if ($user->hasRole(['proprietaire', 'admin_boutique', 'comptable'])) {

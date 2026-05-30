@@ -3,15 +3,39 @@
 @section('page-title', 'Gestion des clients')
 
 @section('content')
+{{-- KPIs crédit --}}
+@if($creditCount > 0)
+<div class="grid grid-cols-2 gap-3 mb-4">
+    <div class="bg-red-50 border border-red-100 rounded-xl px-4 py-3 flex items-center gap-3">
+        <i class="fas fa-exclamation-triangle text-red-400 text-xl"></i>
+        <div>
+            <p class="text-xs text-red-500">Clients avec crédit</p>
+            <p class="text-lg font-bold text-red-700">{{ $creditCount }}</p>
+        </div>
+    </div>
+    <div class="bg-orange-50 border border-orange-100 rounded-xl px-4 py-3 flex items-center gap-3">
+        <i class="fas fa-hand-holding-usd text-orange-400 text-xl"></i>
+        <div>
+            <p class="text-xs text-orange-500">Total crédit en cours</p>
+            <p class="text-lg font-bold text-orange-700">{{ number_format($totalCredit, 0, ',', ' ') }} FCFA</p>
+        </div>
+    </div>
+</div>
+@endif
+
 <div class="flex items-center justify-between mb-4 flex-wrap gap-2">
     <form class="flex gap-2 flex-wrap">
-        <input type="text" name="search" value="{{ request('search') }}" placeholder="Nom, téléphone, email..."
-               class="border border-gray-200 rounded-lg px-3 py-2 text-sm w-48 focus:ring-2 focus:ring-blue-500">
+        <input type="text" name="search" value="{{ request('search') }}" placeholder="Nom, téléphone..."
+               class="border border-gray-200 rounded-lg px-3 py-2 text-sm w-44 focus:ring-2 focus:ring-blue-500">
         <select name="type" class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
             <option value="">Tous les types</option>
-            <option value="individual" {{ request('type') === 'individual' ? 'selected' : '' }}>Particulier</option>
-            <option value="professional" {{ request('type') === 'professional' ? 'selected' : '' }}>Professionnel</option>
-            <option value="wholesale" {{ request('type') === 'wholesale' ? 'selected' : '' }}>Grossiste</option>
+            <option value="individual"    {{ request('type') === 'individual'    ? 'selected' : '' }}>Particulier</option>
+            <option value="professional"  {{ request('type') === 'professional'  ? 'selected' : '' }}>Professionnel</option>
+            <option value="wholesale"     {{ request('type') === 'wholesale'     ? 'selected' : '' }}>Grossiste</option>
+        </select>
+        <select name="filter" class="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
+            <option value="">Tous</option>
+            <option value="credit" {{ request('filter') === 'credit' ? 'selected' : '' }}>Avec crédit en cours</option>
         </select>
         <button class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700">Filtrer</button>
     </form>

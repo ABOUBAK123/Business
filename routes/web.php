@@ -99,6 +99,7 @@ Route::middleware(['auth', 'tenant.active'])->group(function () {
 
     // Customers
     Route::resource('customers', CustomerController::class);
+    Route::post('customers/{customer}/payment', [CustomerController::class, 'recordPayment'])->name('customers.payment');
 
     // Users management
     Route::resource('users', UserManagementController::class)->only(['index', 'create', 'store', 'edit', 'update']);
@@ -109,5 +110,6 @@ Route::middleware(['auth', 'tenant.active'])->group(function () {
         Route::get('sales', [ReportController::class, 'sales'])->name('sales');
         Route::get('stock', [ReportController::class, 'stock'])->name('stock');
         Route::get('top-articles', [ReportController::class, 'topArticles'])->name('top-articles');
+        Route::get('financial', [ReportController::class, 'financial'])->name('financial');
     });
 });

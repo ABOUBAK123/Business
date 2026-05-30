@@ -70,3 +70,7 @@
    class="flex items-center gap-3 px-3 py-2 rounded-lg text-blue-100 hover:bg-white/10 {{ request()->routeIs('reports.top-articles') ? 'bg-white/20 font-semibold' : '' }}">
     <i class="fas fa-trophy w-4"></i> Top articles
 </a>
+<a href="{{ route('reports.financial') }}"
+   class="flex items-center gap-3 px-3 py-2 rounded-lg text-blue-100 hover:bg-white/10 {{ request()->routeIs('reports.financial') ? 'bg-white/20 font-semibold' : '' }}">
+    <i class="fas fa-chart-line w-4"></i> Rapport financier
+</a>
