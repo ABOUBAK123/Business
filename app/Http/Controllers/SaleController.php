@@ -35,10 +35,13 @@ class SaleController extends Controller
             $query->where('invoice_number', 'like', "%{$request->search}%");
         }
 
+        $totalAmount = (clone $query)->sum('total_ttc');
+        $totalCount  = (clone $query)->count();
+
         $sales = $query->latest()->paginate(25)->withQueryString();
         $branches = Branch::whereIn('id', $branchIds)->get();
 
-        return view('sales.index', compact('sales', 'branches'));
+        return view('sales.index', compact('sales', 'branches', 'totalAmount', 'totalCount'));
     }
 
     public function create(Request $request)

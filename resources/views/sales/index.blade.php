@@ -73,6 +73,19 @@
                 </td></tr>
             @endforelse
         </tbody>
+        @if($totalCount > 0)
+        <tfoot class="bg-blue-50 border-t-2 border-blue-200">
+            <tr>
+                <td colspan="5" class="px-4 py-3 text-sm font-bold text-blue-800">
+                    Total — {{ number_format($totalCount, 0, ',', ' ') }} vente{{ $totalCount > 1 ? 's' : '' }}
+                </td>
+                <td class="px-4 py-3 text-right text-base font-bold text-blue-900">
+                    {{ number_format($totalAmount, 0, ',', ' ') }} FCFA
+                </td>
+                <td colspan="2"></td>
+            </tr>
+        </tfoot>
+        @endif
     </table>
     @if($sales->hasPages())
         <div class="px-4 py-3 border-t border-gray-100">{{ $sales->links() }}</div>
