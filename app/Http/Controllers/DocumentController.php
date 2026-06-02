@@ -207,25 +207,28 @@ class DocumentController extends Controller
         $this->guardPermission('documents');
         $request->validate([
             // zip est ajouté car Windows/WAMP détecte docx/xlsx/pptx comme application/zip
-            'file'  => 'required|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,odt,ods,odp,csv,zip|max:51200',
-            'title' => 'nullable|string|max:500',
+            'file'   => 'required|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,odt,ods,odp,csv,zip|max:51200',
+            'title'  => 'nullable|string|max:500',
+            'folder' => 'nullable|string|max:500',
         ]);
 
         $file   = $request->file('file');
         ClamAvScanner::scan($file, 'documents');
         $title  = $request->title ?: pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
         $path   = $file->store('documents', 'public');
+        $folder = $request->input('folder');
 
         $document = Document::create([
-            'id'         => Str::uuid(),
-            'title'      => $title,
-            'file_path'  => '/storage/' . $path,
+            'id'          => Str::uuid(),
+            'title'       => $title,
+            'description' => $folder ? "Dossier: {$folder}" : null,
+            'file_path'   => '/storage/' . $path,
             'final_file_path' => '/storage/' . $path,
-            'file_size'  => $file->getSize(),
-            'mime_type'  => $file->getMimeType(),
-            'status'     => 'draft',
-            'owner_id'   => Auth::id(),
-            'created_by' => Auth::id(),
+            'file_size'   => $file->getSize(),
+            'mime_type'   => $file->getMimeType(),
+            'status'      => 'draft',
+            'owner_id'    => Auth::id(),
+            'created_by'  => Auth::id(),
         ]);
 
         DocumentVersion::create([
@@ -249,23 +252,25 @@ class DocumentController extends Controller
     {
         $this->guardPermission('documents.upload');
         $request->validate([
-            'title' => 'required|string|max:500',
-            'file'  => 'required|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,odt,ods,odp,csv,zip|max:51200',
+            'title'  => 'required|string|max:500',
+            'file'   => 'required|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx,odt,ods,odp,csv,zip|max:51200',
+            'folder' => 'nullable|string|max:500',
         ]);
 
         $file     = $request->file('file');
         ClamAvScanner::scan($file, 'documents');
         $path     = $file->store('documents', 'public');
+        $folder   = $request->input('folder');
         $document = Document::create([
-            'title'      => $request->title,
-            'description'=> $request->description,
-            'file_path'  => '/storage/' . $path,
+            'title'       => $request->title,
+            'description' => $folder ? "Dossier: {$folder}" : $request->input('description'),
+            'file_path'   => '/storage/' . $path,
             'final_file_path' => '/storage/' . $path,
-            'file_size'  => $file->getSize(),
-            'mime_type'  => $file->getMimeType(),
-            'status'     => 'draft',
-            'owner_id'   => Auth::id(),
-            'created_by' => Auth::id(),
+            'file_size'   => $file->getSize(),
+            'mime_type'   => $file->getMimeType(),
+            'status'      => 'draft',
+            'owner_id'    => Auth::id(),
+            'created_by'  => Auth::id(),
         ]);
 
         DocumentVersion::create([
