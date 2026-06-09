@@ -981,7 +981,10 @@ class AdminController extends Controller
                     $mutationRequestQuery->orWhere(function ($query) use ($currentUserId) {
                         $query->where('event_type', 'mutation_request')
                             ->where('status', 'pending')
-                            ->where('metadata->approval_workflow->current_approver_user_id', $currentUserId);
+                            ->whereRaw(
+                                "BINARY JSON_UNQUOTE(JSON_EXTRACT(`metadata`, '$.\"approval_workflow\".\"current_approver_user_id\"')) = BINARY ?",
+                                [$currentUserId]
+                            );
                     });
                 }
                 $personnelMutationRequests = $mutationRequestQuery->limit(50)->get();
