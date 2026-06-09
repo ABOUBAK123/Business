@@ -936,7 +936,10 @@ class AdminController extends Controller
                 if ($currentUserId !== '') {
                     $trainingEnrollmentQuery->orWhere(function ($query) use ($currentUserId) {
                         $query->where('status', 'pending')
-                            ->where('metadata->approval_workflow->current_approver_user_id', $currentUserId);
+                            ->whereRaw(
+                                "BINARY JSON_UNQUOTE(JSON_EXTRACT(`metadata`, '$.\"approval_workflow\".\"current_approver_user_id\"')) = BINARY ?",
+                                [$currentUserId]
+                            );
                     });
                 }
                 $personnelTrainingEnrollments = $trainingEnrollmentQuery->limit(50)->get();
