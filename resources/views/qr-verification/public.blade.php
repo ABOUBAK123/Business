@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vérification du document — E-Parapheur</title>
+    <title>Vérification du document — E-Administration</title>
     @php
         $useVite = file_exists(public_path('build/manifest.json')) || file_exists(public_path('hot'));
-        $appName = \App\Models\AppSetting::where('key', 'app_name')->value('value') ?? 'E-Parapheur';
+        $appName = \App\Models\AppSetting::where('key', 'app_name')->value('value') ?? 'E-Administration';
         $logoPath = \App\Models\AppSetting::where('key', 'header_logo')->value('value');
         $brandColor = \App\Models\AppSetting::where('key', 'menu_color')->value('value') ?? '#1e40af';
     @endphp

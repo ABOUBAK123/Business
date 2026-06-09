@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>@yield('title', 'Connexion') — E-Parapheur</title>
+    <title>@yield('title', 'Connexion') — E-Administration</title>
     @php
         $useVite = file_exists(public_path('build/manifest.json')) || file_exists(public_path('hot'));
     @endphp
@@ -16,7 +16,7 @@
         $authMenuColor = '#173b9f';
         $authFavicon = null;
         $authHeaderLogo = null;
-        $authAppName = 'E-Parapheur';
+        $authAppName = 'E-Administration';
     @endphp
 
     {{-- Favicon --}}
