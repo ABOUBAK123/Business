@@ -116,7 +116,7 @@ if ($tab !== 'personnel' && !array_key_exists($tab, $tabs)) {
        title="{{ $label }}"
        class="flex items-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition
               {{ $personnelTab === $key ? 'bg-[#2453d6] text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100' }}">
-        <i class="{{ $icon }} text-xs flex-shrink-0"></i>
+        <i class="{{ $icon }} text-sm flex-shrink-0"></i>
         <span class="adm-tab-label">{{ $label }}</span>
     </a>
     @endforeach
@@ -128,7 +128,7 @@ if ($tab !== 'personnel' && !array_key_exists($tab, $tabs)) {
        title="{{ $label }}"
        class="flex items-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition
               {{ $tab === $key ? 'bg-[#2453d6] text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100' }}">
-        <i class="{{ $icon }} text-xs flex-shrink-0"></i>
+        <i class="{{ $icon }} text-sm flex-shrink-0"></i>
         <span class="adm-tab-label">{{ $label }}</span>
     </a>
     @endforeach
@@ -1179,7 +1179,7 @@ $_oc = [
     @foreach($agentSpaceTabs as $key => [$icon, $label])
     <a href="{{ route('admin.index', array_merge(['tab' => 'personnel', 'personnel_tab' => 'agent-space', 'agent_space_tab' => $key], $agentSpaceCanSearchAll ? ($agentSpaceEmployee ? ['selected_employee' => $agentSpaceEmployee->id, 'selected_employee_number' => $agentSpaceEmployee->employee_number] : ($agentSpaceEmployeeNumberInput !== '' ? ['selected_employee_number' => $agentSpaceEmployeeNumberInput] : [])) : [])) }}"
        class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition {{ $agentSpaceTab === $key ? 'bg-[#2453d6] text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200' }}">
-      <i class="{{ $icon }} text-xs"></i>
+      <i class="{{ $icon }} text-sm"></i>
       <span>{{ $label }}</span>
     </a>
     @endforeach
@@ -2886,7 +2886,7 @@ document.getElementById('motif-popup').addEventListener('click', function(e) {
     @foreach($leaveSubtabs as $key => [$icon, $label])
     <a href="{{ route('admin.index', ['tab' => 'personnel', 'personnel_tab' => 'leave', 'leave_subtab' => $key]) }}"
        class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition {{ $leaveSubtab === $key ? 'bg-[#2453d6] text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200' }}">
-      <i class="{{ $icon }} text-xs"></i>
+      <i class="{{ $icon }} text-sm"></i>
       <span>{{ $label }}</span>
     </a>
     @endforeach
@@ -3308,7 +3308,7 @@ document.getElementById('motif-popup').addEventListener('click', function(e) {
     @foreach($trainingSubtabs as $key => [$icon, $label])
     <a href="{{ route('admin.index', ['tab' => 'personnel', 'personnel_tab' => 'training', 'training_subtab' => $key]) }}"
        class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition {{ $trainingSubtab === $key ? 'bg-[#2453d6] text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200' }}">
-      <i class="{{ $icon }} text-xs"></i>
+      <i class="{{ $icon }} text-sm"></i>
       <span>{{ $label }}</span>
     </a>
     @endforeach
@@ -4028,7 +4028,7 @@ document.getElementById('motif-popup').addEventListener('click', function(e) {
     @foreach($careerSubtabs as $key => [$icon, $label])
     <a href="{{ route('admin.index', ['tab' => 'personnel', 'personnel_tab' => 'career', 'career_subtab' => $key]) }}"
        class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition {{ $careerSubtab === $key ? 'bg-[#2453d6] text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200' }}">
-      <i class="{{ $icon }} text-xs"></i>
+      <i class="{{ $icon }} text-sm"></i>
       <span>{{ $label }}</span>
     </a>
     @endforeach
