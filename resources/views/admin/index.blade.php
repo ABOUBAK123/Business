@@ -10620,8 +10620,8 @@ function openProfileEditModal(data) {
         adminTypeEl.value = data.administration_type || '';
         profileAdministrationTypeChange('edit', data.administration_id || '');
     }
-    // set form action
-    document.getElementById('form-profile-edit').action = _adminBase + '/profiles/' + data.id + '?tab=user-profiles';
+    // set form action (without query params - use method spoofing with @method('PUT'))
+    document.getElementById('form-profile-edit').action = _adminBase + '/profiles/' + data.id;
     // reset all checkboxes then check the active ones
     document.querySelectorAll('#modal-profile-edit input[type=checkbox]').forEach(cb => cb.checked = false);
     var activeSet = {};
