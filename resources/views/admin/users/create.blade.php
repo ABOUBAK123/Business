@@ -22,6 +22,22 @@
                        class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
             </div>
             <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Administration <span class="text-red-500">*</span></label>
+                <select name="profile_id" required class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="">-- Sélectionner une administration --</option>
+                    @php
+                        $profiles = App\Models\AdministrationProfile::with(['emitterAdministration', 'recipientAdministration'])
+                            ->orderBy('name')
+                            ->get();
+                    @endphp
+                    @foreach($profiles as $profile)
+                        <option value="{{ $profile->id }}" {{ old('profile_id') === $profile->id ? 'selected' : '' }}>
+                            {{ $profile->name }} ({{ $profile->administration_label }})
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+            <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Rôle système</label>
                 <select name="role" class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                     @foreach(['user'=>'Utilisateur','manager'=>'Manager','signer'=>'Signataire','admin'=>'Administrateur'] as $v => $l)

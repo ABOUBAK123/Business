@@ -28,20 +28,22 @@ class UserController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'name'     => 'required|string|max:191',
-            'email'    => 'required|email|unique:users,email',
-            'password' => 'required|string|min:8',
-            'role'     => 'required|in:admin,user,signer,manager',
+            'name'       => 'required|string|max:191',
+            'email'      => 'required|email|unique:users,email',
+            'password'   => 'required|string|min:8',
+            'role'       => 'required|in:admin,user,signer,manager',
+            'profile_id' => 'required|uuid|exists:administration_profiles,id',
         ]);
 
         $payload = [
-            'name'      => $data['name'],
-            'full_name' => $data['name'],
-            'email'     => $data['email'],
-            'password'  => Hash::make($data['password']),
-            'role'      => $data['role'],
-            'status'    => 'active',
-            'locale'    => 'fr',
+            'name'       => $data['name'],
+            'full_name'  => $data['name'],
+            'email'      => $data['email'],
+            'password'   => Hash::make($data['password']),
+            'role'       => $data['role'],
+            'profile_id' => $data['profile_id'],
+            'status'     => 'active',
+            'locale'     => 'fr',
         ];
 
         try {
