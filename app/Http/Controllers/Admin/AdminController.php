@@ -5265,22 +5265,30 @@ class AdminController extends Controller
             $selectedAdminId = $data['administration_id'] ?? null;
             $selectedProfileId = $data['profile_id'] ?? null;
 
-            if (!empty($selectedAdminType) && !empty($selectedAdminId)) {
-                $selectedProfile = $selectedProfileId ? AdministrationProfile::find($selectedProfileId) : null;
-                $profileMatchesScope = $selectedProfile
-                    && $selectedProfile->administration_id === $selectedAdminId
-                    && ($selectedProfile->effective_administration_type ?? 'emitter') === $selectedAdminType;
+            if (empty($selectedAdminType) || empty($selectedAdminId)) {
+                return back()
+                    ->withInput()
+                    ->withErrors(['users' => 'Administration et type d\'administration sont obligatoires.']);
+            }
 
-                if (!$profileMatchesScope) {
-                    $fallbackProfile = AdministrationProfile::query()
-                        ->where('administration_id', $selectedAdminId)
-                        ->where('administration_type', $selectedAdminType)
-                        ->orderBy('name')
-                        ->first();
+            $selectedProfile = $selectedProfileId ? AdministrationProfile::find($selectedProfileId) : null;
+            $profileMatchesScope = $selectedProfile
+                && $selectedProfile->administration_id === $selectedAdminId
+                && ($selectedProfile->effective_administration_type ?? 'emitter') === $selectedAdminType;
 
-                    if ($fallbackProfile) {
-                        $selectedProfileId = $fallbackProfile->id;
-                    }
+            if (!$profileMatchesScope) {
+                $fallbackProfile = AdministrationProfile::query()
+                    ->where('administration_id', $selectedAdminId)
+                    ->where('administration_type', $selectedAdminType)
+                    ->orderBy('name')
+                    ->first();
+
+                if ($fallbackProfile) {
+                    $selectedProfileId = $fallbackProfile->id;
+                } else {
+                    return back()
+                        ->withInput()
+                        ->withErrors(['users' => 'Aucun profil trouvé pour cette administration. Veuillez d\'abord créer un profil.']);
                 }
             }
 
@@ -5376,6 +5384,10 @@ class AdminController extends Controller
 
                 if ($fallbackProfile) {
                     $selectedProfileId = $fallbackProfile->id;
+                } else {
+                    return back()
+                        ->withInput()
+                        ->withErrors(['users' => 'Aucun profil trouvé pour cette administration. Veuillez d\'abord créer un profil.']);
                 }
             }
         }
