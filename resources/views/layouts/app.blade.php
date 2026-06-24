@@ -13,7 +13,7 @@
     @else
         <script src="{{ asset('vendor/tailwind/tailwind.js') }}"></script>
     @endif
-    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    <link rel="stylesheet" href="{{ asset('vendor/fontawesome/css/all.min.css') }}">
     @php
         /* ── Theming dynamique selon l'administration de l'utilisateur connecté ── */
         $themUser    = auth()->user();
