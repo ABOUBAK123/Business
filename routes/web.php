@@ -402,7 +402,7 @@ Route::middleware('auth')->group(function () {
 
         // Profils / Rôles
         Route::post('/profiles',            [AdminController::class, 'storeProfile'])->name('profiles.store');
-        Route::get('/profiles/{profile}',   fn($profile) => redirect()->route('admin.index', ['tab' => 'user-profiles', 'p_edit' => $profile])->with('anchor', 'profile-' . $profile))->name('profiles.show');
+        Route::get('/profiles/{id}',        function($id) { return redirect()->route('admin.index', ['tab' => 'user-profiles', 'p_edit' => $id]); })->name('profiles.show');
         Route::put('/profiles/{profile}',   [AdminController::class, 'updateProfile'])->name('profiles.update');
         Route::delete('/profiles/{profile}',[AdminController::class, 'destroyProfile'])->name('profiles.destroy');
         Route::post('/profiles/assign',     [AdminController::class, 'assignProfile'])->name('profiles.assign');
