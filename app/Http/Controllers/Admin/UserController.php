@@ -28,12 +28,32 @@ class UserController extends Controller
     public function store(Request $request)
     {
         $data = $request->validate([
-            'name'       => 'required|string|max:191',
-            'email'      => 'required|email|unique:users,email',
-            'password'   => 'required|string|min:8',
-            'role'       => 'required|in:admin,user,signer,manager',
-            'profile_id' => 'required|uuid|exists:administration_profiles,id',
+            'name'                 => 'required|string|max:191',
+            'email'                => 'required|email|unique:users,email',
+            'password'             => 'required|string|min:8',
+            'role'                 => 'required|in:admin,user,signer,manager',
+            'administration_type'  => 'required|in:emitter,recipient',
+            'administration_id'    => 'required|uuid',
         ]);
+
+        $selectedAdminType = $data['administration_type'];
+        $selectedAdminId = $data['administration_id'];
+        $selectedProfileId = null;
+
+        // Chercher un profil correspondant
+        $fallbackProfile = \App\Models\AdministrationProfile::query()
+            ->where('administration_id', $selectedAdminId)
+            ->where('administration_type', $selectedAdminType)
+            ->orderBy('name')
+            ->first();
+
+        if ($fallbackProfile) {
+            $selectedProfileId = $fallbackProfile->id;
+        } else {
+            return back()
+                ->withInput()
+                ->withErrors(['users' => 'Aucun profil trouvé pour cette administration. Veuillez d\'abord créer un profil.']);
+        }
 
         $payload = [
             'name'       => $data['name'],
@@ -41,7 +61,7 @@ class UserController extends Controller
             'email'      => $data['email'],
             'password'   => Hash::make($data['password']),
             'role'       => $data['role'],
-            'profile_id' => $data['profile_id'],
+            'profile_id' => $selectedProfileId,
             'status'     => 'active',
             'locale'     => 'fr',
         ];

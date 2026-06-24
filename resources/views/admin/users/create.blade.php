@@ -22,19 +22,35 @@
                        class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
             </div>
             <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Type <span class="text-red-500">*</span></label>
+                <select name="administration_type" required class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <option value="">-- Sélectionner un type --</option>
+                    <option value="emitter" {{ old('administration_type') === 'emitter' ? 'selected' : '' }}>Émettrice</option>
+                    <option value="recipient" {{ old('administration_type') === 'recipient' ? 'selected' : '' }}>Destinataire</option>
+                </select>
+            </div>
+            <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Administration <span class="text-red-500">*</span></label>
-                <select name="profile_id" required class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <select name="administration_id" required class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
                     <option value="">-- Sélectionner une administration --</option>
                     @php
-                        $profiles = App\Models\AdministrationProfile::with(['emitterAdministration', 'recipientAdministration'])
-                            ->orderBy('name')
-                            ->get();
+                        $issuingAdmins = App\Models\IssuingAdministration::orderBy('name')->get();
+                        $recipientAdmins = App\Models\RecipientAdministration::orderBy('name')->get();
                     @endphp
-                    @foreach($profiles as $profile)
-                        <option value="{{ $profile->id }}" {{ old('profile_id') === $profile->id ? 'selected' : '' }}>
-                            {{ $profile->name }} ({{ $profile->administration_label }})
-                        </option>
-                    @endforeach
+                    <optgroup label="Administrations Émettrice">
+                        @foreach($issuingAdmins as $admin)
+                            <option value="{{ $admin->id }}" data-type="emitter" {{ old('administration_id') === $admin->id && old('administration_type') === 'emitter' ? 'selected' : '' }}>
+                                {{ $admin->name }} ({{ $admin->code }})
+                            </option>
+                        @endforeach
+                    </optgroup>
+                    <optgroup label="Administrations Destinataire">
+                        @foreach($recipientAdmins as $admin)
+                            <option value="{{ $admin->id }}" data-type="recipient" {{ old('administration_id') === $admin->id && old('administration_type') === 'recipient' ? 'selected' : '' }}>
+                                {{ $admin->name }} ({{ $admin->code }})
+                            </option>
+                        @endforeach
+                    </optgroup>
                 </select>
             </div>
             <div>
