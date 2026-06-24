@@ -413,6 +413,7 @@ Route::middleware('auth')->group(function () {
 
         // Utilisateurs (onglet admin intégré)
         Route::post('/users-tab',                          [AdminController::class, 'storeUserTab'])->name('users-tab.store');
+        Route::get('/users-tab/{user}',                    fn($user) => redirect()->route('admin.index', ['tab' => 'users', 'u_edit' => $user]))->name('users-tab.show');
         Route::put('/users-tab/{user}',                    [AdminController::class, 'updateUserTab'])->name('users-tab.update');
         Route::delete('/users-tab/{user}',                 [AdminController::class, 'destroyUserTab'])->name('users-tab.destroy');
         Route::post('/users-tab/{user}/toggle-status',     [AdminController::class, 'toggleUserStatusTab'])->name('users-tab.toggle-status');

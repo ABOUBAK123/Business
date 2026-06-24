@@ -8760,7 +8760,10 @@ function userAdminIdChange(prefix) {
 }
 
 function openUserEditModal(data) {
-  document.getElementById('form-user-edit').action = _adminBase + '/users-tab/' + data.id;
+  // Construire l'URL correcte pour la route PUT
+  var userUpdateUrl = _adminBase + '/users-tab/' + data.id;
+  document.getElementById('form-user-edit').action = userUpdateUrl;
+  document.getElementById('form-user-edit').method = 'POST'; // Laravel utilise POST avec @method('PUT')
   document.getElementById('e-nom').value     = data.nom || '';
   document.getElementById('e-prenoms').value = data.prenoms || '';
   document.getElementById('e-name').value    = data.name || '';
