@@ -1601,12 +1601,19 @@ class SignatureController extends Controller
                 'recipients'         => [$recipient],
                 'requiredRecipients' => 1,
             ]],
-            'notificationUrl' => $platformWebhookUrl,
-            'webhookUrl'      => $platformWebhookUrl,
-            'callbackUrl'     => $platformWebhookUrl,
         ];
 
-        $wflResp = $client->post("{$endpoint}/api/users/{$ownerUserId}/workflows", $workflowPayload);
+        Log::debug('SunnyStamp: workflow creation request', [
+            'endpoint' => "{$endpoint}/api/users/{$ownerUserId}/workflows",
+            'ownerUserId' => $ownerUserId,
+            'payload' => $workflowPayload,
+            'recipient' => $recipient,
+        ]);
+
+        $wflResp = $client
+            ->withHeaders(['Content-Type' => 'application/json'])
+            ->asJson()
+            ->post("{$endpoint}/api/users/{$ownerUserId}/workflows", $workflowPayload);
 
         if (!$wflResp->successful()) {
             // Fallback payload: certaines versions API refusent des champs avancés.
@@ -1615,21 +1622,21 @@ class SignatureController extends Controller
                 'steps' => [[
                     'stepType' => $stepType,
                     'recipients' => [array_filter([
-                        'id' => $recipientPlatformUserId,
-                        'userId' => $recipientPlatformUserId,
                         'email' => $signer->email,
                         'firstName' => $recipientFirstName,
                         'lastName' => $recipientLastName,
-                        'phoneNumber' => $recipientPhone,
-                    ], fn($v) => !is_null($v) && $v !== '')],
+                        'phoneNumber' => $recipientPhone ?: null,
+                        'id' => $recipientPlatformUserId ?: null,
+                        'userId' => $recipientPlatformUserId ?: null,
+                    ], fn($v) => $v !== null && $v !== '')],
                     'requiredRecipients' => 1,
                 ]],
-                'notificationUrl' => $platformWebhookUrl,
-                'webhookUrl'      => $platformWebhookUrl,
-                'callbackUrl'     => $platformWebhookUrl,
             ];
 
-            $fallbackResp = $client->post("{$endpoint}/api/users/{$ownerUserId}/workflows", $fallbackPayload);
+            $fallbackResp = $client
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->asJson()
+                ->post("{$endpoint}/api/users/{$ownerUserId}/workflows", $fallbackPayload);
             if ($fallbackResp->successful()) {
                 $wflResp = $fallbackResp;
             }
@@ -2439,6 +2446,7 @@ class SignatureController extends Controller
                 'workflow_name' => $wf?->name,
                 'step_order' => (int) ($stepObj->order ?? 0),
                 'step_name' => (string) ($stepObj->name ?? ''),
+                'platformUserId' => $platformUserId,
             ]
         );
 
