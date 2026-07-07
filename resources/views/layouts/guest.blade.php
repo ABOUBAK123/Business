@@ -31,5 +31,7 @@
         </p>
     </div>
 
+    @include('components.contact-footer')
+
 </body>
 </html>

@@ -166,5 +166,8 @@ function toggleStockAlert() {
     icon.classList.toggle('rotate-180', hidden);
 }
 </script>
+
+@include('components.contact-footer')
+
 </body>
 </html>

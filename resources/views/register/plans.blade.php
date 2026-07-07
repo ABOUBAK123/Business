@@ -78,6 +78,20 @@
             @endforeach
         </div>
 
+        <!-- Support Contact Section -->
+        <div class="bg-white rounded-2xl shadow-sm border border-blue-200 p-8 mt-12 text-center">
+            <h3 class="text-lg font-bold text-gray-900 mb-4">💬 Besoin d'aide pour choisir votre plan?</h3>
+            <p class="text-gray-600 text-sm mb-6">Notre équipe est disponible pour répondre à toutes vos questions</p>
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <a href="tel:010142004609" class="inline-flex items-center gap-2 bg-blue-600 text-white px-6 py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-700 transition">
+                    <i class="fas fa-phone"></i> Appeler: 01 01 42 00 46 09
+                </a>
+                <a href="https://wa.me/22510142004609" target="_blank" class="inline-flex items-center gap-2 bg-green-600 text-white px-6 py-2.5 rounded-lg text-sm font-semibold hover:bg-green-700 transition">
+                    <i class="fab fa-whatsapp"></i> WhatsApp
+                </a>
+            </div>
+        </div>
+
         <p class="text-center text-sm text-gray-400 mt-8">
             Déjà inscrit ? <a href="{{ route('login') }}" class="text-blue-600 hover:underline">Se connecter</a>
         </p>
