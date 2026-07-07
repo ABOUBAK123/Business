@@ -1560,6 +1560,17 @@ class SignatureController extends Controller
         $consentPageId = $actionType === 'signature'
             ? ($cfg->consent_page_id ?? '')
             : ($cfg->consent_page_id_approval ?: $cfg->consent_page_id ?? '');
+
+        // Certaines pages de consentement requièrent un numéro de téléphone.
+        // Ne pas l'inclure si le téléphone n'est pas disponible.
+        if (!empty($consentPageId) && empty($recipientPhone)) {
+            Log::warning('SunnyStamp: consentPageId ignorée - no phone for recipient', [
+                'signer_email' => $signer->email,
+                'consent_page_id' => $consentPageId,
+            ]);
+            $consentPageId = '';
+        }
+
         $sigProfileId = $cfg->signature_profile_id ?? '';
 
         $recipientPlatformUserId = self::resolvePlatformUserIdByEmail($cfg, (string) $signer->email);
