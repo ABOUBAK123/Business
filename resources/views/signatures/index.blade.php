@@ -121,9 +121,10 @@
                                 data-document-url="{{ !empty($row['firstExecutionId']) ? route('signatures.workflow-document', ['executionId' => $row['firstExecutionId']]) : '' }}"
                                 data-workflow-name="{{ $row['workflowName'] }}"
                                 data-document-title="{{ $row['documentTitle'] }}"
-                                class="inline-flex items-center justify-center h-8 w-8 rounded-lg border {{ $row['actionType'] === 'signature' ? 'border-blue-200 text-blue-600 hover:bg-blue-50' : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50' }} transition"
+                                class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl font-medium text-sm transition-all duration-200 {{ $row['actionType'] === 'signature' ? 'bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 hover:border-blue-300 hover:shadow-md active:bg-blue-200' : 'bg-emerald-50 border border-emerald-200 text-emerald-600 hover:bg-emerald-100 hover:border-emerald-300 hover:shadow-md active:bg-emerald-200' }}"
                                 title="{{ $row['actionType'] === 'signature' ? 'Signer sur la plateforme' : 'Lire et valider le document' }}">
-                                <i class="fa-solid {{ $row['actionType'] === 'signature' ? 'fa-pen-to-square' : 'fa-circle-check' }} text-sm wf-btn-icon"></i>
+                                <i class="fa-solid {{ $row['actionType'] === 'signature' ? 'fa-pen-to-square' : 'fa-circle-check' }} text-base wf-btn-icon"></i>
+                                <span>{{ $row['actionType'] === 'signature' ? 'Signer' : 'Valider' }}</span>
                             </button>
                             {{-- Formulaire de repli (local) si API non configurée --}}
                             <form id="wf-local-{{ $firstExecId }}" method="POST" action="{{ route('signatures.workflow-action') }}" class="hidden">
