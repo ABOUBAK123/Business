@@ -1601,6 +1601,8 @@ class SignatureController extends Controller
                 'recipients'         => [$recipient],
                 'requiredRecipients' => 1,
             ]],
+            'notificationUrl' => $platformWebhookUrl,
+            'webhookUrl'      => $platformWebhookUrl,
         ];
 
         Log::debug('SunnyStamp: workflow creation request', [
@@ -1631,6 +1633,8 @@ class SignatureController extends Controller
                     ], fn($v) => $v !== null && $v !== '')],
                     'requiredRecipients' => 1,
                 ]],
+                'notificationUrl' => $platformWebhookUrl,
+                'webhookUrl'      => $platformWebhookUrl,
             ];
 
             $fallbackResp = $client
@@ -1867,6 +1871,11 @@ class SignatureController extends Controller
         // Certaines versions API rejettent PATCH application/json (HTTP 415).
         // On tente plusieurs variantes compatibles avant d'échouer.
         // Certaines APIs utilisent 'status' plutôt que 'workflowStatus'.
+
+        Log::debug('SunnyStamp: avant démarrage workflow', [
+            'workflow_id' => $workflowId,
+            'endpoint' => $endpoint,
+        ]);
         $startAttempts = [
             // Variantes PATCH merge-patch
             fn() => $client
