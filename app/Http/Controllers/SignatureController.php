@@ -1578,8 +1578,6 @@ class SignatureController extends Controller
             'email' => $signer->email,
             'firstName' => $recipientFirstName,
             'lastName' => $recipientLastName,
-            'name' => (string) $signer->name,
-            'maxInvites' => 1,
         ];
         if (!empty($recipientPhone)) {
             $recipient['phoneNumber'] = $recipientPhone;
