@@ -10058,7 +10058,7 @@ function profilesSearch(q) {
     <div class="adm-modal-box max-w-xl">
         <button onclick="closeModal('modal-profile-edit')" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-xl"><i class="fas fa-times"></i></button>
         <h3 class="text-lg font-bold text-gray-800 mb-5">Modifier le profil</h3>
-        <form id="form-profile-edit" method="POST" action="" class="space-y-4">
+        <form id="form-profile-edit" method="POST" action="" class="space-y-4" onsubmit="console.log('Form submitting to:', this.action); return true;">
             @csrf @method('PUT')
             <div class="grid grid-cols-2 gap-4">
                 <div class="col-span-2 sm:col-span-1">

@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="<?php echo e(csrf_token()); ?>">
-    <title><?php echo $__env->yieldContent('title', 'E-Parapheur'); ?> — E-Parapheur Connect & Sign</title>
+    <title><?php echo $__env->yieldContent('title', 'E-Administration'); ?> — E-Administration Connect & Sign</title>
     <?php
         $useVite = file_exists(public_path('build/manifest.json')) || file_exists(public_path('hot'));
     ?>
@@ -13,7 +13,7 @@
     <?php else: ?>
         <script src="<?php echo e(asset('vendor/tailwind/tailwind.js')); ?>"></script>
     <?php endif; ?>
-    <link rel="stylesheet" href="/vendor/fontawesome/css/all.min.css">
+    <link rel="stylesheet" href="<?php echo e(asset('vendor/fontawesome/css/all.min.css')); ?>">
     <?php
         /* ── Theming dynamique selon l'administration de l'utilisateur connecté ── */
         $themUser    = auth()->user();
@@ -142,7 +142,7 @@
         $sidebarLogo        = null;
         $sidebarAdminName   = null;
         $sidebarAdminCode   = null;
-        $sidebarDisplayName = 'E-Parapheur';
+        $sidebarDisplayName = 'E-Administration';
         $sidebarUser        = auth()->user();
         if ($sidebarUser && $sidebarUser->profile_id) {
             $sidebarProfile = \App\Models\AdministrationProfile::with(['emitterAdministration', 'recipientAdministration'])
@@ -155,7 +155,7 @@
                 // 1) Libellé affiché : code administration en priorité
                 $sidebarDisplayName = ($sidebarAdminCode && trim($sidebarAdminCode) !== '')
                     ? trim($sidebarAdminCode)
-                    : ($sidebarAdminName ?: 'E-Parapheur');
+                    : ($sidebarAdminName ?: 'E-Administration');
 
                 // 2) Contrôle strict: le logo du menu doit provenir uniquement
                 // de l'administration résolue du profil connecté.

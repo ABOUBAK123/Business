@@ -33,6 +33,7 @@ $allTabs = [
     'user-profiles'      => ['fas fa-user-shield',       'Rôles',                 '#64748b', 'administration.user-profiles'],
     'instructions'       => ['fas fa-list-check',        'Instructions',          '#0891b2', 'administration.instructions'],
     'courrier-archiving' => ['fas fa-archive',           'Archivage courrier',    '#78716c', 'administration.courrier-archiving'],
+    'antivirus'          => ['fas fa-shield-virus',       'Antivirus',             '#dc2626', 'administration.antivirus'],
 ];
 $permSvcAdmin = app(\App\Services\UserPermissionsService::class);
 $permSetAdmin = $permSvcAdmin->permissionsSet(auth()->user());
@@ -114,7 +115,7 @@ if ($tab !== 'personnel' && !array_key_exists($tab, $tabs)) {
        title="<?php echo e($label); ?>"
        class="flex items-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition
               <?php echo e($personnelTab === $key ? 'bg-[#2453d6] text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'); ?>">
-        <i class="<?php echo e($icon); ?> text-xs flex-shrink-0"></i>
+        <i class="fa <?php echo e($icon); ?> text-sm flex-shrink-0"></i>
         <span class="adm-tab-label"><?php echo e($label); ?></span>
     </a>
     <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
@@ -126,7 +127,7 @@ if ($tab !== 'personnel' && !array_key_exists($tab, $tabs)) {
        title="<?php echo e($label); ?>"
        class="flex items-center gap-1.5 px-3 py-2 sm:px-4 sm:py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition
               <?php echo e($tab === $key ? 'bg-[#2453d6] text-white shadow-sm' : 'text-gray-600 hover:bg-gray-100'); ?>">
-        <i class="<?php echo e($icon); ?> text-xs flex-shrink-0"></i>
+        <i class="fa <?php echo e($icon); ?> text-sm flex-shrink-0"></i>
         <span class="adm-tab-label"><?php echo e($label); ?></span>
     </a>
     <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
@@ -135,6 +136,32 @@ if ($tab !== 'personnel' && !array_key_exists($tab, $tabs)) {
 
 
 <?php if($tab === 'overview'): ?>
+<?php
+    $overviewAdminScope = $adminScope ?? null;
+    $overviewAdminName  = null;
+    if ($overviewAdminScope) {
+        if ($overviewAdminScope['type'] === 'emitter') {
+            $overviewAdminName = \App\Models\IssuingAdministration::find($overviewAdminScope['id'])?->name;
+        } else {
+            $overviewAdminName = \App\Models\RecipientAdministration::find($overviewAdminScope['id'])?->name;
+        }
+    }
+?>
+<?php if($overviewAdminScope): ?>
+<div class="mb-5 flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+    <i class="fas fa-building text-blue-500"></i>
+    <div>
+        <span class="text-sm font-semibold text-blue-800">Périmètre : </span>
+        <span class="text-sm text-blue-700"><?php echo e($overviewAdminName ?? $overviewAdminScope['id']); ?></span>
+        <span class="ml-2 text-xs text-blue-500 bg-blue-100 rounded-full px-2 py-0.5"><?php echo e($overviewAdminScope['type'] === 'emitter' ? 'Émetteur' : 'Destinataire'); ?></span>
+    </div>
+</div>
+<?php else: ?>
+<div class="mb-5 flex items-center gap-3 bg-violet-50 border border-violet-200 rounded-xl px-4 py-3">
+    <i class="fas fa-globe text-violet-500"></i>
+    <span class="text-sm font-semibold text-violet-800">Super Admin — toutes les administrations</span>
+</div>
+<?php endif; ?>
 <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
     <?php $__currentLoopData = [
         ['fas fa-users',      $stats['users'],      'Utilisateurs',  'blue'],
@@ -145,7 +172,7 @@ if ($tab !== 'personnel' && !array_key_exists($tab, $tabs)) {
     <div class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
         <div class="flex items-center justify-between mb-3">
             <div class="h-10 w-10 rounded-xl bg-<?php echo e($color); ?>-100 flex items-center justify-center">
-                <i class="<?php echo e($icon); ?> text-<?php echo e($color); ?>-500"></i>
+                <i class="fa <?php echo e($icon); ?> text-<?php echo e($color); ?>-500"></i>
             </div>
             <span class="text-2xl font-black text-gray-800"><?php echo e(number_format($count)); ?></span>
         </div>
@@ -191,7 +218,7 @@ $_oc = [
        class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5 hover:shadow-md transition group">
         <div class="flex items-start justify-between mb-3">
             <div class="h-11 w-11 rounded-xl bg-<?php echo e($color); ?>-100 flex items-center justify-center">
-                <i class="<?php echo e($icon); ?> text-<?php echo e($color); ?>-600"></i>
+                <i class="fa <?php echo e($icon); ?> text-<?php echo e($color); ?>-600"></i>
             </div>
             <?php if($cnt !== null): ?>
             <span class="text-2xl font-black text-gray-800"><?php echo e(number_format($cnt)); ?></span>
@@ -282,7 +309,7 @@ $_oc = [
       ]; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as [$title, $desc, $icon, $color]): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
       <div class="rounded-2xl border border-gray-200 p-4 bg-gray-50">
         <div class="h-10 w-10 rounded-xl bg-<?php echo e($color); ?>-100 flex items-center justify-center mb-3">
-          <i class="<?php echo e($icon); ?> text-<?php echo e($color); ?>-600"></i>
+          <i class="fa <?php echo e($icon); ?> text-<?php echo e($color); ?>-600"></i>
         </div>
         <h4 class="font-semibold text-gray-800 mb-1"><?php echo e($title); ?></h4>
         <p class="text-sm text-gray-500"><?php echo e($desc); ?></p>
@@ -1153,7 +1180,7 @@ $_oc = [
     <?php $__currentLoopData = $agentSpaceTabs; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $key => [$icon, $label]): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
     <a href="<?php echo e(route('admin.index', array_merge(['tab' => 'personnel', 'personnel_tab' => 'agent-space', 'agent_space_tab' => $key], $agentSpaceCanSearchAll ? ($agentSpaceEmployee ? ['selected_employee' => $agentSpaceEmployee->id, 'selected_employee_number' => $agentSpaceEmployee->employee_number] : ($agentSpaceEmployeeNumberInput !== '' ? ['selected_employee_number' => $agentSpaceEmployeeNumberInput] : [])) : []))); ?>"
        class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition <?php echo e($agentSpaceTab === $key ? 'bg-[#2453d6] text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'); ?>">
-      <i class="<?php echo e($icon); ?> text-xs"></i>
+      <i class="fa <?php echo e($icon); ?> text-sm"></i>
       <span><?php echo e($label); ?></span>
     </a>
     <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
@@ -1403,30 +1430,124 @@ $_oc = [
   <div class="space-y-3">
     <?php $__empty_1 = true; $__currentLoopData = $myLeaveRequests; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $lr): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
     <?php
-      $lrDays = $lr->approved_days ?? $lr->requested_days;
-      $badge  = $leaveBadge[$lr->status] ?? 'bg-gray-100 text-gray-500';
-      $label  = $leaveStatusLabels[$lr->status] ?? $lr->status;
+      $lrDays    = $lr->approved_days ?? $lr->requested_days;
+      $badge     = $leaveBadge[$lr->status] ?? 'bg-gray-100 text-gray-500';
+      $label     = $leaveStatusLabels[$lr->status] ?? $lr->status;
+
+      // Workflow circuit
+      $wfMeta    = is_array($lr->metadata) ? $lr->metadata : [];
+      $wf        = is_array($wfMeta['approval_workflow'] ?? null) ? $wfMeta['approval_workflow'] : null;
+      $wfSteps   = $wf ? (array) ($wf['steps']   ?? []) : [];
+      $wfHistory = $wf ? (array) ($wf['history']  ?? []) : [];
+      $wfCurIdx  = $wf ? (int)   ($wf['current_step_index'] ?? 0) : 0;
+
+      // Build step-status map from history
+      $wfStepInfo = [];
+      foreach ($wfHistory as $h) {
+          $si = (int) ($h['step_index'] ?? -1);
+          if ($si >= 0 && !isset($wfStepInfo[$si])) {
+              $wfStepInfo[$si] = [
+                  'status'  => $h['status'] ?? '',
+                  'comment' => $h['comment'] ?? '',
+                  'at'      => $h['acted_at'] ?? '',
+              ];
+          }
+      }
     ?>
-    <div class="rounded-xl border border-gray-200 px-4 py-3 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
-      <div>
-        <div class="text-sm font-bold text-gray-800"><?php echo e($lr->leaveType?->name ?? 'Type supprimé'); ?></div>
-        <?php if($lr->start_date && $lr->end_date): ?>
-        <div class="text-xs text-gray-500 mt-0.5">
-          Du <?php echo e($lr->start_date->format('d/m/Y')); ?> au <?php echo e($lr->end_date->format('d/m/Y')); ?>
+    <div class="rounded-xl border border-gray-200 px-4 py-3">
+      
+      <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+        <div>
+          <div class="text-sm font-bold text-gray-800"><?php echo e($lr->leaveType?->name ?? 'Type supprimé'); ?></div>
+          <?php if($lr->start_date && $lr->end_date): ?>
+          <div class="text-xs text-gray-500 mt-0.5">
+            Du <?php echo e($lr->start_date->format('d/m/Y')); ?> au <?php echo e($lr->end_date->format('d/m/Y')); ?>
 
+          </div>
+          <?php endif; ?>
+          <div class="text-xs text-gray-400 mt-0.5">
+            Durée : <?php echo e($lrDays ? number_format((float) $lrDays, 0) . ' jour(s)' : '-'); ?>
+
+            &nbsp;·&nbsp; Demandé le : <?php echo e($lr->created_at->format('d/m/Y')); ?>
+
+          </div>
+          <?php if($lr->reason): ?>
+          <div class="text-xs text-gray-400 mt-0.5 italic">"<?php echo e(Str::limit($lr->reason, 80)); ?>"</div>
+          <?php endif; ?>
         </div>
-        <?php endif; ?>
-        <div class="text-xs text-gray-400 mt-0.5">
-          Durée : <?php echo e($lrDays ? number_format((float) $lrDays, 0) . ' jour(s)' : '-'); ?>
-
-          &nbsp;·&nbsp; Demandé le : <?php echo e($lr->created_at->format('d/m/Y')); ?>
-
-        </div>
-        <?php if($lr->reason): ?>
-        <div class="text-xs text-gray-400 mt-0.5 italic">"<?php echo e(Str::limit($lr->reason, 80)); ?>"</div>
-        <?php endif; ?>
+        <span class="inline-block flex-shrink-0 text-xs font-semibold px-3 py-1 rounded-full <?php echo e($badge); ?>"><?php echo e($label); ?></span>
       </div>
-      <span class="inline-block flex-shrink-0 text-xs font-semibold px-3 py-1 rounded-full <?php echo e($badge); ?>"><?php echo e($label); ?></span>
+
+      
+      <?php if(!empty($wfSteps)): ?>
+      <div class="mt-3 pt-3 border-t border-gray-100">
+        <div class="text-[11px] text-gray-400 font-medium mb-2 flex items-center gap-1">
+          <i class="fas fa-project-diagram text-[9px]"></i> Circuit de validation
+        </div>
+        <div class="flex items-start overflow-x-auto pb-1 gap-0">
+          <?php $__currentLoopData = $wfSteps; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $si => $step): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+          <?php
+            $info       = $wfStepInfo[$si] ?? null;
+            $isApproved = $info && $info['status'] === 'approved';
+            $isRejected = $info && $info['status'] === 'rejected';
+            $isCurrent  = !$info && $si === $wfCurIdx && $lr->status === 'pending';
+            // Final approval: last step approved = fully approved
+            $isFinalApproved = $isApproved && $lr->status === 'approved' && $loop->last;
+
+            if ($isApproved) {
+                $circleClass = 'bg-green-500 border-green-500 text-white shadow-green-200';
+                $iconClass   = 'fas fa-check';
+                $connColor   = 'bg-green-400';
+            } elseif ($isRejected) {
+                $circleClass = 'bg-red-500 border-red-500 text-white shadow-red-200';
+                $iconClass   = 'fas fa-times';
+                $connColor   = 'bg-gray-200';
+            } elseif ($isCurrent) {
+                $circleClass = 'bg-amber-400 border-amber-400 text-white shadow-amber-200';
+                $iconClass   = 'fas fa-hourglass-half';
+                $connColor   = 'bg-gray-200';
+            } else {
+                $circleClass = 'bg-white border-gray-300 text-gray-400';
+                $iconClass   = 'far fa-circle';
+                $connColor   = 'bg-gray-200';
+            }
+
+            $profileLabel = trim((string) ($step['profile'] ?? '')) ?: ('Étape ' . ($si + 1));
+            $isDrh = ($step['kind'] ?? '') === 'drh_final';
+            $hasMotif = $isRejected && !empty($info['comment']);
+          ?>
+
+          
+          <div class="flex flex-col items-center flex-shrink-0" style="min-width:68px">
+            <div class="w-9 h-9 rounded-full border-2 <?php echo e($circleClass); ?> flex items-center justify-center text-xs shadow-sm">
+              <i class="<?php echo e($iconClass); ?>"></i>
+            </div>
+            <div class="text-[10px] text-center mt-1 font-medium text-gray-600 leading-tight" style="max-width:64px">
+              <?php echo e(Str::limit($profileLabel, 22)); ?>
+
+            </div>
+            <?php if($isDrh): ?>
+            <div class="text-[9px] text-indigo-500 font-semibold -mt-0.5">DRH</div>
+            <?php endif; ?>
+            <?php if($hasMotif): ?>
+            <button type="button"
+              onclick="openMotifPopup(<?php echo e(json_encode($info['comment'])); ?>, <?php echo e(json_encode($profileLabel)); ?>, <?php echo e(json_encode($info['at'])); ?>)"
+              class="mt-1 text-[10px] px-2 py-0.5 rounded-full bg-red-50 border border-red-200 text-red-600 hover:bg-red-100 transition font-semibold whitespace-nowrap">
+              <i class="fas fa-comment-alt text-[8px]"></i> Motif
+            </button>
+            <?php endif; ?>
+          </div>
+
+          
+          <?php if(!$loop->last): ?>
+          <div class="flex-shrink-0 self-start" style="margin-top:16px; width:28px">
+            <div class="h-0.5 w-full <?php echo e($connColor); ?> rounded"></div>
+          </div>
+          <?php endif; ?>
+          <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+        </div>
+      </div>
+      <?php endif; ?>
     </div>
     <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_1): ?>
     <div class="rounded-xl bg-gray-50 border border-dashed border-gray-300 px-4 py-6 text-center text-sm text-gray-500">
@@ -1436,6 +1557,55 @@ $_oc = [
     <?php endif; ?>
   </div>
 </div>
+
+
+<div id="motif-popup" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/40 backdrop-blur-sm p-4">
+  <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm">
+    <div class="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+      <h3 class="text-sm font-bold text-gray-800 flex items-center gap-2">
+        <i class="fas fa-comment-alt text-red-500"></i>
+        Motif du rejet &mdash; <span id="motif-profile-name" class="text-red-600 ml-1"></span>
+      </h3>
+      <button type="button" onclick="closeMotifPopup()" class="text-gray-400 hover:text-gray-600 transition">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    <div class="px-6 py-5 space-y-2">
+      <p id="motif-comment-text" class="text-sm text-gray-700 leading-relaxed"></p>
+      <p id="motif-date-text" class="text-xs text-gray-400"></p>
+    </div>
+    <div class="px-6 py-3 border-t border-gray-100 flex justify-end">
+      <button type="button" onclick="closeMotifPopup()"
+        class="px-4 py-1.5 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+        Fermer
+      </button>
+    </div>
+  </div>
+</div>
+<?php $__env->startPush('scripts'); ?>
+<script>
+function openMotifPopup(comment, profile, date) {
+    document.getElementById('motif-comment-text').textContent = comment || 'Aucun motif renseigné.';
+    document.getElementById('motif-profile-name').textContent = profile || '';
+    var d = '';
+    if (date) {
+        try { d = 'Le ' + new Date(date).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' }); } catch(e) { d = date; }
+    }
+    document.getElementById('motif-date-text').textContent = d;
+    var modal = document.getElementById('motif-popup');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+function closeMotifPopup() {
+    var modal = document.getElementById('motif-popup');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+document.getElementById('motif-popup').addEventListener('click', function(e) {
+    if (e.target === this) closeMotifPopup();
+});
+</script>
+<?php $__env->stopPush(); ?>
 
 
 <?php
@@ -1860,9 +2030,293 @@ $_oc = [
     <h4 class="text-base font-bold text-gray-800 mb-3"><?php echo e(__('personnel.ui.agent_space.requested_training_title')); ?></h4>
     <div class="space-y-2">
       <?php $__empty_1 = true; $__currentLoopData = $agentSpaceTrainingEnrollments; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $enrollment): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); $__empty_1 = false; ?>
-      <div class="rounded-xl border border-gray-200 px-3 py-2">
-        <div class="text-sm font-semibold text-gray-800"><?php echo e($enrollment->training?->title ?? __('personnel.ui.agent_space.deleted_training')); ?></div>
-        <div class="text-xs text-gray-500"><?php echo e(__('personnel.ui.agent_space.status_prefix')); ?> <?php echo e(__('personnel.ui.statuses.' . $enrollment->status)); ?> · <?php echo e(__('personnel.ui.agent_space.start_prefix')); ?> <?php echo e(optional($enrollment->planned_start_date)->format('d/m/Y') ?: '-'); ?></div>
+      <?php
+        $_enrStatus      = (string) ($enrollment->status ?? 'planned');
+        $_enrWorkflow    = is_array(data_get($enrollment->metadata, 'approval_workflow')) ? data_get($enrollment->metadata, 'approval_workflow') : [];
+        $_enrSteps       = collect(data_get($_enrWorkflow, 'steps', []))->values();
+        $_enrCurrentIdx  = (int) data_get($_enrWorkflow, 'current_step_index', 0);
+        $_enrHistory     = collect(data_get($_enrWorkflow, 'history', []));
+        $_enrHasWorkflow = !empty($_enrWorkflow) && $_enrSteps->isNotEmpty();
+
+        $_enrRejHist     = $_enrHistory->first(fn($h) => (string) data_get($h, 'status', '') === 'rejected');
+        $_enrRejIdx      = $_enrRejHist !== null ? (int) data_get($_enrRejHist, 'step_index', -1) : -1;
+
+        // 'planned' = approuvée entièrement (équivalent de 'validated' dans les mutations)
+        $_enrCircStatus  = $_enrStatus === 'rejected' ? 'rejected' : ($_enrStatus === 'pending' ? 'pending' : 'validated');
+
+        $_enrTotalSteps  = $_enrSteps->count();
+        if ($_enrCircStatus === 'validated') {
+          $_enrDone = $_enrTotalSteps;
+        } elseif ($_enrCircStatus === 'rejected') {
+          $_enrDone = max(0, $_enrRejIdx);
+        } else {
+          $_enrDone = min(max(0, $_enrCurrentIdx), $_enrTotalSteps);
+        }
+
+        $_enrBadges = [
+          'pending'     => ['bg' => 'bg-amber-100 text-amber-800',    'label' => 'En attente'],
+          'planned'     => ['bg' => 'bg-emerald-100 text-emerald-700', 'label' => 'Approuvée'],
+          'in_progress' => ['bg' => 'bg-blue-100 text-blue-700',      'label' => 'En cours'],
+          'completed'   => ['bg' => 'bg-emerald-100 text-emerald-700', 'label' => 'Terminée'],
+          'cancelled'   => ['bg' => 'bg-gray-100 text-gray-600',      'label' => 'Annulée'],
+          'rejected'    => ['bg' => 'bg-red-100 text-red-700',        'label' => 'Rejetée'],
+        ];
+        $_enrBadge = $_enrBadges[$_enrStatus] ?? ['bg' => 'bg-gray-100 text-gray-700', 'label' => ucfirst($_enrStatus)];
+
+        $_enrKindLabels = [
+          'chef_service'   => 'Chef de service',
+          'sous_directeur' => 'Sous-Directeur',
+          'directeur'      => 'Directeur',
+          'drh_final'      => 'DRH / Ressources Humaines',
+        ];
+
+        $_enrCircuitId   = 'enr_circuit_' . $enrollment->id;
+        $_enrCircuitOpen = ($_enrStatus === 'pending');
+        $_enrNextStep    = ($_enrCircStatus === 'pending' && $_enrSteps->has($_enrCurrentIdx)) ? $_enrSteps->get($_enrCurrentIdx) : null;
+        $_enrNextName    = $_enrNextStep ? ($allUsers->firstWhere('id', (string) data_get($_enrNextStep, 'user_id'))?->name ?? 'Valideur') : null;
+        $_enrNextKind    = $_enrNextStep ? ($_enrKindLabels[data_get($_enrNextStep, 'kind', '')] ?? data_get($_enrNextStep, 'profile', '')) : null;
+        $_enrPct         = $_enrTotalSteps > 0 ? (int) round(($_enrDone / $_enrTotalSteps) * 100) : 0;
+      ?>
+
+      <div class="rounded-xl border border-gray-200 px-4 py-3">
+
+        
+        <div class="flex items-center justify-between gap-2">
+          <div class="text-sm font-semibold text-gray-800 truncate"><?php echo e($enrollment->training?->title ?? __('personnel.ui.agent_space.deleted_training')); ?></div>
+          <span class="flex-shrink-0 inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold <?php echo e($_enrBadge['bg']); ?>"><?php echo e($_enrBadge['label']); ?></span>
+        </div>
+
+        
+        <div class="text-xs text-gray-400 mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+          <?php if($enrollment->planned_start_date || $enrollment->planned_end_date): ?>
+          <span><i class="far fa-calendar mr-1"></i><?php echo e(optional($enrollment->planned_start_date)->format('d/m/Y') ?: '-'); ?><?php if($enrollment->planned_end_date): ?> → <?php echo e(optional($enrollment->planned_end_date)->format('d/m/Y')); ?><?php endif; ?></span>
+          <?php endif; ?>
+          <span><i class="far fa-clock mr-1"></i>Soumise le <?php echo e(optional($enrollment->created_at)->format('d/m/Y H:i') ?: '-'); ?></span>
+        </div>
+
+        <?php if($enrollment->notes): ?>
+        <div class="text-xs text-gray-500 mt-1.5 italic"><?php echo e(Str::limit($enrollment->notes, 100)); ?></div>
+        <?php endif; ?>
+
+        
+        <?php if($_enrHasWorkflow): ?>
+        <div class="mt-3 rounded-xl overflow-hidden border
+          <?php echo e($_enrCircStatus === 'validated' ? 'border-emerald-200' : ($_enrCircStatus === 'rejected' ? 'border-red-200' : 'border-blue-200')); ?>">
+
+          
+          <button type="button"
+            onclick="(function(el){ el.classList.toggle('hidden') })(document.getElementById('<?php echo e($_enrCircuitId); ?>'))"
+            class="w-full flex items-center justify-between px-3 py-2.5 text-left gap-2
+              <?php echo e($_enrCircStatus === 'validated' ? 'bg-emerald-50' : ($_enrCircStatus === 'rejected' ? 'bg-red-50' : 'bg-blue-50')); ?>">
+            <div class="flex items-center gap-2">
+              <?php if($_enrCircStatus === 'validated'): ?>
+                <span class="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500 text-white shadow-sm">
+                  <i class="fas fa-check-double text-xs"></i>
+                </span>
+                <span class="text-xs font-bold text-emerald-700">Demande approuvée</span>
+              <?php elseif($_enrCircStatus === 'rejected'): ?>
+                <span class="flex items-center justify-center w-6 h-6 rounded-full bg-red-500 text-white shadow-sm">
+                  <i class="fas fa-times text-xs"></i>
+                </span>
+                <span class="text-xs font-bold text-red-700">Demande rejetée</span>
+              <?php else: ?>
+                <span class="relative flex items-center justify-center w-6 h-6">
+                  <span class="animate-ping absolute inset-0 rounded-full bg-blue-400 opacity-40"></span>
+                  <span class="relative flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white shadow-sm">
+                    <i class="fas fa-hourglass-half text-xs"></i>
+                  </span>
+                </span>
+                <span class="text-xs font-bold text-blue-700">Circuit de validation en cours</span>
+              <?php endif; ?>
+            </div>
+            <div class="flex items-center gap-2 flex-shrink-0">
+              <span class="text-xs font-semibold
+                <?php echo e($_enrCircStatus === 'validated' ? 'text-emerald-600' : ($_enrCircStatus === 'rejected' ? 'text-red-600' : 'text-blue-600')); ?>">
+                <?php echo e($_enrDone); ?>/<?php echo e($_enrTotalSteps); ?>
+
+              </span>
+              <div class="w-14 h-1.5 rounded-full bg-white/60 overflow-hidden border
+                <?php echo e($_enrCircStatus === 'validated' ? 'border-emerald-200' : ($_enrCircStatus === 'rejected' ? 'border-red-200' : 'border-blue-200')); ?>">
+                <div class="h-full rounded-full
+                  <?php echo e($_enrCircStatus === 'rejected' ? 'bg-red-500' : ($_enrCircStatus === 'validated' ? 'bg-emerald-500' : 'bg-blue-500')); ?>"
+                  style="width: <?php echo e($_enrPct); ?>%"></div>
+              </div>
+              <i class="fas fa-chevron-down text-xs opacity-40"></i>
+            </div>
+          </button>
+
+          
+          <div id="<?php echo e($_enrCircuitId); ?>" class="<?php echo e($_enrCircuitOpen ? '' : 'hidden'); ?> bg-white px-3 py-4">
+
+            
+            <div class="mb-4 h-2 w-full rounded-full bg-gray-100 overflow-hidden border border-gray-200">
+              <div class="h-full rounded-full transition-all duration-700
+                <?php echo e($_enrCircStatus === 'rejected' ? 'bg-red-400' : ($_enrCircStatus === 'validated' ? 'bg-emerald-500' : 'bg-blue-500')); ?>"
+                style="width: <?php echo e($_enrPct); ?>%"></div>
+            </div>
+
+            
+            <div class="relative">
+              <?php if($_enrSteps->count() > 1): ?>
+              <div class="absolute left-[19px] top-5 bottom-5 w-0.5 bg-gray-200"></div>
+              <?php endif; ?>
+              <div class="space-y-4">
+                <?php $__currentLoopData = $_enrSteps; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $idx => $step): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                <?php
+                  $sName    = $allUsers->firstWhere('id', (string) data_get($step, 'user_id'))?->name ?? 'Valideur';
+                  $sKind    = (string) data_get($step, 'kind', '');
+                  $sProf    = (string) data_get($step, 'profile', $sKind);
+                  $sKindLbl = $_enrKindLabels[$sKind] ?? $sProf;
+                  $sWds     = preg_split('/\s+/', trim($sName));
+                  $sInits   = strtoupper(substr($sWds[0] ?? '', 0, 1)) . strtoupper(substr($sWds[1] ?? '', 0, 1));
+                  $sHist    = $_enrHistory->first(fn($h) => (int) data_get($h, 'step_index') === $idx);
+                  $sAt      = $sHist ? data_get($sHist, 'acted_at') : null;
+                  $sCmt     = $sHist ? data_get($sHist, 'comment') : null;
+
+                  if ($_enrCircStatus === 'validated') {
+                    $sState = 'done';
+                  } elseif ($_enrCircStatus === 'rejected') {
+                    if ($_enrRejIdx >= 0 && $idx === $_enrRejIdx) $sState = 'rejected';
+                    elseif ($_enrRejIdx >= 0 && $idx < $_enrRejIdx) $sState = 'done';
+                    else $sState = 'todo';
+                  } else {
+                    if ($idx < $_enrCurrentIdx) $sState = 'done';
+                    elseif ($idx === $_enrCurrentIdx) $sState = 'current';
+                    else $sState = 'todo';
+                  }
+                ?>
+                <div class="relative flex items-start gap-3">
+
+                  
+                  <div class="relative z-10 flex-shrink-0">
+                    <?php if($sState === 'done'): ?>
+                      <div class="w-10 h-10 rounded-full bg-emerald-500 border-2 border-emerald-200 flex items-center justify-center shadow">
+                        <i class="fas fa-check text-white text-xs"></i>
+                      </div>
+                    <?php elseif($sState === 'rejected'): ?>
+                      <div class="w-10 h-10 rounded-full bg-red-500 border-2 border-red-200 flex items-center justify-center shadow">
+                        <i class="fas fa-times text-white text-xs"></i>
+                      </div>
+                    <?php elseif($sState === 'current'): ?>
+                      <div class="relative w-10 h-10">
+                        <span class="animate-ping absolute inset-0 rounded-full bg-blue-400 opacity-40"></span>
+                        <div class="relative w-10 h-10 rounded-full bg-blue-500 border-2 border-blue-200 flex items-center justify-center shadow">
+                          <i class="fas fa-hourglass-half text-white text-xs"></i>
+                        </div>
+                      </div>
+                    <?php else: ?>
+                      <div class="w-10 h-10 rounded-full bg-gray-100 border-2 border-gray-300 flex items-center justify-center">
+                        <span class="text-xs font-bold text-gray-400"><?php echo e($idx + 1); ?></span>
+                      </div>
+                    <?php endif; ?>
+                  </div>
+
+                  
+                  <div class="flex-1 min-w-0 pb-1">
+                    <div class="flex items-start justify-between gap-2 flex-wrap">
+                      <div class="min-w-0">
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                          <span class="text-xs font-bold
+                            <?php echo e($sState === 'done' ? 'text-emerald-700' : ($sState === 'rejected' ? 'text-red-700' : ($sState === 'current' ? 'text-blue-700' : 'text-gray-400'))); ?>">
+                            <?php echo e($sKindLbl); ?>
+
+                          </span>
+                          <?php if($sState === 'done'): ?>
+                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
+                              <i class="fas fa-check text-xs"></i> Validé
+                            </span>
+                          <?php elseif($sState === 'rejected'): ?>
+                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+                              <i class="fas fa-times text-xs"></i> Rejeté
+                            </span>
+                          <?php elseif($sState === 'current'): ?>
+                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 animate-pulse">
+                              <i class="fas fa-clock text-xs"></i> En attente
+                            </span>
+                          <?php else: ?>
+                            <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs text-gray-400 bg-gray-100">À venir</span>
+                          <?php endif; ?>
+                        </div>
+                        <div class="flex items-center gap-1.5 mt-1">
+                          <div class="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0
+                            <?php echo e($sState === 'done' ? 'bg-emerald-100 text-emerald-700' : ($sState === 'rejected' ? 'bg-red-100 text-red-700' : ($sState === 'current' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'))); ?>">
+                            <?php echo e($sInits ?: '?'); ?>
+
+                          </div>
+                          <span class="text-xs font-medium <?php echo e($sState === 'todo' ? 'text-gray-400' : 'text-gray-700'); ?> truncate"><?php echo e($sName); ?></span>
+                        </div>
+                      </div>
+                      <?php if($sAt): ?>
+                      <div class="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
+                        <i class="far fa-clock mr-0.5"></i><?php echo e(\Carbon\Carbon::parse($sAt)->format('d/m/Y à H:i')); ?>
+
+                      </div>
+                      <?php endif; ?>
+                    </div>
+                    <?php if($sCmt): ?>
+                    <div class="mt-2 rounded-lg px-3 py-2 text-xs flex items-start gap-2
+                      <?php echo e($sState === 'rejected' ? 'bg-red-50 border border-red-100 text-red-700' : 'bg-gray-50 border border-gray-100 text-gray-600'); ?>">
+                      <i class="fas fa-comment-alt mt-0.5 opacity-60 flex-shrink-0"></i>
+                      <span><?php echo e($sCmt); ?></span>
+                    </div>
+                    <?php endif; ?>
+                  </div>
+                </div>
+                <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+              </div>
+            </div>
+
+            
+            <?php if($_enrCircStatus === 'pending' && $_enrNextStep): ?>
+            <div class="mt-4 rounded-xl bg-blue-50 border border-blue-200 px-4 py-3 flex items-center gap-3">
+              <div class="flex-shrink-0 w-9 h-9 rounded-full bg-blue-500 flex items-center justify-center shadow-sm">
+                <i class="fas fa-user-check text-white text-sm"></i>
+              </div>
+              <div class="min-w-0">
+                <div class="text-xs font-bold text-blue-900">Prochain valideur</div>
+                <div class="text-xs text-blue-700 truncate"><?php echo e($_enrNextName); ?> · <?php echo e($_enrNextKind); ?></div>
+              </div>
+            </div>
+            <?php endif; ?>
+
+            
+            <?php if($_enrCircStatus === 'validated'): ?>
+            <div class="mt-4 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 flex items-center gap-3">
+              <div class="flex-shrink-0 w-9 h-9 rounded-full bg-emerald-500 flex items-center justify-center shadow-sm">
+                <i class="fas fa-check-double text-white text-sm"></i>
+              </div>
+              <div>
+                <div class="text-xs font-bold text-emerald-800">Formation approuvée par tous les responsables</div>
+                <div class="text-xs text-emerald-600">Votre demande a été validée. La formation est planifiée.</div>
+              </div>
+            </div>
+            <?php endif; ?>
+
+            
+            <?php if($_enrCircStatus === 'rejected' && data_get($enrollment->metadata, 'rejection_reason')): ?>
+            <div class="mt-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3 flex items-start gap-3">
+              <div class="flex-shrink-0 w-9 h-9 rounded-full bg-red-500 flex items-center justify-center shadow-sm mt-0.5">
+                <i class="fas fa-ban text-white text-sm"></i>
+              </div>
+              <div class="min-w-0">
+                <div class="text-xs font-bold text-red-800">Motif de rejet</div>
+                <div class="text-xs text-red-700"><?php echo e(data_get($enrollment->metadata, 'rejection_reason')); ?></div>
+              </div>
+            </div>
+            <?php endif; ?>
+
+          </div>
+        </div>
+        <?php endif; ?>
+
+        
+        <?php if($_enrStatus === 'rejected' && !$_enrHasWorkflow && data_get($enrollment->metadata, 'rejection_reason')): ?>
+        <div class="mt-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">
+          <i class="fas fa-ban mr-1 opacity-60"></i><?php echo e(data_get($enrollment->metadata, 'rejection_reason')); ?>
+
+        </div>
+        <?php endif; ?>
+
       </div>
       <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_1): ?>
       <div class="rounded-xl bg-gray-50 border border-gray-200 px-3 py-3 text-sm text-gray-500"><?php echo e(__('personnel.ui.agent_space.no_training_requests')); ?></div>
@@ -1895,7 +2349,7 @@ $_oc = [
       Aucune entité de destination disponible pour votre administration.
     </div>
     <?php else: ?>
-    <form method="POST" action="<?php echo e(route('admin.personnel.mutation-requests.store')); ?>" class="space-y-3">
+    <form method="POST" action="<?php echo e(route('admin.personnel.mutation-requests.store')); ?>" enctype="multipart/form-data" class="space-y-3">
       <?php echo csrf_field(); ?>
       <input type="hidden" name="personnel_tab" value="agent-space">
       <input type="hidden" name="agent_space_tab" value="mutation">
@@ -1925,11 +2379,122 @@ $_oc = [
           class="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm"><?php echo e(old('notes')); ?></textarea>
       </div>
 
-      <button type="submit" class="px-4 py-2 bg-[#2453d6] text-white rounded-xl text-sm font-semibold">
-        <i class="fas fa-paper-plane mr-1"></i> Envoyer la demande
-      </button>
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">Pièces justificatives</label>
+        <div class="space-y-3">
+          <div class="flex gap-2">
+            <input type="file" id="mutationAttachmentInput" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.zip"
+              class="flex-1 text-sm text-gray-700 border border-gray-300 rounded-xl px-3 py-2" />
+            <button type="button" id="mutationAttachBtn" class="px-4 py-2 bg-slate-200 text-slate-800 rounded-xl text-sm font-semibold hover:bg-slate-300 transition">
+              <i class="fas fa-plus mr-1"></i> Joindre
+            </button>
+          </div>
+          <div id="mutationAttachmentsList" class="space-y-2"></div>
+        </div>
+        <p class="text-xs text-gray-500 mt-2">Ajoutez plusieurs justificatifs en cliquant sur le bouton "Joindre".</p>
+      </div>
+
+      <script>
+        (function() {
+          const attachmentInput = document.getElementById('mutationAttachmentInput');
+          const attachBtn = document.getElementById('mutationAttachBtn');
+          const attachmentsList = document.getElementById('mutationAttachmentsList');
+          let files = [];
+
+          attachBtn.addEventListener('click', function(e) {
+            e.preventDefault();
+            const file = attachmentInput.files[0];
+            if (!file) {
+              alert('Veuillez sélectionner un fichier.');
+              return;
+            }
+
+            const maxSize = 20 * 1024 * 1024;
+            const allowedMimes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/jpeg', 'image/png', 'application/zip'];
+
+            if (file.size > maxSize) {
+              alert('Le fichier ne doit pas dépasser 20 Mo.');
+              return;
+            }
+            if (!allowedMimes.includes(file.type)) {
+              alert('Format non autorisé. Acceptés: PDF, DOC, DOCX, JPG, PNG, ZIP.');
+              return;
+            }
+
+            files.push(file);
+            renderAttachments();
+            attachmentInput.value = '';
+            attachmentInput.focus();
+          });
+
+          attachmentInput.addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              attachBtn.click();
+            }
+          });
+
+          function renderAttachments() {
+            attachmentsList.innerHTML = '';
+            files.forEach((file, index) => {
+              const div = document.createElement('div');
+              div.className = 'flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2';
+              div.innerHTML = `
+                <div class="flex items-center gap-2 min-w-0">
+                  <i class="fas fa-file text-slate-600"></i>
+                  <span class="text-sm text-slate-700 truncate">${file.name}</span>
+                  <span class="text-xs text-slate-500 whitespace-nowrap">(${(file.size / 1024).toFixed(1)} KB)</span>
+                </div>
+                <button type="button" class="text-red-600 hover:text-red-800 text-sm font-semibold"
+                  onclick="mutationRemoveFile(${index})">Supprimer</button>
+              `;
+              attachmentsList.appendChild(div);
+            });
+          }
+
+          window.mutationRemoveFile = function(index) {
+            files.splice(index, 1);
+            renderAttachments();
+          };
+
+          const form = document.querySelector('form[action="<?php echo e(route('admin.personnel.mutation-requests.store')); ?>"]');
+          if (form) {
+            const originalAction = form.action;
+            form.addEventListener('submit', function(e) {
+              if (files.length === 0) return;
+
+              e.preventDefault();
+
+              const formData = new FormData(this);
+              files.forEach(file => {
+                formData.append('attachments[]', file);
+              });
+
+              fetch(originalAction, {
+                method: 'POST',
+                body: formData
+              })
+              .then(response => {
+                if (response.redirected) {
+                  window.location.href = response.url;
+                } else {
+                  return response.text();
+                }
+              })
+              .catch(error => {
+                console.error('Erreur:', error);
+                alert('Erreur lors de l\'envoi.');
+              });
+            });
+          }
+        })();
+      </script>
+      <div class="pt-4">
+        <button type="submit" class="w-full px-4 py-3 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 transition">
+          Envoyer la demande
+        </button>
+      </div>
     </form>
-    <?php endif; ?>
   </section>
 
   <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
@@ -1950,6 +2515,7 @@ $_oc = [
           return (string) data_get($item, 'status', '') === 'rejected';
         });
         $rejectedStepIndex = $rejectedHistory !== null ? (int) data_get($rejectedHistory, 'step_index', -1) : -1;
+        $attachments = is_array(data_get($request->metadata, 'mutation_request.attachments')) ? data_get($request->metadata, 'mutation_request.attachments') : [];
         $totalSteps = $steps->count();
         if ($status === 'validated') {
           $completedSteps = $totalSteps;
@@ -1970,83 +2536,272 @@ $_oc = [
         <div class="text-xs text-gray-500 mt-2"><?php echo e($request->summary); ?></div>
         <?php endif; ?>
 
-        <?php if($steps->isNotEmpty()): ?>
-        <div class="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-3">
-          <div class="flex items-center justify-between gap-2 flex-wrap">
-            <div class="text-xs font-semibold text-gray-700">Niveau d'évolution</div>
-            <div class="text-xs text-gray-600">
-              <?php if($status === 'rejected' && $rejectedStepIndex >= 0): ?>
-                Rejet à l'étape <?php echo e(min($rejectedStepIndex + 1, $totalSteps)); ?>/<?php echo e($totalSteps); ?>
+        <?php if(!empty($attachments)): ?>
+        <div class="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-3">
+          <div class="text-xs font-semibold text-slate-700">Pièce justificative</div>
+          <div class="mt-2 flex flex-wrap gap-2">
+            <?php $__currentLoopData = $attachments; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $attachmentIndex => $attachment): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+            <a href="<?php echo e(route('admin.personnel.mutation-requests.attachment.download', [$request, $attachmentIndex])); ?>"
+              class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-100">
+              <i class="fas fa-file-upload"></i> <?php echo e($attachment['original_name'] ?? basename($attachment['path'] ?? '')); ?>
 
-              <?php elseif($status === 'validated'): ?>
-                Circuit terminé (<?php echo e($totalSteps); ?>/<?php echo e($totalSteps); ?>)
-              <?php else: ?>
-                Étapes franchies: <?php echo e($completedSteps); ?>/<?php echo e($totalSteps); ?>
-
-              <?php endif; ?>
-            </div>
-          </div>
-
-          <div class="mt-2 h-1.5 w-full rounded-full bg-gray-200 overflow-hidden">
-            <?php
-              $progressPct = $totalSteps > 0 ? (int) round(($completedSteps / $totalSteps) * 100) : 0;
-            ?>
-            <div class="h-full <?php echo e($status === 'rejected' ? 'bg-red-500' : ($status === 'validated' ? 'bg-emerald-500' : 'bg-blue-500')); ?>" style="width: <?php echo e($progressPct); ?>%"></div>
-          </div>
-
-          <div class="mt-3 space-y-2">
-            <?php $__currentLoopData = $steps; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $idx => $step): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
-            <?php
-              $stepApproverName = $allUsers->firstWhere('id', (string) data_get($step, 'user_id'))?->name ?? 'Valideur';
-              $stepProfile = (string) data_get($step, 'profile', 'Niveau');
-              if ($status === 'validated') {
-                $stepState = 'done';
-              } elseif ($status === 'rejected') {
-                if ($rejectedStepIndex >= 0 && $idx === $rejectedStepIndex) {
-                  $stepState = 'rejected';
-                } elseif ($rejectedStepIndex >= 0 && $idx < $rejectedStepIndex) {
-                  $stepState = 'done';
-                } else {
-                  $stepState = 'todo';
-                }
-              } else {
-                if ($idx < $currentStepIndex) {
-                  $stepState = 'done';
-                } elseif ($idx === $currentStepIndex) {
-                  $stepState = 'current';
-                } else {
-                  $stepState = 'todo';
-                }
-              }
-
-              $stepDotClass = $stepState === 'done'
-                ? 'bg-emerald-500'
-                : ($stepState === 'rejected' ? 'bg-red-500' : ($stepState === 'current' ? 'bg-blue-500' : 'bg-gray-300'));
-              $stepTextClass = $stepState === 'done'
-                ? 'text-emerald-700'
-                : ($stepState === 'rejected' ? 'text-red-700' : ($stepState === 'current' ? 'text-blue-700' : 'text-gray-500'));
-              $stepLabel = $stepState === 'done'
-                ? 'Validée'
-                : ($stepState === 'rejected' ? 'Rejetée' : ($stepState === 'current' ? 'En cours' : 'À venir'));
-            ?>
-            <div class="flex items-start gap-2">
-              <span class="mt-1 h-2.5 w-2.5 rounded-full <?php echo e($stepDotClass); ?>"></span>
-              <div class="text-xs min-w-0">
-                <div class="font-semibold <?php echo e($stepTextClass); ?>">Étape <?php echo e($idx + 1); ?> · <?php echo e($stepLabel); ?></div>
-                <div class="text-gray-600 truncate"><?php echo e($stepProfile); ?> - <?php echo e($stepApproverName); ?></div>
-              </div>
-            </div>
+            </a>
             <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
           </div>
         </div>
         <?php endif; ?>
 
-        <?php if($status === 'rejected' && data_get($request->metadata, 'rejection_reason')): ?>
-        <div class="mt-2 rounded-lg bg-red-50 border border-red-100 px-3 py-2 text-xs text-red-700">
-          Motif du rejet: <?php echo e(data_get($request->metadata, 'rejection_reason')); ?>
+        <?php if($steps->isNotEmpty()): ?>
+        <?php
+          $kindLabels = [
+            'target_entity_manager' => 'Responsable entité cible',
+            'chef_service'          => 'Chef de service',
+            'sous_directeur'        => 'Sous-Directeur',
+            'directeur'             => 'Directeur',
+            'drh_final'             => 'DRH / Ressources Humaines',
+          ];
+          $progressPct = $totalSteps > 0 ? (int) round(($completedSteps / $totalSteps) * 100) : 0;
+          $circuitId   = 'circuit_' . $request->id;
+          $circuitOpen = ($status === 'pending');
+          $nextStep    = ($status === 'pending' && $steps->has($currentStepIndex)) ? $steps->get($currentStepIndex) : null;
+          $nextApproverName = $nextStep ? ($allUsers->firstWhere('id', (string) data_get($nextStep, 'user_id'))?->name ?? 'Valideur') : null;
+          $nextKindLabel    = $nextStep ? ($kindLabels[data_get($nextStep, 'kind', '')] ?? data_get($nextStep, 'profile', '')) : null;
+        ?>
 
+        
+        <div class="mt-3 rounded-xl overflow-hidden border
+          <?php echo e($status === 'validated' ? 'border-emerald-200' : ($status === 'rejected' ? 'border-red-200' : 'border-blue-200')); ?>">
+
+          
+          <button type="button"
+            onclick="(function(el){ el.classList.toggle('hidden') })(document.getElementById('<?php echo e($circuitId); ?>'))"
+            class="w-full flex items-center justify-between px-3 py-2.5 text-left gap-2
+              <?php echo e($status === 'validated' ? 'bg-emerald-50' : ($status === 'rejected' ? 'bg-red-50' : 'bg-blue-50')); ?>">
+
+            <div class="flex items-center gap-2">
+              <?php if($status === 'validated'): ?>
+                <span class="flex items-center justify-center w-6 h-6 rounded-full bg-emerald-500 text-white shadow-sm">
+                  <i class="fas fa-check-double text-xs"></i>
+                </span>
+                <span class="text-xs font-bold text-emerald-700">Circuit terminé — Mutation approuvée</span>
+              <?php elseif($status === 'rejected'): ?>
+                <span class="flex items-center justify-center w-6 h-6 rounded-full bg-red-500 text-white shadow-sm">
+                  <i class="fas fa-times text-xs"></i>
+                </span>
+                <span class="text-xs font-bold text-red-700">Demande rejetée</span>
+              <?php else: ?>
+                <span class="relative flex items-center justify-center w-6 h-6">
+                  <span class="animate-ping absolute inset-0 rounded-full bg-blue-400 opacity-40"></span>
+                  <span class="relative flex items-center justify-center w-6 h-6 rounded-full bg-blue-500 text-white shadow-sm">
+                    <i class="fas fa-hourglass-half text-xs"></i>
+                  </span>
+                </span>
+                <span class="text-xs font-bold text-blue-700">Circuit de validation en cours</span>
+              <?php endif; ?>
+            </div>
+
+            <div class="flex items-center gap-2 flex-shrink-0">
+              <span class="text-xs font-semibold
+                <?php echo e($status === 'validated' ? 'text-emerald-600' : ($status === 'rejected' ? 'text-red-600' : 'text-blue-600')); ?>">
+                <?php echo e($completedSteps); ?>/<?php echo e($totalSteps); ?>
+
+              </span>
+              <div class="w-14 h-1.5 rounded-full bg-white/60 overflow-hidden border
+                <?php echo e($status === 'validated' ? 'border-emerald-200' : ($status === 'rejected' ? 'border-red-200' : 'border-blue-200')); ?>">
+                <div class="h-full rounded-full
+                  <?php echo e($status === 'rejected' ? 'bg-red-500' : ($status === 'validated' ? 'bg-emerald-500' : 'bg-blue-500')); ?>"
+                  style="width: <?php echo e($progressPct); ?>%"></div>
+              </div>
+              <i class="fas fa-chevron-down text-xs opacity-40"></i>
+            </div>
+          </button>
+
+          
+          <div id="<?php echo e($circuitId); ?>" class="<?php echo e($circuitOpen ? '' : 'hidden'); ?> bg-white px-3 py-4">
+
+            
+            <div class="mb-4 h-2 w-full rounded-full bg-gray-100 overflow-hidden border border-gray-200">
+              <div class="h-full rounded-full transition-all duration-700
+                <?php echo e($status === 'rejected' ? 'bg-red-400' : ($status === 'validated' ? 'bg-emerald-500' : 'bg-blue-500')); ?>"
+                style="width: <?php echo e($progressPct); ?>%"></div>
+            </div>
+
+            
+            <div class="relative">
+              
+              <?php if($steps->count() > 1): ?>
+              <div class="absolute left-[19px] top-5 bottom-5 w-0.5 bg-gray-200"></div>
+              <?php endif; ?>
+
+              <div class="space-y-4">
+                <?php $__currentLoopData = $steps; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $idx => $step): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+                <?php
+                  $sApproverName  = $allUsers->firstWhere('id', (string) data_get($step, 'user_id'))?->name ?? 'Valideur';
+                  $sKind          = (string) data_get($step, 'kind', '');
+                  $sProfile       = (string) data_get($step, 'profile', $sKind);
+                  $sKindLabel     = $kindLabels[$sKind] ?? $sProfile;
+                  $sWords         = preg_split('/\s+/', trim($sApproverName));
+                  $sInitials      = strtoupper(substr($sWords[0] ?? '', 0, 1)) . strtoupper(substr($sWords[1] ?? '', 0, 1));
+
+                  $sHistoryEntry  = $history->first(fn($h) => (int) data_get($h, 'step_index') === $idx);
+                  $sActedAt       = $sHistoryEntry ? data_get($sHistoryEntry, 'acted_at') : null;
+                  $sComment       = $sHistoryEntry ? data_get($sHistoryEntry, 'comment') : null;
+
+                  if ($status === 'validated') {
+                    $sState = 'done';
+                  } elseif ($status === 'rejected') {
+                    if ($rejectedStepIndex >= 0 && $idx === $rejectedStepIndex) $sState = 'rejected';
+                    elseif ($rejectedStepIndex >= 0 && $idx < $rejectedStepIndex) $sState = 'done';
+                    else $sState = 'todo';
+                  } else {
+                    if ($idx < $currentStepIndex) $sState = 'done';
+                    elseif ($idx === $currentStepIndex) $sState = 'current';
+                    else $sState = 'todo';
+                  }
+                ?>
+
+                <div class="relative flex items-start gap-3">
+                  
+                  <div class="relative z-10 flex-shrink-0">
+                    <?php if($sState === 'done'): ?>
+                      <div class="w-10 h-10 rounded-full bg-emerald-500 border-2 border-emerald-200 flex items-center justify-center shadow">
+                        <i class="fas fa-check text-white text-xs"></i>
+                      </div>
+                    <?php elseif($sState === 'rejected'): ?>
+                      <div class="w-10 h-10 rounded-full bg-red-500 border-2 border-red-200 flex items-center justify-center shadow">
+                        <i class="fas fa-times text-white text-xs"></i>
+                      </div>
+                    <?php elseif($sState === 'current'): ?>
+                      <div class="relative w-10 h-10">
+                        <span class="animate-ping absolute inset-0 rounded-full bg-blue-400 opacity-40"></span>
+                        <div class="relative w-10 h-10 rounded-full bg-blue-500 border-2 border-blue-200 flex items-center justify-center shadow">
+                          <i class="fas fa-hourglass-half text-white text-xs"></i>
+                        </div>
+                      </div>
+                    <?php else: ?>
+                      <div class="w-10 h-10 rounded-full bg-gray-100 border-2 border-gray-300 flex items-center justify-center">
+                        <span class="text-xs font-bold text-gray-400"><?php echo e($idx + 1); ?></span>
+                      </div>
+                    <?php endif; ?>
+                  </div>
+
+                  
+                  <div class="flex-1 min-w-0 pb-1">
+                    <div class="flex items-start justify-between gap-2 flex-wrap">
+                      <div class="min-w-0">
+                        
+                        <div class="flex items-center gap-1.5 flex-wrap">
+                          <span class="text-xs font-bold
+                            <?php echo e($sState === 'done' ? 'text-emerald-700' : ($sState === 'rejected' ? 'text-red-700' : ($sState === 'current' ? 'text-blue-700' : 'text-gray-400'))); ?>">
+                            <?php echo e($sKindLabel); ?>
+
+                          </span>
+                          <?php if($sState === 'done'): ?>
+                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
+                              <i class="fas fa-check text-xs"></i> Validé
+                            </span>
+                          <?php elseif($sState === 'rejected'): ?>
+                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-semibold bg-red-100 text-red-700">
+                              <i class="fas fa-times text-xs"></i> Rejeté
+                            </span>
+                          <?php elseif($sState === 'current'): ?>
+                            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-700 animate-pulse">
+                              <i class="fas fa-clock text-xs"></i> En attente
+                            </span>
+                          <?php else: ?>
+                            <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs text-gray-400 bg-gray-100">
+                              À venir
+                            </span>
+                          <?php endif; ?>
+                        </div>
+
+                        
+                        <div class="flex items-center gap-1.5 mt-1">
+                          <div class="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0
+                            <?php echo e($sState === 'done' ? 'bg-emerald-100 text-emerald-700' : ($sState === 'rejected' ? 'bg-red-100 text-red-700' : ($sState === 'current' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-400'))); ?>">
+                            <?php echo e($sInitials ?: '?'); ?>
+
+                          </div>
+                          <span class="text-xs font-medium <?php echo e($sState === 'todo' ? 'text-gray-400' : 'text-gray-700'); ?> truncate">
+                            <?php echo e($sApproverName); ?>
+
+                          </span>
+                        </div>
+                      </div>
+
+                      
+                      <?php if($sActedAt): ?>
+                      <div class="text-xs text-gray-400 whitespace-nowrap flex-shrink-0">
+                        <i class="far fa-clock mr-0.5"></i>
+                        <?php echo e(\Carbon\Carbon::parse($sActedAt)->format('d/m/Y à H:i')); ?>
+
+                      </div>
+                      <?php endif; ?>
+                    </div>
+
+                    
+                    <?php if($sComment): ?>
+                    <div class="mt-2 rounded-lg px-3 py-2 text-xs flex items-start gap-2
+                      <?php echo e($sState === 'rejected' ? 'bg-red-50 border border-red-100 text-red-700' : 'bg-gray-50 border border-gray-100 text-gray-600'); ?>">
+                      <i class="fas fa-comment-alt mt-0.5 opacity-60 flex-shrink-0"></i>
+                      <span><?php echo e($sComment); ?></span>
+                    </div>
+                    <?php endif; ?>
+                  </div>
+                </div>
+                <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+              </div>
+            </div>
+
+            
+            <?php if($status === 'pending' && $nextStep): ?>
+            <div class="mt-4 rounded-xl bg-blue-50 border border-blue-200 px-4 py-3 flex items-center gap-3">
+              <div class="flex-shrink-0 w-9 h-9 rounded-full bg-blue-500 flex items-center justify-center shadow-sm">
+                <i class="fas fa-user-check text-white text-sm"></i>
+              </div>
+              <div class="min-w-0">
+                <div class="text-xs font-bold text-blue-900">Prochain valideur</div>
+                <div class="text-xs text-blue-700 truncate">
+                  <?php echo e($nextApproverName); ?>
+
+                  <span class="mx-1 opacity-40">·</span>
+                  <?php echo e($nextKindLabel); ?>
+
+                </div>
+              </div>
+            </div>
+            <?php endif; ?>
+
+            
+            <?php if($status === 'validated'): ?>
+            <div class="mt-4 rounded-xl bg-emerald-50 border border-emerald-200 px-4 py-3 flex items-center gap-3">
+              <div class="flex-shrink-0 w-9 h-9 rounded-full bg-emerald-500 flex items-center justify-center shadow-sm">
+                <i class="fas fa-check-double text-white text-sm"></i>
+              </div>
+              <div>
+                <div class="text-xs font-bold text-emerald-800">Mutation approuvée par tous les responsables</div>
+                <div class="text-xs text-emerald-600">Décision finale le <?php echo e(optional($request->updated_at)->format('d/m/Y')); ?></div>
+              </div>
+            </div>
+            <?php endif; ?>
+
+            
+            <?php if($status === 'rejected' && data_get($request->metadata, 'rejection_reason')): ?>
+            <div class="mt-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3 flex items-start gap-3">
+              <div class="flex-shrink-0 w-9 h-9 rounded-full bg-red-500 flex items-center justify-center shadow-sm mt-0.5">
+                <i class="fas fa-ban text-white text-sm"></i>
+              </div>
+              <div class="min-w-0">
+                <div class="text-xs font-bold text-red-800">Motif de rejet</div>
+                <div class="text-xs text-red-700"><?php echo e(data_get($request->metadata, 'rejection_reason')); ?></div>
+              </div>
+            </div>
+            <?php endif; ?>
+
+          </div>
         </div>
         <?php endif; ?>
+
       </div>
       <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); if ($__empty_1): ?>
       <div class="rounded-xl bg-gray-50 border border-gray-200 px-3 py-3 text-sm text-gray-500">Aucune demande de mutation pour le moment.</div>
@@ -2054,6 +2809,7 @@ $_oc = [
     </div>
   </section>
 </div>
+<?php endif; ?>
 <?php else: ?>
 <div class="grid grid-cols-1 xl:grid-cols-2 gap-5">
   <section class="bg-white rounded-2xl border border-gray-200 shadow-sm p-5">
@@ -2150,7 +2906,7 @@ $_oc = [
     <?php $__currentLoopData = $leaveSubtabs; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $key => [$icon, $label]): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
     <a href="<?php echo e(route('admin.index', ['tab' => 'personnel', 'personnel_tab' => 'leave', 'leave_subtab' => $key])); ?>"
        class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition <?php echo e($leaveSubtab === $key ? 'bg-[#2453d6] text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'); ?>">
-      <i class="<?php echo e($icon); ?> text-xs"></i>
+      <i class="fa <?php echo e($icon); ?> text-sm"></i>
       <span><?php echo e($label); ?></span>
     </a>
     <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
@@ -2572,7 +3328,7 @@ $_oc = [
     <?php $__currentLoopData = $trainingSubtabs; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $key => [$icon, $label]): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
     <a href="<?php echo e(route('admin.index', ['tab' => 'personnel', 'personnel_tab' => 'training', 'training_subtab' => $key])); ?>"
        class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition <?php echo e($trainingSubtab === $key ? 'bg-[#2453d6] text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'); ?>">
-      <i class="<?php echo e($icon); ?> text-xs"></i>
+      <i class="fa <?php echo e($icon); ?> text-sm"></i>
       <span><?php echo e($label); ?></span>
     </a>
     <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
@@ -3294,7 +4050,7 @@ $_oc = [
     <?php $__currentLoopData = $careerSubtabs; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $key => [$icon, $label]): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
     <a href="<?php echo e(route('admin.index', ['tab' => 'personnel', 'personnel_tab' => 'career', 'career_subtab' => $key])); ?>"
        class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition <?php echo e($careerSubtab === $key ? 'bg-[#2453d6] text-white shadow-sm' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'); ?>">
-      <i class="<?php echo e($icon); ?> text-xs"></i>
+      <i class="fa <?php echo e($icon); ?> text-sm"></i>
       <span><?php echo e($label); ?></span>
     </a>
     <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
@@ -3320,6 +4076,7 @@ $_oc = [
           <th class="py-3 pr-4">GRADE</th>
           <th class="py-3 pr-4">EMPLOI</th>
           <th class="py-3 pr-4">JUSTIF</th>
+          <th class="py-3 pr-4">PJ</th>
           <th class="py-3">Action</th>
         </tr>
       </thead>
@@ -3333,6 +4090,7 @@ $_oc = [
           $mutationGrade = $mutationEmployeeMeta['grade'] ?? '-';
           $mutationEmployment = $mutation->employee?->job_title ?: ($mutationEmployeeMeta['employment'] ?? ($mutationEmployeeMeta['emploi'] ?? '-'));
           $mutationJustif = trim((string) ($mutation->summary ?? $mutation->notes ?? ''));
+          $mutationAttachments = is_array(data_get($mutation->metadata, 'mutation_request.attachments')) ? data_get($mutation->metadata, 'mutation_request.attachments') : [];
         ?>
         <tr class="border-b border-gray-100 align-top">
           <td class="py-3 pr-4 text-gray-600"><?php echo e(optional($mutation->created_at)->format('d/m/Y H:i')); ?></td>
@@ -3341,6 +4099,19 @@ $_oc = [
           <td class="py-3 pr-4 text-gray-600"><?php echo e($mutationGrade); ?></td>
           <td class="py-3 pr-4 text-gray-600"><?php echo e($mutationEmployment); ?></td>
           <td class="py-3 pr-4 text-gray-600"><?php echo e($mutationJustif !== '' ? $mutationJustif : '-'); ?></td>
+          <td class="py-3 pr-4 text-gray-600">
+            <?php if(!empty($mutationAttachments)): ?>
+              <?php $__currentLoopData = $mutationAttachments; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $attachmentIndex => $attachment): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+              <a href="<?php echo e(route('admin.personnel.mutation-requests.attachment.download', [$mutation, $attachmentIndex])); ?>"
+                class="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-[11px] text-slate-700 hover:bg-slate-100">
+                <i class="fas fa-file"></i> <?php echo e($attachment['original_name'] ?? basename($attachment['path'] ?? '')); ?>
+
+              </a>
+              <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+            <?php else: ?>
+              -
+            <?php endif; ?>
+          </td>
           <td class="py-3">
             <?php if($wfCanAct): ?>
             <div class="flex items-center gap-2 whitespace-nowrap">
@@ -7596,6 +8367,14 @@ function toggleOoSecret() {
                 <i class="fas fa-pen text-xs"></i>
               </a>
               
+              <form method="POST" action="<?php echo e(route('admin.users-tab.notify-account', $u)); ?>" class="inline">
+                <?php echo csrf_field(); ?>
+                <button type="submit" class="text-amber-600 hover:bg-amber-50 rounded p-1.5 transition"
+                  title="Notifier la création de compte par email">
+                  <i class="fas fa-envelope text-xs"></i>
+                </button>
+              </form>
+              
               <form method="POST" action="<?php echo e(route('admin.users-tab.toggle-status', $u)); ?>" class="inline">
                 <?php echo csrf_field(); ?>
                 <button type="submit"
@@ -8039,7 +8818,10 @@ function userAdminIdChange(prefix) {
 }
 
 function openUserEditModal(data) {
-  document.getElementById('form-user-edit').action = _adminBase + '/users-tab/' + data.id;
+  // Construire l'URL correcte pour la route PUT
+  var userUpdateUrl = _adminBase + '/users-tab/' + data.id;
+  document.getElementById('form-user-edit').action = userUpdateUrl;
+  document.getElementById('form-user-edit').method = 'POST'; // Laravel utilise POST avec <?php echo method_field('PUT'); ?>
   document.getElementById('e-nom').value     = data.nom || '';
   document.getElementById('e-prenoms').value = data.prenoms || '';
   document.getElementById('e-name').value    = data.name || '';
@@ -8085,6 +8867,21 @@ function openUserEditModal(data) {
       var hiddenId = editForm.querySelector('input[name="administration_id"]');
       if (hiddenType && !hiddenType.value && data.scope_type) hiddenType.value = data.scope_type;
       if (hiddenId && !hiddenId.value && data.scope_id) hiddenId.value = data.scope_id;
+    }
+    // Peupler e-sub-entity pour les admins à scope fixe
+    var eScopeType = (hiddenType && hiddenType.value) ? hiddenType.value : data.scope_type;
+    var eScopeId   = (hiddenId   && hiddenId.value)   ? hiddenId.value   : data.scope_id;
+    var eSubSel = document.getElementById('e-sub-entity');
+    if (eSubSel && eScopeType && eScopeId) {
+      eSubSel.innerHTML = '<option value="">Direction sous tutelle</option>';
+      __subEntities.filter(function(s){ return s.scope_type === eScopeType && s.scope_id === eScopeId; })
+        .forEach(function(s){ eSubSel.innerHTML += '<option value="' + s.id + '">' + s.name + '</option>'; });
+      if (data.sub_code) {
+        for (var si = 0; si < eSubSel.options.length; si++) {
+          var ese = __subEntities.find(function(s){ return s.id === eSubSel.options[si].value; });
+          if (ese && ese.code === data.sub_code) { eSubSel.selectedIndex = si; break; }
+        }
+      }
     }
   }
   openUserModal('edit');
@@ -8146,6 +8943,28 @@ document.addEventListener('DOMContentLoaded', function() {
       openUserEditModal(bootData);
     } catch (e) {
       console.error('Impossible d\'ouvrir automatiquement le modal utilisateur:', e);
+    }
+  }
+
+  // Peupler c-sub-entity pour les admins à scope fixe (pas de select c-admin-id)
+  if (!document.getElementById('c-admin-id')) {
+    var createModal = document.getElementById('modal-user-create');
+    if (createModal) {
+      var cHiddenType = createModal.querySelector('input[name="administration_type"]');
+      var cHiddenId   = createModal.querySelector('input[name="administration_id"]');
+      if (cHiddenType && cHiddenId && cHiddenType.value && cHiddenId.value) {
+        var cSubSel = document.getElementById('c-sub-entity');
+        if (cSubSel) {
+          cSubSel.innerHTML = '<option value="">Direction sous tutelle</option>';
+          var cFiltered = __subEntities.filter(function(s){
+            return s.scope_type === cHiddenType.value && s.scope_id === cHiddenId.value;
+          });
+          cFiltered.forEach(function(s){
+            cSubSel.innerHTML += '<option value="' + s.id + '">' + s.name + '</option>';
+          });
+          cSubSel.disabled = false;
+        }
+      }
     }
   }
 });
@@ -9074,6 +9893,7 @@ $permissionTree = [
       'administration.courrier-archiving' => 'Archivage courrier',
       'administration.instructions'        => 'Instructions',
         'administration.user-profiles'      => 'Profils & Rôles',
+        'administration.antivirus'          => 'Journal Antivirus',
     ]],
     'personnel'        => ['label' => 'Gestion du personnel', 'children' => [
         'personnel.dashboard'  => 'Tableau de bord',
@@ -9872,8 +10692,8 @@ function openProfileEditModal(data) {
         adminTypeEl.value = data.administration_type || '';
         profileAdministrationTypeChange('edit', data.administration_id || '');
     }
-    // set form action
-    document.getElementById('form-profile-edit').action = _adminBase + '/profiles/' + data.id + '?tab=user-profiles';
+    // set form action (without query params - use method spoofing with <?php echo method_field('PUT'); ?>)
+    document.getElementById('form-profile-edit').action = _adminBase + '/profiles/' + data.id;
     // reset all checkboxes then check the active ones
     document.querySelectorAll('#modal-profile-edit input[type=checkbox]').forEach(cb => cb.checked = false);
     var activeSet = {};
@@ -10184,6 +11004,198 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 <?php $__env->stopPush(); ?>
+
+
+<?php if($tab === 'antivirus'): ?>
+<?php
+$avEnabled = config('services.clamav.enabled', false);
+$avResultFilter = request('av_result', '');
+$avContextFilter = request('av_context', '');
+$avContextLabels = [
+    'documents'    => 'Documents',
+    'courriers'    => 'Courriers',
+    'signatures'   => 'Signatures',
+    'reunions'     => 'Réunions',
+    'profil'       => 'Profil',
+    'actes-publics'=> 'Actes publics',
+    'rh-mutations' => 'RH — Mutations',
+    'rh-employes'  => 'RH — Employés',
+    'rh-documents' => 'RH — Documents',
+    'rh-conges'    => 'RH — Congés',
+    'rh-formations'=> 'RH — Formations',
+    'templates'    => 'Templates',
+    'apparence'    => 'Apparence',
+    'emetteurs'    => 'Émetteurs',
+    'destinataires'=> 'Destinataires',
+    'utilisateurs' => 'Utilisateurs',
+];
+?>
+
+
+<div class="mb-6 flex items-center gap-3 px-5 py-4 rounded-2xl border
+    <?php echo e($avEnabled ? 'bg-green-50 border-green-200' : 'bg-amber-50 border-amber-200'); ?>">
+    <i class="fas fa-shield-virus text-xl <?php echo e($avEnabled ? 'text-green-600' : 'text-amber-500'); ?>"></i>
+    <div>
+        <p class="font-semibold text-sm <?php echo e($avEnabled ? 'text-green-800' : 'text-amber-800'); ?>">
+            Antivirus ClamAV — <?php echo e($avEnabled ? 'Activé' : 'Désactivé (mode développement)'); ?>
+
+        </p>
+        <p class="text-xs <?php echo e($avEnabled ? 'text-green-600' : 'text-amber-600'); ?> mt-0.5">
+            <?php if($avEnabled): ?>
+                Chaque fichier uploadé est scanné avant enregistrement. Les résultats sont consignés ci-dessous.
+            <?php else: ?>
+                Activez <code class="bg-amber-100 px-1 rounded font-mono">CLAMAV_ENABLED=true</code> dans <code class="bg-amber-100 px-1 rounded font-mono">.env</code> sur le serveur Ubuntu de production pour activer les scans.
+            <?php endif; ?>
+        </p>
+    </div>
+</div>
+
+
+<?php if((method_exists($scanLogs, 'total') ? $scanLogs->total() : $scanLogs->count()) > 0 || $avResultFilter || $avContextFilter): ?>
+<?php
+    $hasAvTable   = \Illuminate\Support\Facades\Schema::hasTable('clamav_scan_logs');
+    $totalScans   = $hasAvTable ? \App\Models\ClamAvScanLog::count() : 0;
+    $cleanCount   = $hasAvTable ? \App\Models\ClamAvScanLog::where('result', 'clean')->count() : 0;
+    $infectedCount= $hasAvTable ? \App\Models\ClamAvScanLog::where('result', 'infected')->count() : 0;
+    $errorCount   = $hasAvTable ? \App\Models\ClamAvScanLog::where('result', 'error')->count() : 0;
+?>
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white rounded-2xl border border-gray-200 p-4 text-center shadow-sm">
+        <p class="text-2xl font-bold text-gray-800"><?php echo e(number_format($totalScans)); ?></p>
+        <p class="text-xs text-gray-500 mt-1">Fichiers scannés</p>
+    </div>
+    <div class="bg-white rounded-2xl border border-green-200 p-4 text-center shadow-sm">
+        <p class="text-2xl font-bold text-green-600"><?php echo e(number_format($cleanCount)); ?></p>
+        <p class="text-xs text-gray-500 mt-1">Propres</p>
+    </div>
+    <div class="bg-white rounded-2xl border border-red-200 p-4 text-center shadow-sm">
+        <p class="text-2xl font-bold text-red-600"><?php echo e(number_format($infectedCount)); ?></p>
+        <p class="text-xs text-gray-500 mt-1">Infectés</p>
+    </div>
+    <div class="bg-white rounded-2xl border border-amber-200 p-4 text-center shadow-sm">
+        <p class="text-2xl font-bold text-amber-600"><?php echo e(number_format($errorCount)); ?></p>
+        <p class="text-xs text-gray-500 mt-1">Erreurs</p>
+    </div>
+</div>
+<?php endif; ?>
+
+
+<form method="GET" action="<?php echo e(route('admin.index')); ?>" class="flex flex-wrap gap-3 mb-5 items-end">
+    <input type="hidden" name="tab" value="antivirus">
+    <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Résultat</label>
+        <select name="av_result" class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-300 focus:border-blue-400">
+            <option value="">Tous les résultats</option>
+            <option value="clean"    <?php echo e($avResultFilter === 'clean'    ? 'selected' : ''); ?>>✓ Propre</option>
+            <option value="infected" <?php echo e($avResultFilter === 'infected' ? 'selected' : ''); ?>>✗ Infecté</option>
+            <option value="error"    <?php echo e($avResultFilter === 'error'    ? 'selected' : ''); ?>>⚠ Erreur</option>
+        </select>
+    </div>
+    <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Module</label>
+        <select name="av_context" class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-300 focus:border-blue-400">
+            <option value="">Tous les modules</option>
+            <?php $__currentLoopData = $avContextLabels; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $val => $lbl): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+            <option value="<?php echo e($val); ?>" <?php echo e($avContextFilter === $val ? 'selected' : ''); ?>><?php echo e($lbl); ?></option>
+            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+        </select>
+    </div>
+    <button type="submit" class="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition">
+        <i class="fas fa-filter mr-1"></i> Filtrer
+    </button>
+    <?php if($avResultFilter || $avContextFilter): ?>
+    <a href="<?php echo e(route('admin.index', ['tab' => 'antivirus'])); ?>" class="px-4 py-2 bg-gray-100 text-gray-600 text-sm font-semibold rounded-lg hover:bg-gray-200 transition">
+        <i class="fas fa-times mr-1"></i> Réinitialiser
+    </a>
+    <?php endif; ?>
+</form>
+
+
+<div class="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+    <?php if($scanLogs->isEmpty()): ?>
+    <div class="py-16 text-center text-gray-400">
+        <i class="fas fa-shield-virus text-4xl mb-3"></i>
+        <p class="text-sm font-medium">Aucun scan enregistré<?php echo e($avResultFilter || $avContextFilter ? ' pour ces filtres' : ''); ?>.</p>
+        <?php if(!$avEnabled): ?>
+        <p class="text-xs mt-1">Activez ClamAV sur le serveur pour commencer à scanner les fichiers.</p>
+        <?php endif; ?>
+    </div>
+    <?php else: ?>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 border-b border-gray-200">
+                <tr>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Date</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Fichier</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Taille</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Module</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Résultat</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Menace</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Utilisateur</th>
+                    <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">IP</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+            <?php $__currentLoopData = $scanLogs; $__env->addLoop($__currentLoopData); foreach($__currentLoopData as $log): $__env->incrementLoopIndices(); $loop = $__env->getLastLoop(); ?>
+            <?php
+                $resultConfig = match($log->result) {
+                    'infected' => ['bg-red-100 text-red-700',   'fas fa-bug',          'Infecté'],
+                    'error'    => ['bg-amber-100 text-amber-700','fas fa-exclamation-triangle', 'Erreur'],
+                    default    => ['bg-green-100 text-green-700','fas fa-check-circle', 'Propre'],
+                };
+                [$resultClass, $resultIcon, $resultLabel] = $resultConfig;
+                $sizeFormatted = $log->file_size
+                    ? ($log->file_size >= 1048576
+                        ? number_format($log->file_size / 1048576, 1) . ' Mo'
+                        : number_format($log->file_size / 1024, 0) . ' Ko')
+                    : '—';
+                $contextLabel = $avContextLabels[$log->context] ?? ($log->context ?? '—');
+                $userName = $log->user?->full_name ?: ($log->user?->name ?: ($log->user?->email ?? '—'));
+            ?>
+            <tr class="<?php echo e($log->result === 'infected' ? 'bg-red-50' : ''); ?> hover:bg-gray-50 transition">
+                <td class="px-4 py-3 text-gray-500 text-xs whitespace-nowrap">
+                    <?php echo e($log->scanned_at?->format('d/m/Y H:i:s') ?? '—'); ?>
+
+                </td>
+                <td class="px-4 py-3 max-w-[200px]">
+                    <span class="block truncate font-medium text-gray-800" title="<?php echo e($log->file_name); ?>">
+                        <?php echo e($log->file_name); ?>
+
+                    </span>
+                    <?php if($log->mime_type): ?>
+                    <span class="text-xs text-gray-400"><?php echo e($log->mime_type); ?></span>
+                    <?php endif; ?>
+                </td>
+                <td class="px-4 py-3 text-gray-500 text-xs whitespace-nowrap"><?php echo e($sizeFormatted); ?></td>
+                <td class="px-4 py-3 text-xs">
+                    <span class="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-full font-medium"><?php echo e($contextLabel); ?></span>
+                </td>
+                <td class="px-4 py-3 whitespace-nowrap">
+                    <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold <?php echo e($resultClass); ?>">
+                        <i class="<?php echo e($resultIcon); ?>"></i> <?php echo e($resultLabel); ?>
+
+                    </span>
+                </td>
+                <td class="px-4 py-3 text-xs text-red-700 font-mono">
+                    <?php echo e($log->threat ?? '—'); ?>
+
+                </td>
+                <td class="px-4 py-3 text-xs text-gray-600"><?php echo e($userName); ?></td>
+                <td class="px-4 py-3 text-xs text-gray-400 font-mono"><?php echo e($log->ip_address ?? '—'); ?></td>
+            </tr>
+            <?php endforeach; $__env->popLoop(); $loop = $__env->getLastLoop(); ?>
+            </tbody>
+        </table>
+    </div>
+    <?php if(method_exists($scanLogs, 'hasPages') && $scanLogs->hasPages()): ?>
+    <div class="px-4 py-3 border-t border-gray-100">
+        <?php echo e($scanLogs->appends(request()->except('av_page'))->links()); ?>
+
+    </div>
+    <?php endif; ?>
+    <?php endif; ?>
+</div>
+<?php endif; ?>
 
 <?php $__env->stopSection(); ?>
 
