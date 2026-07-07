@@ -1601,7 +1601,6 @@ class SignatureController extends Controller
                 'recipients'         => [$recipient],
                 'requiredRecipients' => 1,
             ]],
-            'notificationUrl' => $platformWebhookUrl,
             'webhookUrl'      => $platformWebhookUrl,
         ];
 
@@ -1633,7 +1632,6 @@ class SignatureController extends Controller
                     ], fn($v) => $v !== null && $v !== '')],
                     'requiredRecipients' => 1,
                 ]],
-                'notificationUrl' => $platformWebhookUrl,
                 'webhookUrl'      => $platformWebhookUrl,
             ];
 
@@ -1923,9 +1921,17 @@ class SignatureController extends Controller
         ];
 
         $startResp = null;
-        foreach ($startAttempts as $attempt) {
+        foreach ($startAttempts as $index => $attempt) {
             try {
                 $candidate = $attempt();
+                Log::debug('SunnyStamp: tentative start workflow', [
+                    'workflow_id' => $workflowId,
+                    'attempt' => $index + 1,
+                    'status' => $candidate->status(),
+                    'success' => $candidate->successful(),
+                    'body_excerpt' => substr($candidate->body(), 0, 200),
+                ]);
+
                 if ($candidate->successful()) {
                     $startResp = $candidate;
                     break;
@@ -1940,6 +1946,7 @@ class SignatureController extends Controller
             } catch (\Throwable $e) {
                 Log::warning('SunnyStamp: tentative start workflow en exception', [
                     'workflow_id' => $workflowId,
+                    'attempt' => $index + 1,
                     'error' => $e->getMessage(),
                 ]);
             }
