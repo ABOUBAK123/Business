@@ -1582,13 +1582,6 @@ class SignatureController extends Controller
         if (!empty($recipientPhone)) {
             $recipient['phoneNumber'] = $recipientPhone;
         }
-        if (!empty($recipientPlatformUserId)) {
-            $recipient['id'] = $recipientPlatformUserId;
-            $recipient['userId'] = $recipientPlatformUserId;
-        }
-        if (!empty($consentPageId)) {
-            $recipient['consentPageId'] = $consentPageId;
-        }
 
         $webhookToken = config('services.signature_platform.webhook_secret', '');
         $platformWebhookUrl = rtrim(config('app.url'), '/') . '/api/signature/platform-webhook'
