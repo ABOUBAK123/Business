@@ -1492,13 +1492,16 @@ class DocumentController extends Controller
                 return null;
             }
 
+            $ext      = strtolower(pathinfo($absOfficePath, PATHINFO_EXTENSION));
+            $convKey  = md5(pathinfo($absOfficePath, PATHINFO_FILENAME) . time());
+
+            // Essayer la conversion avec URL publique
             $tmpDir  = 'tmp-convert';
-            $tmpName = uniqid('conv_', true) . '.' . pathinfo($absOfficePath, PATHINFO_EXTENSION);
-            Storage::disk('public')->put($tmpDir . '/' . $tmpName, file_get_contents($absOfficePath));
+            $tmpName = uniqid('conv_', true) . '.' . $ext;
+            $fileContent = file_get_contents($absOfficePath);
+            Storage::disk('public')->put($tmpDir . '/' . $tmpName, $fileContent);
             $fileUrl = $appUrl . '/storage/' . $tmpDir . '/' . $tmpName;
 
-            $ext      = strtolower(pathinfo($absOfficePath, PATHINFO_EXTENSION));
-            $convKey  = md5($tmpName . time());
             $payload = [
                 'async' => false,
                 'embeddedfonts' => true,
@@ -1528,20 +1531,36 @@ class DocumentController extends Controller
                 CURLOPT_SSL_VERIFYPEER => false,
             ]);
             $body = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
             curl_close($ch);
 
             Storage::disk('public')->delete($tmpDir . '/' . $tmpName);
 
             if (!$body) {
-                Log::warning('OnlyOffice conversion response empty', ['filetype' => $ext]);
+                Log::warning('OnlyOffice conversion response empty', ['filetype' => $ext, 'httpCode' => $httpCode]);
                 return null;
             }
 
-            $json = json_decode($body, true);
-            $pdfUrl = $json['fileUrl'] ?? null;
+            $xml = @simplexml_load_string($body);
+            if (!$xml) {
+                Log::warning('OnlyOffice conversion response invalid', ['filetype' => $ext, 'body' => substr($body, 0, 500)]);
+                return null;
+            }
+
+            $error = $xml->Error ?? null;
+            if ($error && (int)$error !== 0) {
+                Log::warning('OnlyOffice conversion error', [
+                    'filetype' => $ext,
+                    'error' => (string)$error,
+                    'response' => $body,
+                ]);
+                return null;
+            }
+
+            $pdfUrl = (string)($xml->FileUrl ?? null);
             if (!$pdfUrl) {
                 Log::warning('OnlyOffice conversion failed - no fileUrl', [
-                    'response' => json_encode($json),
+                    'response' => $body,
                     'filetype' => $ext,
                 ]);
                 return null;
