@@ -1561,6 +1561,14 @@ class SignatureController extends Controller
             ? ($cfg->consent_page_id ?? '')
             : ($cfg->consent_page_id_approval ?: $cfg->consent_page_id ?? '');
 
+        $sigProfileId = $cfg->signature_profile_id ?? '';
+
+        $recipientPlatformUserId = self::resolvePlatformUserIdByEmail($cfg, (string) $signer->email);
+        $nameParts = preg_split('/\s+/', trim((string) $signer->name)) ?: [];
+        $recipientFirstName = (string) ($nameParts[0] ?? $signer->name ?? 'Utilisateur');
+        $recipientLastName = trim((string) implode(' ', array_slice($nameParts, 1)));
+        $recipientPhone = self::resolveRecipientPhone($signer);
+
         // Certaines pages de consentement requièrent un numéro de téléphone.
         // Ne pas l'inclure si le téléphone n'est pas disponible.
         Log::debug('SunnyStamp: phone resolution', [
@@ -1582,14 +1590,6 @@ class SignatureController extends Controller
             'consent_page_id_after' => $consentPageId,
             'will_be_sent' => !empty($consentPageId),
         ]);
-
-        $sigProfileId = $cfg->signature_profile_id ?? '';
-
-        $recipientPlatformUserId = self::resolvePlatformUserIdByEmail($cfg, (string) $signer->email);
-        $nameParts = preg_split('/\s+/', trim((string) $signer->name)) ?: [];
-        $recipientFirstName = (string) ($nameParts[0] ?? $signer->name ?? 'Utilisateur');
-        $recipientLastName = trim((string) implode(' ', array_slice($nameParts, 1)));
-        $recipientPhone = self::resolveRecipientPhone($signer);
 
         $client = Http::withToken($token)
             ->timeout($timeout)
