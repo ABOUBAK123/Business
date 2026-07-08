@@ -1563,13 +1563,25 @@ class SignatureController extends Controller
 
         // Certaines pages de consentement requièrent un numéro de téléphone.
         // Ne pas l'inclure si le téléphone n'est pas disponible.
+        Log::debug('SunnyStamp: phone resolution', [
+            'signer_email' => $signer->email,
+            'phone_resolved' => $recipientPhone,
+            'consent_page_id_before' => $consentPageId,
+        ]);
+
         if (!empty($consentPageId) && empty($recipientPhone)) {
-            Log::warning('SunnyStamp: consentPageId ignorée - no phone for recipient', [
+            Log::warning('SunnyStamp: consentPageId ignored - no phone for recipient', [
                 'signer_email' => $signer->email,
                 'consent_page_id' => $consentPageId,
+                'recipient_phone' => $recipientPhone,
             ]);
             $consentPageId = '';
         }
+
+        Log::debug('SunnyStamp: consentPageId final', [
+            'consent_page_id_after' => $consentPageId,
+            'will_be_sent' => !empty($consentPageId),
+        ]);
 
         $sigProfileId = $cfg->signature_profile_id ?? '';
 
@@ -1618,8 +1630,11 @@ class SignatureController extends Controller
         Log::debug('SunnyStamp: workflow creation request', [
             'endpoint' => "{$endpoint}/api/users/{$ownerUserId}/workflows",
             'ownerUserId' => $ownerUserId,
-            'payload' => $workflowPayload,
-            'recipient' => $recipient,
+            'recipient_email' => $signer->email,
+            'recipient_phone' => $recipientPhone,
+            'consent_page_id' => $consentPageId,
+            'payload_keys' => array_keys($workflowPayload),
+            'full_payload' => $workflowPayload,
         ]);
 
         $wflResp = $client
