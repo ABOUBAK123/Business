@@ -1629,29 +1629,22 @@ class SignatureController extends Controller
             ->timeout($timeout)
             ->when(!$verifySSL, fn($h) => $h->withoutVerifying());
 
-        // 1. Créer le workflow
+        // 1. Créer le workflow EN DRAFT (sans recipients pour éviter auto-launch)
         $stepType  = $actionType === 'signature' ? 'signature' : 'approval';
-        $recipient = [
-            'email' => $signer->email,
-            'firstName' => $recipientFirstName,
-            'lastName' => $recipientLastName,
-        ];
-        if (!empty($recipientPhone)) {
-            $recipient['phoneNumber'] = $recipientPhone;
-        }
 
         $webhookToken = config('services.signature_platform.webhook_secret', '');
         $platformWebhookUrl = rtrim(config('app.url'), '/') . '/api/signature/platform-webhook'
             . ($webhookToken !== '' ? '?token=' . urlencode($webhookToken) : '');
 
+        // Payload minimal - workflow en draft sans recipients (prevents auto-launch)
         $workflowPayload = [
-            'name'            => 'e-Parapheur — ' . $document->title,
-            'steps'           => [[
+            'name'    => 'e-Parapheur — ' . $document->title,
+            'steps'   => [[
                 'stepType'           => $stepType,
-                'recipients'         => [$recipient],
+                'recipients'         => [], // Vide au départ pour éviter le lancement automatique
                 'requiredRecipients' => 1,
             ]],
-            'webhookUrl'      => $platformWebhookUrl,
+            'webhookUrl' => $platformWebhookUrl,
         ];
 
         if (!empty($consentPageId)) {
@@ -1678,18 +1671,12 @@ class SignatureController extends Controller
 
         if (!$wflResp->successful()) {
             // Fallback payload: certaines versions API refusent des champs avancés.
+            // Aussi en draft sans recipients (prevents auto-launch)
             $fallbackPayload = [
                 'name' => 'e-Parapheur — ' . $document->title,
                 'steps' => [[
                     'stepType' => $stepType,
-                    'recipients' => [array_filter([
-                        'email' => $signer->email,
-                        'firstName' => $recipientFirstName,
-                        'lastName' => $recipientLastName,
-                        'phoneNumber' => $recipientPhone ?: null,
-                        'id' => $recipientPlatformUserId ?: null,
-                        'userId' => $recipientPlatformUserId ?: null,
-                    ], fn($v) => $v !== null && $v !== '')],
+                    'recipients' => [], // Vide au départ aussi
                     'requiredRecipients' => 1,
                 ]],
                 'webhookUrl'      => $platformWebhookUrl,
@@ -1759,6 +1746,51 @@ class SignatureController extends Controller
                 'invite_url' => $inviteUrlFromCreation,
             ]);
             return $inviteUrlFromCreation;
+        }
+
+        // 2a. Ajouter les recipients au workflow APRÈS sa création (maintenant qu'il est en draft)
+        $recipient = [
+            'email' => $signer->email,
+            'firstName' => $recipientFirstName,
+            'lastName' => $recipientLastName,
+        ];
+        if (!empty($recipientPhone)) {
+            $recipient['phoneNumber'] = $recipientPhone;
+        }
+
+        $updateStepPayload = [
+            'stepType'           => $stepType,
+            'recipients'         => [$recipient],
+            'requiredRecipients' => 1,
+        ];
+
+        try {
+            $updateStepResp = $client->put(
+                "{$endpoint}/api/users/{$ownerUserId}/workflows/{$workflowId}/steps/0",
+                $updateStepPayload
+            );
+            if (!$updateStepResp->successful()) {
+                Log::warning('SunnyStamp: failed to update workflow step with recipients (trying POST instead)', [
+                    'workflow_id' => $workflowId,
+                    'status' => $updateStepResp->status(),
+                ]);
+                // Essayer POST si PUT échoue
+                $updateStepResp = $client->post(
+                    "{$endpoint}/api/workflows/{$workflowId}/steps",
+                    $updateStepPayload
+                );
+            }
+            Log::debug('SunnyStamp: workflow step update response', [
+                'workflow_id' => $workflowId,
+                'status' => $updateStepResp->status(),
+                'successful' => $updateStepResp->successful(),
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('SunnyStamp: exception updating workflow step', [
+                'workflow_id' => $workflowId,
+                'error' => $e->getMessage(),
+            ]);
+        }
         }
 
         if (!is_string($workflowId) || $workflowId === '') {
@@ -2034,6 +2066,17 @@ class SignatureController extends Controller
                     'doc_payload' => $docPayload,
                 ]);
                 return null;
+            }
+
+            // Vérifier si l'invite URL est déjà dans la réponse du document
+            $inviteUrlFromDocument = $this->extractInviteUrl($docRespJson, $endpoint);
+            if (is_string($inviteUrlFromDocument) && $inviteUrlFromDocument !== '') {
+                Log::info('SunnyStamp: URL d\'invitation trouvée dans réponse document', [
+                    'workflow_id' => $workflowId,
+                    'document_id' => $docId,
+                    'invite_url' => $inviteUrlFromDocument,
+                ]);
+                return $inviteUrlFromDocument;
             }
         } catch (\Throwable $e) {
             $this->lastPlatformError = 'create_document: exception ' . $e->getMessage();

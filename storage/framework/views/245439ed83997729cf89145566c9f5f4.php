@@ -8502,6 +8502,12 @@ function toggleOoSecret() {
       </div>
 
       <div>
+        <label class="block text-xs font-medium text-gray-600 mb-1">Téléphone</label>
+        <input type="tel" name="phone" placeholder="+225 00 00 00 00"
+          class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
+      </div>
+
+      <div>
         <label class="block text-xs font-medium text-gray-600 mb-1">Mot de passe <span class="text-red-500">*</span></label>
         <div class="relative">
           <input id="c-pwd" type="password" name="password" placeholder="Minimum 8 caractères" required
