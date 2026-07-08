@@ -1792,7 +1792,6 @@ class SignatureController extends Controller
                 'error' => $e->getMessage(),
             ]);
         }
-        }
 
         if (!is_string($workflowId) || $workflowId === '') {
             $this->lastPlatformError = 'create_workflow: ID du workflow non trouvé dans la réponse API - ' . self::formatApiErrorDetail($wflResp);
