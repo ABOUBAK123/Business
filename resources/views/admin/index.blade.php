@@ -8596,6 +8596,9 @@ function toggleOoSecret() {
       <input type="email" id="e-email" name="email" placeholder="E-mail" required value="{{ old('email', $editUser->email ?? ($editUserData['email'] ?? '')) }}"
         class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
 
+      <input type="tel" id="e-phone" name="phone" placeholder="Téléphone" value="{{ old('phone', $editUser->phone ?? ($editUserData['phone'] ?? '')) }}"
+        class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
+
       <select id="e-quota" name="quota"
         class="border border-gray-200 rounded-lg px-3 py-2.5 text-sm w-full focus:ring-2 focus:ring-[#2453d6] outline-none">
         <option value="">Quota par défaut</option>
