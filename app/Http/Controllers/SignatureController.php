@@ -1944,56 +1944,10 @@ class SignatureController extends Controller
             'workflow_id' => $workflowId,
         ]);
 
-        // Aller directement à la création des invites
-        $startResp = null;
-            // Variantes PATCH merge-patch
-            fn() => $client
-                ->withHeaders(['Content-Type' => 'application/merge-patch+json'])
-                ->send('PATCH', "{$endpoint}/api/workflows/{$workflowId}", ['json' => ['workflowStatus' => 'started']]),
-            fn() => $client
-                ->withHeaders(['Content-Type' => 'application/merge-patch+json'])
-                ->send('PATCH', "{$endpoint}/api/workflows/{$workflowId}", ['json' => ['workflowStatus' => 'in_progress']]),
-            fn() => $client
-                ->withHeaders(['Content-Type' => 'application/merge-patch+json'])
-                ->send('PATCH', "{$endpoint}/api/workflows/{$workflowId}", ['json' => ['workflowStatus' => 'STARTED']]),
-
-            // Variantes PATCH JSON
-            fn() => $client
-                ->withHeaders(['Content-Type' => 'application/json'])
-                ->send('PATCH', "{$endpoint}/api/workflows/{$workflowId}", ['json' => ['workflowStatus' => 'started']]),
-            fn() => $client
-                ->withHeaders(['Content-Type' => 'application/json'])
-                ->send('PATCH', "{$endpoint}/api/workflows/{$workflowId}", ['json' => ['workflowStatus' => 'in_progress']]),
-            fn() => $client
-                ->withHeaders(['Content-Type' => 'application/json'])
-                ->send('PATCH', "{$endpoint}/api/workflows/{$workflowId}", ['json' => ['status' => 'started']]),
-            fn() => $client
-                ->withHeaders(['Content-Type' => 'application/json'])
-                ->send('PATCH', "{$endpoint}/api/workflows/{$workflowId}", ['json' => ['status' => 'in_progress']]),
-
-            // Variantes PUT
-            fn() => $client
-                ->withHeaders(['Content-Type' => 'application/json'])
-                ->send('PUT', "{$endpoint}/api/workflows/{$workflowId}", ['json' => ['workflowStatus' => 'started']]),
-            fn() => $client
-                ->withHeaders(['Content-Type' => 'application/json'])
-                ->send('PUT', "{$endpoint}/api/workflows/{$workflowId}", ['json' => ['workflowStatus' => 'in_progress']]),
-
-            // Variantes POST /start
-            fn() => $client
-                ->withHeaders(['Content-Type' => 'application/json'])
-                ->send('POST', "{$endpoint}/api/workflows/{$workflowId}/start", ['json' => []]),
-            fn() => $client
-                ->withHeaders(['Content-Type' => 'application/json'])
-                ->send('POST', "{$endpoint}/api/workflows/{$workflowId}/start", ['json' => ['workflowStatus' => 'started']]),
-            fn() => $client
-                ->withHeaders(['Content-Type' => 'application/json'])
-                ->send('POST', "{$endpoint}/api/workflows/{$workflowId}/start", ['json' => ['status' => 'started']]),
-        ];
-
-        // SKIP: Direct workflow start (causes 500 errors). Instead, proceed to invite creation.
-
-        // 4. Créer le lien d'invitation
+        // 4. Créer le lien d'invitation (directement, sans démarrage manuel du workflow)
+        Log::debug('SunnyStamp: proceeding to invite creation', [
+            'workflow_id' => $workflowId,
+        ]);
         $recipientIdentity = array_filter([
             'id' => $recipientPlatformUserId,
             'userId' => $recipientPlatformUserId,
