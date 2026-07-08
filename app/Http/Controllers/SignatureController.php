@@ -1617,6 +1617,9 @@ class SignatureController extends Controller
             $consentPageId = '';
         }
 
+        // Désactiver consentPageId temporairement pour diagnostiquer erreur 500
+        $consentPageId = '';
+
         Log::debug('SunnyStamp: consentPageId final', [
             'consent_page_id_after' => $consentPageId,
             'will_be_sent' => !empty($consentPageId),
