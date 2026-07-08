@@ -1669,6 +1669,11 @@ class SignatureController extends Controller
             ->asJson()
             ->post("{$endpoint}/api/users/{$ownerUserId}/workflows", $workflowPayload);
 
+        Log::info('SunnyStamp: workflow creation FULL response', [
+            'status' => $wflResp->status(),
+            'body' => $wflResp->body(), // Log la réponse brute complète
+        ]);
+
         if (!$wflResp->successful()) {
             // Fallback payload: certaines versions API refusent des champs avancés.
             // Aussi en draft sans recipients (prevents auto-launch)
@@ -1724,28 +1729,25 @@ class SignatureController extends Controller
             ?? ($wflRespJson['workflow']['id'] ?? null)
             ?? null;
 
-        // Vérifier si la réponse contient déjà l'URL d'invitation
-        $inviteUrlFromCreation = $wflRespJson['inviteUrl']
-            ?? $wflRespJson['invite']['url']
-            ?? $wflRespJson['invites'][0]['url']
-            ?? $wflRespJson['stepInvites'][0]['url']
-            ?? null;
-
-        Log::debug('SunnyStamp: workflow creation response', [
+        Log::debug('SunnyStamp: workflow creation response parsed', [
             'workflow_id' => $workflowId,
-            'invite_url_in_response' => $inviteUrlFromCreation,
             'response_keys' => array_keys($wflRespJson),
-            'steps' => $wflRespJson['steps'] ?? null,
-            'currentRecipientEmails' => $wflRespJson['currentRecipientEmails'] ?? null,
-            'currentRecipientUsers' => $wflRespJson['currentRecipientUsers'] ?? null,
+            'full_json' => $wflRespJson,
         ]);
 
-        if (is_string($inviteUrlFromCreation) && $inviteUrlFromCreation !== '') {
-            Log::info('SunnyStamp: URL d\'invitation trouvée dans réponse workflow', [
+        // PREMIÈRE tentative: chercher l'invite URL dans la réponse de création
+        $inviteUrl = $this->extractInviteUrl($wflRespJson, $endpoint);
+        if (is_string($inviteUrl) && $inviteUrl !== '') {
+            Log::info('SunnyStamp: ✅ Invite URL trouvée dans réponse workflow (1ère tentative)', [
                 'workflow_id' => $workflowId,
-                'invite_url' => $inviteUrlFromCreation,
+                'invite_url' => $inviteUrl,
             ]);
-            return $inviteUrlFromCreation;
+            return $inviteUrl;
+        }
+
+        Log::info('SunnyStamp: ❌ Pas d\'invite URL dans réponse workflow, continuer...', [
+            'workflow_id' => $workflowId,
+        ]);
         }
 
         // 2a. Ajouter les recipients au workflow APRÈS sa création (maintenant qu'il est en draft)
@@ -2068,16 +2070,20 @@ class SignatureController extends Controller
                 return null;
             }
 
-            // Vérifier si l'invite URL est déjà dans la réponse du document
+            // DEUXIÈME tentative: chercher l'invite URL dans la réponse du document
             $inviteUrlFromDocument = $this->extractInviteUrl($docRespJson, $endpoint);
             if (is_string($inviteUrlFromDocument) && $inviteUrlFromDocument !== '') {
-                Log::info('SunnyStamp: URL d\'invitation trouvée dans réponse document', [
+                Log::info('SunnyStamp: ✅ Invite URL trouvée dans réponse document (2ème tentative)', [
                     'workflow_id' => $workflowId,
                     'document_id' => $docId,
                     'invite_url' => $inviteUrlFromDocument,
                 ]);
                 return $inviteUrlFromDocument;
             }
+
+            Log::info('SunnyStamp: ❌ Pas d\'invite URL dans réponse document non plus, continuer...', [
+                'workflow_id' => $workflowId,
+            ]);
         } catch (\Throwable $e) {
             $this->lastPlatformError = 'create_document: exception ' . $e->getMessage();
             Log::error('SunnyStamp: exception création document /documents', [
