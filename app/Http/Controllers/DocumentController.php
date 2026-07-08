@@ -1396,6 +1396,12 @@ class DocumentController extends Controller
             if ($pdfAbsPath && file_exists($pdfAbsPath)) {
                 @unlink($pdfAbsPath);
             }
+            Log::warning('Document convertToPdf failed', [
+                'document_id' => (string) $document->id,
+                'file' => $relative,
+                'pdfAbsPath' => $pdfAbsPath,
+                'pdfExists' => $pdfAbsPath ? file_exists($pdfAbsPath) : false,
+            ]);
             return response()->json(['ok' => false, 'message' => 'La conversion PDF a échoué. Vérifiez LibreOffice/OnlyOffice.'], 422);
         }
 
@@ -1479,6 +1485,10 @@ class DocumentController extends Controller
             $appUrl   = rtrim((string) AppSetting::where('key', 'app_public_url')->value('value'), '/');
 
             if (empty($ooUrl) || empty($appUrl)) {
+                Log::warning('OnlyOffice not configured', [
+                    'ooUrl' => empty($ooUrl) ? 'EMPTY' : 'SET',
+                    'appUrl' => empty($appUrl) ? 'EMPTY' : 'SET',
+                ]);
                 return null;
             }
 
@@ -1523,12 +1533,17 @@ class DocumentController extends Controller
             Storage::disk('public')->delete($tmpDir . '/' . $tmpName);
 
             if (!$body) {
+                Log::warning('OnlyOffice conversion response empty', ['filetype' => $ext]);
                 return null;
             }
 
             $json = json_decode($body, true);
             $pdfUrl = $json['fileUrl'] ?? null;
             if (!$pdfUrl) {
+                Log::warning('OnlyOffice conversion failed - no fileUrl', [
+                    'response' => json_encode($json),
+                    'filetype' => $ext,
+                ]);
                 return null;
             }
 
@@ -1545,6 +1560,7 @@ class DocumentController extends Controller
             }
 
             if (!$pdfContent) {
+                Log::warning('OnlyOffice PDF download failed', ['pdfUrl' => $pdfUrl]);
                 return null;
             }
 
