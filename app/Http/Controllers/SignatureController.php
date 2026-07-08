@@ -2086,32 +2086,38 @@ class SignatureController extends Controller
                         return $detailsInviteUrl;
                     }
 
-                    // Si pas d'URL dans la réponse, construire manuellement
-                    // Format: {endpoint}/invite?workflowId={id}
-                    $constructedInviteUrl = rtrim($endpoint, '/') . '/invite?workflowId=' . $workflowId;
-                    Log::info('SunnyStamp: ✅ Invite URL CONSTRUITE manuellement', [
-                        'workflow_id' => $workflowId,
-                        'invite_url' => $constructedInviteUrl,
-                    ]);
-
-                    // Avant de retourner, LANCER le workflow explicitement
-                    Log::debug('SunnyStamp: Lancement du workflow avant retour de l\'invite URL', [
+                    // Essayer GET /workflows/{id}/invites pour récupérer les invitations
+                    Log::debug('SunnyStamp: Tentative GET /invites après document création', [
                         'workflow_id' => $workflowId,
                     ]);
                     try {
-                        $startResp = $client->post("{$endpoint}/api/workflows/{$workflowId}/start", []);
-                        Log::info('SunnyStamp: Workflow start attempt', [
-                            'workflow_id' => $workflowId,
-                            'status' => $startResp->status(),
-                            'body' => $startResp->body(),
-                        ]);
+                        $getInvitesResp = $client->get("{$endpoint}/api/workflows/{$workflowId}/invites");
+                        if ($getInvitesResp->successful()) {
+                            Log::info('SunnyStamp: GET /invites response après document', [
+                                'workflow_id' => $workflowId,
+                                'body' => $getInvitesResp->body(),
+                            ]);
+                            $invitesUrl = $this->extractInviteUrl($getInvitesResp->json(), $endpoint);
+                            if (is_string($invitesUrl) && $invitesUrl !== '') {
+                                Log::info('SunnyStamp: ✅ Invite URL from GET /invites', [
+                                    'workflow_id' => $workflowId,
+                                    'invite_url' => $invitesUrl,
+                                ]);
+                                return $invitesUrl;
+                            }
+                        }
                     } catch (\Throwable $e) {
-                        Log::warning('SunnyStamp: Exception during workflow start', [
-                            'workflow_id' => $workflowId,
+                        Log::warning('SunnyStamp: Exception GET /invites après document', [
                             'error' => $e->getMessage(),
                         ]);
                     }
 
+                    // Fallback: Construire manuellement
+                    $constructedInviteUrl = rtrim($endpoint, '/') . '/invite?workflowId=' . $workflowId;
+                    Log::info('SunnyStamp: ✅ Invite URL CONSTRUITE manuellement (fallback)', [
+                        'workflow_id' => $workflowId,
+                        'invite_url' => $constructedInviteUrl,
+                    ]);
                     return $constructedInviteUrl;
                 }
             } catch (\Throwable $e) {
