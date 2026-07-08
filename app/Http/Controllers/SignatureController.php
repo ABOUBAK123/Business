@@ -2115,6 +2115,26 @@ class SignatureController extends Controller
                     // Fallback: Construire manuellement avec différentes variations
                     $stepId = $workflowDetailsJson['steps'][0]['id'] ?? null;
 
+                    // IMPORTANT: Essayer de mettre le workflow en état "active" AVANT de retourner l'URL
+                    Log::debug('SunnyStamp: Tentative activation workflow via PATCH', [
+                        'workflow_id' => $workflowId,
+                    ]);
+                    try {
+                        $patchResp = $client->patch(
+                            "{$endpoint}/api/workflows/{$workflowId}",
+                            ['status' => 'active']
+                        );
+                        Log::info('SunnyStamp: PATCH /workflows/{id} status=active', [
+                            'workflow_id' => $workflowId,
+                            'http_status' => $patchResp->status(),
+                            'body' => Str::limit($patchResp->body(), 500),
+                        ]);
+                    } catch (\Throwable $e) {
+                        Log::warning('SunnyStamp: Exception PATCH workflow', [
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+
                     $possibleUrls = [
                         rtrim($endpoint, '/') . '/invite?workflowId=' . $workflowId,
                         rtrim($endpoint, '/') . '/invite?id=' . $workflowId,
