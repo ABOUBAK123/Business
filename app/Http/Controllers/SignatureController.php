@@ -1676,6 +1676,13 @@ class SignatureController extends Controller
             ->asJson()
             ->post("{$endpoint}/api/users/{$ownerUserId}/workflows", $workflowPayload);
 
+        // LOG la réponse BRUTE complète
+        Log::info('SunnyStamp: **WORKFLOW CREATION RESPONSE FULL**', [
+            'status' => $wflResp->status(),
+            'body_raw' => $wflResp->body(),
+            'json_decoded' => $wflResp->json(),
+        ]);
+
         if (!$wflResp->successful()) {
             // Fallback payload: certaines versions API refusent des champs avancés.
             $fallbackPayload = [
@@ -2026,12 +2033,12 @@ class SignatureController extends Controller
             $docRespJson = $docResp->json();
             $docId = $docRespJson['id'] ?? $docRespJson['documentId'] ?? $docRespJson['document']['id'] ?? null;
 
-            Log::info('SunnyStamp: création document via /documents', [
+            // LOG la réponse BRUTE complète du document
+            Log::info('SunnyStamp: **DOCUMENT CREATION RESPONSE FULL**', [
                 'workflow_id' => $workflowId,
                 'status' => $docResp->status(),
-                'document_id' => $docId,
-                'body_excerpt' => substr($docResp->body(), 0, 1000),
-                'full_response' => $docRespJson,
+                'body_raw' => $docResp->body(),
+                'json_decoded' => $docRespJson,
             ]);
 
             if (!$docResp->successful()) {
