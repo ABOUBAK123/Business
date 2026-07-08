@@ -1608,6 +1608,13 @@ class SignatureController extends Controller
             'webhookUrl'      => $platformWebhookUrl,
         ];
 
+        if (!empty($consentPageId)) {
+            $workflowPayload['consentPageId'] = $consentPageId;
+        }
+        if (!empty($sigProfileId)) {
+            $workflowPayload['signatureProfileId'] = $sigProfileId;
+        }
+
         Log::debug('SunnyStamp: workflow creation request', [
             'endpoint' => "{$endpoint}/api/users/{$ownerUserId}/workflows",
             'ownerUserId' => $ownerUserId,
@@ -1638,6 +1645,13 @@ class SignatureController extends Controller
                 ]],
                 'webhookUrl'      => $platformWebhookUrl,
             ];
+
+            if (!empty($consentPageId)) {
+                $fallbackPayload['consentPageId'] = $consentPageId;
+            }
+            if (!empty($sigProfileId)) {
+                $fallbackPayload['signatureProfileId'] = $sigProfileId;
+            }
 
             $fallbackResp = $client
                 ->withHeaders(['Content-Type' => 'application/json'])
