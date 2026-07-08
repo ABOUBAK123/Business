@@ -2062,6 +2062,36 @@ class SignatureController extends Controller
                 ]);
                 return $docInviteUrl;
             }
+
+            // APRÈS le document: faire GET /workflows/{id} pour obtenir les invites générées
+            Log::debug('SunnyStamp: Document créé, récupération du workflow pour les invites', [
+                'workflow_id' => $workflowId,
+            ]);
+
+            try {
+                $workflowDetailsResp = $client->get("{$endpoint}/api/workflows/{$workflowId}");
+                if ($workflowDetailsResp->successful()) {
+                    $workflowDetailsJson = $workflowDetailsResp->json();
+                    Log::info('SunnyStamp: **WORKFLOW DETAILS AFTER DOCUMENT**', [
+                        'workflow_id' => $workflowId,
+                        'body_raw' => $workflowDetailsResp->body(),
+                    ]);
+
+                    $detailsInviteUrl = $this->extractInviteUrl($workflowDetailsJson, $endpoint);
+                    if (is_string($detailsInviteUrl) && $detailsInviteUrl !== '') {
+                        Log::info('SunnyStamp: ✅ Invite URL trouvée dans détails workflow APRÈS document', [
+                            'workflow_id' => $workflowId,
+                            'invite_url' => $detailsInviteUrl,
+                        ]);
+                        return $detailsInviteUrl;
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning('SunnyStamp: Exception lors du GET workflow après document', [
+                    'workflow_id' => $workflowId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         } catch (\Throwable $e) {
             $this->lastPlatformError = 'create_document: exception ' . $e->getMessage();
             Log::error('SunnyStamp: exception création document /documents', [
