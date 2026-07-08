@@ -2115,20 +2115,54 @@ class SignatureController extends Controller
                     // Fallback: Construire manuellement avec différentes variations
                     $stepId = $workflowDetailsJson['steps'][0]['id'] ?? null;
 
-                    // IMPORTANT: Essayer de mettre le workflow en état "active" AVANT de retourner l'URL
-                    Log::debug('SunnyStamp: Tentative activation workflow via PATCH', [
+                    // IMPORTANT: Mettre le workflow en état "started" (PAS "active"!)
+                    // Selon la collection Postman: PATCH /workflows/{id} avec {"workflowStatus": "started"}
+                    Log::debug('SunnyStamp: Lancement workflow via PATCH /workflows/{id}', [
                         'workflow_id' => $workflowId,
                     ]);
                     try {
                         $patchResp = $client->patch(
                             "{$endpoint}/api/workflows/{$workflowId}",
-                            ['status' => 'active']
+                            ['workflowStatus' => 'started']  // Correct: workflowStatus, pas status
                         );
-                        Log::info('SunnyStamp: PATCH /workflows/{id} status=active', [
+                        Log::info('SunnyStamp: PATCH /workflows/{id} launched workflow', [
                             'workflow_id' => $workflowId,
                             'http_status' => $patchResp->status(),
                             'body' => Str::limit($patchResp->body(), 500),
                         ]);
+
+                        // Après lancement: essayer POST /workflows/{id}/invite (pas /sendInvite!)
+                        if ($patchResp->successful() || $patchResp->status() === 200) {
+                            Log::debug('SunnyStamp: Workflow lancé, tentative POST /invite', [
+                                'workflow_id' => $workflowId,
+                                'recipient_email' => $signer->email,
+                            ]);
+                            try {
+                                $inviteResp = $client->post(
+                                    "{$endpoint}/api/workflows/{$workflowId}/invite",
+                                    ['recipientEmail' => $signer->email]
+                                );
+                                if ($inviteResp->successful()) {
+                                    $inviteJson = $inviteResp->json();
+                                    Log::info('SunnyStamp: ✅ Invite créée via POST /invite', [
+                                        'workflow_id' => $workflowId,
+                                        'response' => $inviteJson,
+                                    ]);
+                                    $inviteUrl = $this->extractInviteUrl($inviteJson, $endpoint);
+                                    if (is_string($inviteUrl) && $inviteUrl !== '') {
+                                        Log::info('SunnyStamp: ✅ Invite URL from POST /invite', [
+                                            'workflow_id' => $workflowId,
+                                            'invite_url' => $inviteUrl,
+                                        ]);
+                                        return $inviteUrl;
+                                    }
+                                }
+                            } catch (\Throwable $e) {
+                                Log::warning('SunnyStamp: Exception POST /invite après launch', [
+                                    'error' => $e->getMessage(),
+                                ]);
+                            }
+                        }
                     } catch (\Throwable $e) {
                         Log::warning('SunnyStamp: Exception PATCH workflow', [
                             'error' => $e->getMessage(),
