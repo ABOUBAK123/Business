@@ -1976,13 +1976,11 @@ class SignatureController extends Controller
             if (is_string($inviteUrl) && $inviteUrl !== '') {
                 return $inviteUrl;
             }
-        } else {
-            Log::warning('SunnyStamp: early invite creation/retrieval failed (will retry later)', [
-                'workflow_id' => $workflowId,
-                'status' => $inviteResp->status(),
-                'body_excerpt' => substr($inviteResp->body(), 0, 300),
-            ]);
-        }
+        // Si les endpoints /invites et /invite échouent, passer directement à l'étape document
+        // Le workflow se lance automatiquement, mais on l'attendra pour envoyer l'invitation après
+        Log::debug('SunnyStamp: skipping early invite, will send after document creation', [
+            'workflow_id' => $workflowId,
+        ]);
 
         // Étape 2c: POST /documents avec pdfSignatureFields (obligatoire pour positionner la zone).
         $partData = $uploadResp->json();
@@ -2011,15 +2009,8 @@ class SignatureController extends Controller
             $docPayload['signatureProfileId'] = $sigProfileId;
         }
 
-        // Essayer d'ajouter l'invite directement dans le payload du document
-        $docPayload['recipients'] = [
-            array_filter([
-                'email' => $signer->email,
-                'firstName' => $recipientFirstName,
-                'lastName' => $recipientLastName,
-                'phoneNumber' => $recipientPhone,
-            ], fn($v) => !is_null($v) && $v !== '')
-        ];
+        // Note: Recipients are NOT included in the document payload to avoid auto-launching the workflow
+        // We will send invites AFTER document creation using the /sendInvite endpoint
 
         try {
             $docResp = $client->post("{$endpoint}/api/workflows/{$workflowId}/documents", $docPayload);
@@ -2074,6 +2065,12 @@ class SignatureController extends Controller
             'name' => (string) $signer->name,
             'phoneNumber' => $recipientPhone,
         ], fn($v) => !is_null($v) && $v !== '');
+
+        Log::debug('SunnyStamp: starting invite attempts after document creation', [
+            'workflow_id' => $workflowId,
+            'recipient_email' => $signer->email,
+            'recipient_phone' => $recipientPhone,
+        ]);
 
         $inviteAttempts = [
             // Endpoints officiels SunnyStamp d'abord.
@@ -2295,6 +2292,16 @@ class SignatureController extends Controller
                     continue;
                 }
 
+                // Si 403 (Forbidden), c'est probablement InvalidWorkflowStatus - essayer de récupérer le statut du workflow
+                if ($candidate->status() === 403) {
+                    Log::debug('SunnyStamp: 403 Forbidden received, workflow may be already started - checking workflow status', [
+                        'workflow_id' => $workflowId,
+                        'attempt' => $label,
+                    ]);
+                    $inviteResp = $candidate;
+                    break; // Essayer de récupérer le statut du workflow
+                }
+
                 // Continuer sur endpoints non trouvés / méthode non supportée / payload refusé.
                 if (!in_array($candidate->status(), [400, 404, 405, 415], true)) {
                     $inviteResp = $candidate;
@@ -2313,6 +2320,51 @@ class SignatureController extends Controller
         }
 
         $inviteAttemptSummary = implode(' | ', array_slice($inviteAttemptTrace, -12));
+
+        // Si 403, essayer de récupérer les détails du workflow et extraire l'URL d'invitation
+        if ($inviteResp && $inviteResp->status() === 403) {
+            Log::debug('SunnyStamp: Received 403 (workflow likely started), attempting to extract invite URL from workflow details', [
+                'workflow_id' => $workflowId,
+                'attempt_trace' => $inviteAttemptSummary,
+            ]);
+
+            try {
+                $workflowResp = $client->get("{$endpoint}/api/workflows/{$workflowId}");
+                if ($workflowResp->successful()) {
+                    Log::info('SunnyStamp: détail workflow reçu pour extraction invite URL (403 fallback)', [
+                        'workflow_id' => $workflowId,
+                        'workflow_body' => Str::limit($workflowResp->body(), 1500),
+                    ]);
+
+                    $workflowUrl = $this->extractInviteUrl($workflowResp->json(), $endpoint);
+                    if (is_string($workflowUrl) && $workflowUrl !== '') {
+                        Log::info('SunnyStamp: URL d\'invitation récupérée via workflow details (403 fallback)', [
+                            'workflow_id' => $workflowId,
+                            'url' => $workflowUrl,
+                        ]);
+                        return $workflowUrl;
+                    }
+                }
+
+                // Fallback: vérifier sous /users/{ownerUserId}/workflows/{workflowId}
+                $workflowByUserResp = $client->get("{$endpoint}/api/users/{$ownerUserId}/workflows/{$workflowId}");
+                if ($workflowByUserResp->successful()) {
+                    $workflowByUserUrl = $this->extractInviteUrl($workflowByUserResp->json(), $endpoint);
+                    if (is_string($workflowByUserUrl) && $workflowByUserUrl !== '') {
+                        Log::info('SunnyStamp: URL d\'invitation récupérée via users/{ownerUserId}/workflows/{workflowId} (403 fallback)', [
+                            'workflow_id' => $workflowId,
+                            'url' => $workflowByUserUrl,
+                        ]);
+                        return $workflowByUserUrl;
+                    }
+                }
+            } catch (\Throwable $e) {
+                Log::warning('SunnyStamp: 403 fallback exception', [
+                    'workflow_id' => $workflowId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
 
         if ($inviteResp && $inviteResp->successful()) {
             Log::info('SunnyStamp: réponse invite reçue', [
