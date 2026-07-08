@@ -2112,11 +2112,25 @@ class SignatureController extends Controller
                         ]);
                     }
 
-                    // Fallback: Construire manuellement
-                    $constructedInviteUrl = rtrim($endpoint, '/') . '/invite?workflowId=' . $workflowId;
+                    // Fallback: Construire manuellement avec différentes variations
+                    $stepId = $workflowDetailsJson['steps'][0]['id'] ?? null;
+
+                    $possibleUrls = [
+                        rtrim($endpoint, '/') . '/invite?workflowId=' . $workflowId,
+                        rtrim($endpoint, '/') . '/invite?id=' . $workflowId,
+                        rtrim($endpoint, '/') . '/workflows/' . $workflowId . '/invite',
+                        $stepId ? (rtrim($endpoint, '/') . '/invite?stepId=' . $stepId) : null,
+                        $stepId ? (rtrim($endpoint, '/') . '/invite?workflowId=' . $workflowId . '&stepId=' . $stepId) : null,
+                    ];
+                    $possibleUrls = array_filter($possibleUrls, fn($url) => $url !== null);
+
+                    // Utiliser la première (priorité au workflowId seul)
+                    $constructedInviteUrl = reset($possibleUrls);
                     Log::info('SunnyStamp: ✅ Invite URL CONSTRUITE manuellement (fallback)', [
                         'workflow_id' => $workflowId,
+                        'step_id' => $stepId,
                         'invite_url' => $constructedInviteUrl,
+                        'all_attempts' => $possibleUrls,
                     ]);
                     return $constructedInviteUrl;
                 }
