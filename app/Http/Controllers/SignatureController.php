@@ -1937,25 +1937,15 @@ class SignatureController extends Controller
         }
 
         // 3. Démarrer le workflow
-        // Certaines versions API rejettent PATCH application/json (HTTP 415).
-        // On tente plusieurs variantes compatibles avant d'échouer.
-        // Certaines APIs utilisent 'status' plutôt que 'workflowStatus'.
+        // DÉSACTIVÉ: Le workflow peut démarrer automatiquement lors de la création de l'invite
+        // Essayons directement de créer l'invite au lieu de démarrer manuellement
 
-        // Vérifier l'état du workflow avant démarrage
-        $getWorkflowResp = $client->get("{$endpoint}/api/workflows/{$workflowId}");
-        Log::debug('SunnyStamp: GET workflow status', [
+        Log::debug('SunnyStamp: skipping direct workflow start, proceeding to invite creation', [
             'workflow_id' => $workflowId,
-            'status_code' => $getWorkflowResp->status(),
-            'workflow_data' => $getWorkflowResp->json(),
         ]);
 
-        Log::debug('SunnyStamp: avant démarrage workflow', [
-            'workflow_id' => $workflowId,
-            'endpoint' => $endpoint,
-            'consentPageId' => $consentPageId,
-            'recipientPhone' => $recipientPhone,
-        ]);
-        $startAttempts = [
+        // Aller directement à la création des invites
+        $startResp = null;
             // Variantes PATCH merge-patch
             fn() => $client
                 ->withHeaders(['Content-Type' => 'application/merge-patch+json'])
@@ -2001,80 +1991,7 @@ class SignatureController extends Controller
                 ->send('POST', "{$endpoint}/api/workflows/{$workflowId}/start", ['json' => ['status' => 'started']]),
         ];
 
-        $startResp = null;
-        foreach ($startAttempts as $index => $attempt) {
-            try {
-                $candidate = $attempt();
-                Log::debug('SunnyStamp: tentative start workflow', [
-                    'workflow_id' => $workflowId,
-                    'attempt' => $index + 1,
-                    'method' => $candidate->transferStats->getRequest()->getMethod(),
-                    'url' => (string) $candidate->transferStats->getRequest()->getUri(),
-                    'status' => $candidate->status(),
-                    'success' => $candidate->successful(),
-                    'body_excerpt' => substr($candidate->body(), 0, 500),
-                ]);
-
-                if ($candidate->successful()) {
-                    $startResp = $candidate;
-                    break;
-                }
-
-                $startResp = $candidate;
-
-                // On continue à tester toutes les variantes sauf erreurs d'auth/permission.
-                if (in_array($candidate->status(), [401, 403], true)) {
-                    break;
-                }
-            } catch (\Throwable $e) {
-                Log::warning('SunnyStamp: tentative start workflow en exception', [
-                    'workflow_id' => $workflowId,
-                    'attempt' => $index + 1,
-                    'error' => $e->getMessage(),
-                ]);
-            }
-        }
-
-        if (!$startResp || !$startResp->successful()) {
-            if (!$startResp) {
-                $this->lastPlatformError = 'start_workflow: aucune réponse exploitable reçue';
-                Log::error('SunnyStamp: échec démarrage workflow (aucune réponse)', [
-                    'workflow_id' => $workflowId,
-                ]);
-                return null;
-            }
-            if ($startResp->status() === 403 && str_contains((string) $startResp->body(), 'NoDocumentToSignInWorkflow')) {
-                $this->lastPlatformError = 'start_workflow: aucun document signé détecté dans le workflow après upload';
-            } else {
-                $this->lastPlatformError = 'start_workflow: ' . self::formatApiErrorDetail($startResp);
-            }
-            Log::error('SunnyStamp: échec démarrage workflow', [
-                'status' => $startResp->status(), 'body' => $startResp->body(),
-            ]);
-            return null;
-        }
-
-        // Certaines instances renvoient deja un lien/token de signature dans la reponse start.
-        $startJson = $startResp->json();
-        if (is_array($startJson)) {
-            $startUrl = $this->extractInviteUrl($startJson, $endpoint);
-            if (is_string($startUrl) && $startUrl !== '') {
-                Log::info('SunnyStamp: URL récupérée via réponse start', [
-                    'workflow_id' => $workflowId,
-                    'url' => $startUrl,
-                ]);
-                return $startUrl;
-            }
-        }
-
-        $startBodyUrl = self::extractFirstUrlFromText((string) $startResp->body());
-        if (is_string($startBodyUrl) && $startBodyUrl !== '') {
-            Log::info('SunnyStamp: URL récupérée via body start (texte brut)', [
-                'workflow_id' => $workflowId,
-                'url' => $startBodyUrl,
-            ]);
-            return $startBodyUrl;
-        }
+        // SKIP: Direct workflow start (causes 500 errors). Instead, proceed to invite creation.
 
         // 4. Créer le lien d'invitation
         $recipientIdentity = array_filter([
