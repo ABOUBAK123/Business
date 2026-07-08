@@ -1904,6 +1904,16 @@ class SignatureController extends Controller
             $docPayload['signatureProfileId'] = $sigProfileId;
         }
 
+        // Essayer d'ajouter l'invite directement dans le payload du document
+        $docPayload['recipients'] = [
+            array_filter([
+                'email' => $signer->email,
+                'firstName' => $recipientFirstName,
+                'lastName' => $recipientLastName,
+                'phoneNumber' => $recipientPhone,
+            ], fn($v) => !is_null($v) && $v !== '')
+        ];
+
         try {
             $docResp = $client->post("{$endpoint}/api/workflows/{$workflowId}/documents", $docPayload);
             $docRespJson = $docResp->json();
