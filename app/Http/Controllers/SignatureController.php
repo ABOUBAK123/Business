@@ -1908,7 +1908,38 @@ class SignatureController extends Controller
             'recipient_email' => $signer->email,
         ]);
 
-        // Essayer POST d'abord
+        // Essayer de récupérer les invites (pluriel) pour voir si elles existent déjà
+        $getInvitesResp = $client
+            ->withHeaders(['Content-Type' => 'application/json'])
+            ->asJson()
+            ->get("{$endpoint}/api/workflows/{$workflowId}/invites");
+
+        $inviteUrl = null;
+        if ($getInvitesResp->successful()) {
+            $invitesJson = $getInvitesResp->json();
+            Log::debug('SunnyStamp: retrieved invites (GET /invites)', [
+                'workflow_id' => $workflowId,
+                'invites_response' => $invitesJson,
+            ]);
+
+            // Essayer de trouver l'URL d'invitation
+            if (is_array($invitesJson)) {
+                $inviteUrl = $invitesJson['url']
+                    ?? $invitesJson[0]['url']
+                    ?? $invitesJson['invites'][0]['url']
+                    ?? null;
+            }
+
+            if (is_string($inviteUrl) && $inviteUrl !== '') {
+                Log::info('SunnyStamp: invite URL récupérée via GET /invites', [
+                    'workflow_id' => $workflowId,
+                    'invite_url' => $inviteUrl,
+                ]);
+                return $inviteUrl;
+            }
+        }
+
+        // Si GET /invites ne fonctionne pas, essayer POST pour créer l'invite
         $inviteResp = $client
             ->withHeaders(['Content-Type' => 'application/json'])
             ->asJson()
@@ -1927,14 +1958,13 @@ class SignatureController extends Controller
                 ->get("{$endpoint}/api/workflows/{$workflowId}/invite", ['recipientEmail' => $signer->email]);
         }
 
-        $inviteUrl = null;
         if ($inviteResp->successful()) {
             $inviteJson = $inviteResp->json();
             $inviteUrl = $inviteJson['url'] ?? $inviteJson['inviteUrl'] ?? $inviteJson['link'] ?? null;
             Log::info('SunnyStamp: invite récupérée avant document', [
                 'workflow_id' => $workflowId,
                 'invite_url' => $inviteUrl,
-                'method' => 'GET',
+                'method' => 'POST/GET',
             ]);
             if (is_string($inviteUrl) && $inviteUrl !== '') {
                 return $inviteUrl;
