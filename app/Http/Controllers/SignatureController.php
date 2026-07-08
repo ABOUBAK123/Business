@@ -1937,6 +1937,8 @@ class SignatureController extends Controller
         Log::debug('SunnyStamp: avant démarrage workflow', [
             'workflow_id' => $workflowId,
             'endpoint' => $endpoint,
+            'consentPageId' => $consentPageId,
+            'recipientPhone' => $recipientPhone,
         ]);
         $startAttempts = [
             // Variantes PATCH merge-patch
@@ -1991,9 +1993,11 @@ class SignatureController extends Controller
                 Log::debug('SunnyStamp: tentative start workflow', [
                     'workflow_id' => $workflowId,
                     'attempt' => $index + 1,
+                    'method' => $candidate->transferStats->getRequest()->getMethod(),
+                    'url' => (string) $candidate->transferStats->getRequest()->getUri(),
                     'status' => $candidate->status(),
                     'success' => $candidate->successful(),
-                    'body_excerpt' => substr($candidate->body(), 0, 200),
+                    'body_excerpt' => substr($candidate->body(), 0, 500),
                 ]);
 
                 if ($candidate->successful()) {
