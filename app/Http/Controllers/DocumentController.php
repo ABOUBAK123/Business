@@ -1512,6 +1512,12 @@ class DocumentController extends Controller
                 'url' => $fileUrl,
             ];
 
+            Log::info('OnlyOffice conversion request', [
+                'fileUrl' => $fileUrl,
+                'filetype' => $ext,
+                'ooUrl' => $ooUrl,
+            ]);
+
             $headers = ['Authorization: Bearer '];
             if (!empty($ooSecret)) {
                 $jwtHeader  = rtrim(strtr(base64_encode(json_encode(['alg' => 'HS256', 'typ' => 'JWT'])), '+/', '-_'), '=');
@@ -1529,6 +1535,9 @@ class DocumentController extends Controller
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_TIMEOUT => 60,
                 CURLOPT_SSL_VERIFYPEER => false,
+                CURLOPT_SSL_VERIFYHOST => 0,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_MAXREDIRS => 5,
             ]);
             $body = curl_exec($ch);
             $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -1573,6 +1582,9 @@ class DocumentController extends Controller
                     CURLOPT_RETURNTRANSFER => true,
                     CURLOPT_TIMEOUT => 30,
                     CURLOPT_SSL_VERIFYPEER => false,
+                    CURLOPT_SSL_VERIFYHOST => 0,
+                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_MAXREDIRS => 5,
                 ]);
                 $pdfContent = curl_exec($ch2);
                 curl_close($ch2);
