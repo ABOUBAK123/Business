@@ -1915,6 +1915,13 @@ class SignatureController extends Controller
             ->get("{$endpoint}/api/workflows/{$workflowId}/invites");
 
         $inviteUrl = null;
+        Log::debug('SunnyStamp: GET /invites response', [
+            'workflow_id' => $workflowId,
+            'status' => $getInvitesResp->status(),
+            'successful' => $getInvitesResp->successful(),
+            'body_excerpt' => substr($getInvitesResp->body(), 0, 200),
+        ]);
+
         if ($getInvitesResp->successful()) {
             $invitesJson = $getInvitesResp->json();
             Log::debug('SunnyStamp: retrieved invites (GET /invites)', [
