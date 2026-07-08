@@ -1748,7 +1748,6 @@ class SignatureController extends Controller
         Log::info('SunnyStamp: ❌ Pas d\'invite URL dans réponse workflow, continuer...', [
             'workflow_id' => $workflowId,
         ]);
-        }
 
         // 2a. Ajouter les recipients au workflow APRÈS sa création (maintenant qu'il est en draft)
         $recipient = [
