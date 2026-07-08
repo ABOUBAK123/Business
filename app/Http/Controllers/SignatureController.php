@@ -1946,23 +1946,23 @@ class SignatureController extends Controller
             }
         }
 
-        // Si GET /invites ne fonctionne pas, essayer POST pour créer l'invite
+        // Si GET /invites ne fonctionne pas, essayer POST /invites (pluriel) pour créer l'invite
         $inviteResp = $client
             ->withHeaders(['Content-Type' => 'application/json'])
             ->asJson()
-            ->post("{$endpoint}/api/workflows/{$workflowId}/invite", ['recipientEmail' => $signer->email]);
+            ->post("{$endpoint}/api/workflows/{$workflowId}/invites", ['recipientEmail' => $signer->email]);
 
-        // Si POST échoue, essayer GET pour RÉCUPÉRER l'invite existante
+        // Si POST /invites échoue, essayer POST /invite (singulier)
         if (!$inviteResp->successful()) {
-            Log::debug('SunnyStamp: POST invite failed, trying GET to retrieve existing invite', [
+            Log::debug('SunnyStamp: POST /invites failed, trying POST /invite (singular)', [
                 'workflow_id' => $workflowId,
-                'post_status' => $inviteResp->status(),
+                'status' => $inviteResp->status(),
             ]);
 
             $inviteResp = $client
                 ->withHeaders(['Content-Type' => 'application/json'])
                 ->asJson()
-                ->get("{$endpoint}/api/workflows/{$workflowId}/invite", ['recipientEmail' => $signer->email]);
+                ->post("{$endpoint}/api/workflows/{$workflowId}/invite", ['recipientEmail' => $signer->email]);
         }
 
         if ($inviteResp->successful()) {
