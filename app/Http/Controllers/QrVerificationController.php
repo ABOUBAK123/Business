@@ -484,9 +484,22 @@ class QrVerificationController extends Controller
             ], 404);
         }
 
-        $ext = !empty($document->signed_file_path) || (!empty($document->final_file_path) && strtolower((string) pathinfo((string) $document->final_file_path, PATHINFO_EXTENSION)) === 'pdf')
-            ? 'pdf'
-            : (pathinfo((string) $document->file_path, PATHINFO_EXTENSION) ?: 'pdf');
+        $isSigned = !empty($document->signed_file_path)
+            || $document->status === 'signed'
+            || (!empty($document->final_file_path)
+                && strtolower((string) pathinfo((string) $document->final_file_path, PATHINFO_EXTENSION)) === 'pdf'
+                && $document->signed_at !== null);
+
+        $lastSignature = null;
+        if ($isSigned) {
+            $lastSignature = Signature::with('signer')
+                ->where('document_id', $document->id)
+                ->where('status', 'valid')
+                ->orderByDesc('signed_at')
+                ->first();
+        }
+
+        $ext = $isSigned ? 'pdf' : (pathinfo((string) $document->file_path, PATHINFO_EXTENSION) ?: 'pdf');
         $filename = $this->getSafeDownloadFilename($document, $ext);
         $downloadUrl = route('documents.download', [
             'document' => $document->id,
@@ -507,6 +520,7 @@ class QrVerificationController extends Controller
         return response()->json([
             'valid' => true,
             'message' => 'Numéro trouvé.',
+            'is_signed' => $isSigned,
             'is_owner' => $isOwner,
             'document' => [
                 'id' => $document->id,
@@ -516,6 +530,8 @@ class QrVerificationController extends Controller
                 'owner' => $document->owner?->name,
                 'administration' => $document->issuingAdministration?->name,
             ],
+            'signer' => $lastSignature ? ['name' => $lastSignature->signer?->name ?? 'Signataire'] : null,
+            'signed_at' => $document->signed_at?->format('d/m/Y à H:i'),
             'download_url' => $downloadUrl,
             'preview_url' => $isOwner ? $downloadUrl : null,
             'editor_url' => $isOwner ? route('documents.index', ['open_oo' => $document->id]) : null,
