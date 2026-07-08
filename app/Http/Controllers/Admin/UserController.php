@@ -100,6 +100,7 @@ class UserController extends Controller
     {
         $data = $request->validate([
             'name'   => 'required|string|max:191',
+            'phone'  => 'nullable|string|max:20',
             'role'   => 'required|in:admin,user,signer,manager',
             'status' => 'required|in:active,inactive,suspended',
         ]);
