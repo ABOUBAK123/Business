@@ -367,7 +367,38 @@ class SignatureController extends Controller
             return null;
         }
 
-        return $candidate;
+        return self::normalizePhoneNumber($candidate);
+    }
+
+    private static function normalizePhoneNumber(?string $phone): ?string
+    {
+        if (!$phone) {
+            return null;
+        }
+
+        $phone = trim($phone);
+        if ($phone === '') {
+            return null;
+        }
+
+        $phone = preg_replace('/[\s\-\(\)\.]/u', '', $phone);
+        if (!$phone) {
+            return null;
+        }
+
+        if (!str_starts_with($phone, '+')) {
+            if (str_starts_with($phone, '00')) {
+                $phone = '+' . substr($phone, 2);
+            } elseif (ctype_digit($phone)) {
+                $phone = '+225' . $phone;
+            }
+        }
+
+        if (!preg_match('/^\+\d{7,15}$/', $phone)) {
+            return null;
+        }
+
+        return $phone;
     }
 
     /**
