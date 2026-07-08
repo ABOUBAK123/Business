@@ -2055,13 +2055,6 @@ class SignatureController extends Controller
                 ]);
                 return $docInviteUrl;
             }
-                    'workflow_id' => $workflowId,
-                    'status' => $docResp->status(),
-                    'body' => $docResp->body(),
-                    'doc_payload' => $docPayload,
-                ]);
-                return null;
-            }
         } catch (\Throwable $e) {
             $this->lastPlatformError = 'create_document: exception ' . $e->getMessage();
             Log::error('SunnyStamp: exception création document /documents', [
