@@ -1906,11 +1906,15 @@ class SignatureController extends Controller
 
         try {
             $docResp = $client->post("{$endpoint}/api/workflows/{$workflowId}/documents", $docPayload);
+            $docRespJson = $docResp->json();
+            $docId = $docRespJson['id'] ?? $docRespJson['documentId'] ?? $docRespJson['document']['id'] ?? null;
+
             Log::info('SunnyStamp: création document via /documents', [
                 'workflow_id' => $workflowId,
                 'status' => $docResp->status(),
-                'body_excerpt' => substr($docResp->body(), 0, 250),
-                'pdf_fields' => $docPayload['pdfSignatureFields'],
+                'document_id' => $docId,
+                'body_excerpt' => substr($docResp->body(), 0, 1000),
+                'full_response' => $docRespJson,
             ]);
 
             if (!$docResp->successful()) {
