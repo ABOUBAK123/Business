@@ -1884,24 +1884,39 @@ class SignatureController extends Controller
             'recipient_email' => $signer->email,
         ]);
 
+        // Essayer POST d'abord
         $inviteResp = $client
             ->withHeaders(['Content-Type' => 'application/json'])
             ->asJson()
             ->post("{$endpoint}/api/workflows/{$workflowId}/invite", ['recipientEmail' => $signer->email]);
 
+        // Si POST échoue, essayer GET pour RÉCUPÉRER l'invite existante
+        if (!$inviteResp->successful()) {
+            Log::debug('SunnyStamp: POST invite failed, trying GET to retrieve existing invite', [
+                'workflow_id' => $workflowId,
+                'post_status' => $inviteResp->status(),
+            ]);
+
+            $inviteResp = $client
+                ->withHeaders(['Content-Type' => 'application/json'])
+                ->asJson()
+                ->get("{$endpoint}/api/workflows/{$workflowId}/invite", ['recipientEmail' => $signer->email]);
+        }
+
         $inviteUrl = null;
         if ($inviteResp->successful()) {
             $inviteJson = $inviteResp->json();
             $inviteUrl = $inviteJson['url'] ?? $inviteJson['inviteUrl'] ?? $inviteJson['link'] ?? null;
-            Log::info('SunnyStamp: invite créée avant document', [
+            Log::info('SunnyStamp: invite récupérée avant document', [
                 'workflow_id' => $workflowId,
                 'invite_url' => $inviteUrl,
+                'method' => 'GET',
             ]);
             if (is_string($inviteUrl) && $inviteUrl !== '') {
                 return $inviteUrl;
             }
         } else {
-            Log::warning('SunnyStamp: early invite creation failed (will retry later)', [
+            Log::warning('SunnyStamp: early invite creation/retrieval failed (will retry later)', [
                 'workflow_id' => $workflowId,
                 'status' => $inviteResp->status(),
                 'body_excerpt' => substr($inviteResp->body(), 0, 300),
