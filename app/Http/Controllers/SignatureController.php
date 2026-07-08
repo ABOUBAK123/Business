@@ -1748,6 +1748,9 @@ class SignatureController extends Controller
             'workflow_id' => $workflowId,
             'invite_url_in_response' => $inviteUrlFromCreation,
             'response_keys' => array_keys($wflRespJson),
+            'steps' => $wflRespJson['steps'] ?? null,
+            'currentRecipientEmails' => $wflRespJson['currentRecipientEmails'] ?? null,
+            'currentRecipientUsers' => $wflRespJson['currentRecipientUsers'] ?? null,
         ]);
 
         if (is_string($inviteUrlFromCreation) && $inviteUrlFromCreation !== '') {
