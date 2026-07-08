@@ -2093,6 +2093,25 @@ class SignatureController extends Controller
                         'workflow_id' => $workflowId,
                         'invite_url' => $constructedInviteUrl,
                     ]);
+
+                    // Avant de retourner, LANCER le workflow explicitement
+                    Log::debug('SunnyStamp: Lancement du workflow avant retour de l\'invite URL', [
+                        'workflow_id' => $workflowId,
+                    ]);
+                    try {
+                        $startResp = $client->post("{$endpoint}/api/workflows/{$workflowId}/start", []);
+                        Log::info('SunnyStamp: Workflow start attempt', [
+                            'workflow_id' => $workflowId,
+                            'status' => $startResp->status(),
+                            'body' => $startResp->body(),
+                        ]);
+                    } catch (\Throwable $e) {
+                        Log::warning('SunnyStamp: Exception during workflow start', [
+                            'workflow_id' => $workflowId,
+                            'error' => $e->getMessage(),
+                        ]);
+                    }
+
                     return $constructedInviteUrl;
                 }
             } catch (\Throwable $e) {
