@@ -2085,6 +2085,15 @@ class SignatureController extends Controller
                         ]);
                         return $detailsInviteUrl;
                     }
+
+                    // Si pas d'URL dans la réponse, construire manuellement
+                    // Format: {endpoint}/invite?workflowId={id}
+                    $constructedInviteUrl = rtrim($endpoint, '/') . '/invite?workflowId=' . $workflowId;
+                    Log::info('SunnyStamp: ✅ Invite URL CONSTRUITE manuellement', [
+                        'workflow_id' => $workflowId,
+                        'invite_url' => $constructedInviteUrl,
+                    ]);
+                    return $constructedInviteUrl;
                 }
             } catch (\Throwable $e) {
                 Log::warning('SunnyStamp: Exception lors du GET workflow après document', [
