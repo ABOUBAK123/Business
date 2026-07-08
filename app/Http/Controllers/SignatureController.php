@@ -1877,7 +1877,38 @@ class SignatureController extends Controller
             return null;
         }
 
-        // Étape 2b: POST /documents avec pdfSignatureFields (obligatoire pour positionner la zone).
+        // 2b. Créer l'invite IMMÉDIATEMENT après l'upload, AVANT le document
+        // Cela empêche le workflow de se lancer automatiquement avant qu'on ait l'URL d'invitation
+        Log::debug('SunnyStamp: creating invite before document creation', [
+            'workflow_id' => $workflowId,
+            'recipient_email' => $signer->email,
+        ]);
+
+        $inviteResp = $client
+            ->withHeaders(['Content-Type' => 'application/json'])
+            ->asJson()
+            ->post("{$endpoint}/api/workflows/{$workflowId}/invite", ['recipientEmail' => $signer->email]);
+
+        $inviteUrl = null;
+        if ($inviteResp->successful()) {
+            $inviteJson = $inviteResp->json();
+            $inviteUrl = $inviteJson['url'] ?? $inviteJson['inviteUrl'] ?? $inviteJson['link'] ?? null;
+            Log::info('SunnyStamp: invite créée avant document', [
+                'workflow_id' => $workflowId,
+                'invite_url' => $inviteUrl,
+            ]);
+            if (is_string($inviteUrl) && $inviteUrl !== '') {
+                return $inviteUrl;
+            }
+        } else {
+            Log::warning('SunnyStamp: early invite creation failed (will retry later)', [
+                'workflow_id' => $workflowId,
+                'status' => $inviteResp->status(),
+                'body_excerpt' => substr($inviteResp->body(), 0, 300),
+            ]);
+        }
+
+        // Étape 2c: POST /documents avec pdfSignatureFields (obligatoire pour positionner la zone).
         $partData = $uploadResp->json();
         $displayedPart = $partData['documents'][0]['displayedParts'][0]
             ?? $partData['displayedParts'][0]
