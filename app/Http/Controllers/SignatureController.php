@@ -1737,6 +1737,27 @@ class SignatureController extends Controller
             ?? ($wflRespJson['workflow']['id'] ?? null)
             ?? null;
 
+        // Vérifier si la réponse contient déjà l'URL d'invitation
+        $inviteUrlFromCreation = $wflRespJson['inviteUrl']
+            ?? $wflRespJson['invite']['url']
+            ?? $wflRespJson['invites'][0]['url']
+            ?? $wflRespJson['stepInvites'][0]['url']
+            ?? null;
+
+        Log::debug('SunnyStamp: workflow creation response', [
+            'workflow_id' => $workflowId,
+            'invite_url_in_response' => $inviteUrlFromCreation,
+            'response_keys' => array_keys($wflRespJson),
+        ]);
+
+        if (is_string($inviteUrlFromCreation) && $inviteUrlFromCreation !== '') {
+            Log::info('SunnyStamp: URL d\'invitation trouvée dans réponse workflow', [
+                'workflow_id' => $workflowId,
+                'invite_url' => $inviteUrlFromCreation,
+            ]);
+            return $inviteUrlFromCreation;
+        }
+
         if (!is_string($workflowId) || $workflowId === '') {
             $this->lastPlatformError = 'create_workflow: ID du workflow non trouvé dans la réponse API - ' . self::formatApiErrorDetail($wflResp);
             Log::error('SunnyStamp: ID workflow absent', [
