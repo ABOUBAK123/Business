@@ -1941,6 +1941,14 @@ class SignatureController extends Controller
         // On tente plusieurs variantes compatibles avant d'échouer.
         // Certaines APIs utilisent 'status' plutôt que 'workflowStatus'.
 
+        // Vérifier l'état du workflow avant démarrage
+        $getWorkflowResp = $client->get("{$endpoint}/api/workflows/{$workflowId}");
+        Log::debug('SunnyStamp: GET workflow status', [
+            'workflow_id' => $workflowId,
+            'status_code' => $getWorkflowResp->status(),
+            'workflow_data' => $getWorkflowResp->json(),
+        ]);
+
         Log::debug('SunnyStamp: avant démarrage workflow', [
             'workflow_id' => $workflowId,
             'endpoint' => $endpoint,
