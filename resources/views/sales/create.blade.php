@@ -161,11 +161,21 @@ document.getElementById('searchInput').addEventListener('input', function() {
 });
 
 function addToCart(article) {
+    const availableStock = parseInt(article.stock ?? 0, 10);
+    if (availableStock <= 0) {
+        alert('Stock indisponible pour cet article dans cette succursale.');
+        return;
+    }
+
     const existing = cart.find(i => i.id === article.id);
     if (existing) {
+        if (existing.quantity >= availableStock) {
+            alert(`Quantite maximale atteinte (stock: ${availableStock}).`);
+            return;
+        }
         existing.quantity++;
     } else {
-        cart.push({ ...article, quantity: 1, discount: 0 });
+        cart.push({ ...article, stock: availableStock, quantity: 1, discount: 0 });
     }
     document.getElementById('searchInput').value = '';
     document.getElementById('searchResults').classList.add('hidden');
@@ -190,7 +200,7 @@ function renderCart() {
         <div class="flex items-center gap-3 px-4 py-3">
             <div class="flex-1 min-w-0">
                 <p class="text-sm font-medium text-gray-800 truncate">${item.designation}</p>
-                <p class="text-xs text-gray-400">${formatPrice(item.sale_price_ttc)} / ${item.unit}</p>
+                <p class="text-xs text-gray-400">${formatPrice(item.sale_price_ttc)} / ${item.unit} | Stock: ${item.stock ?? 0}</p>
             </div>
             <div class="flex items-center gap-1">
                 <button type="button" onclick="changeQty(${i}, -1)"
@@ -217,7 +227,8 @@ function renderCart() {
 }
 
 function changeQty(i, delta) {
-    cart[i].quantity = Math.max(1, cart[i].quantity + delta);
+    const maxQty = Math.max(1, parseInt(cart[i].stock ?? 0, 10));
+    cart[i].quantity = Math.min(maxQty, Math.max(1, cart[i].quantity + delta));
     const input = document.getElementById(`qty-${i}`);
     if (input) input.value = cart[i].quantity;
     updateRowTotal(i);
@@ -226,8 +237,11 @@ function changeQty(i, delta) {
 }
 
 function setQty(i, val) {
-    const parsed = Math.max(1, parseInt(val) || 1);
+    const maxQty = Math.max(1, parseInt(cart[i].stock ?? 0, 10));
+    const parsed = Math.min(maxQty, Math.max(1, parseInt(val) || 1));
     cart[i].quantity = parsed;
+    const input = document.getElementById(`qty-${i}`);
+    if (input) input.value = parsed;
     updateRowTotal(i);
     updateTotals();
     buildHiddenInputs();
@@ -291,6 +305,13 @@ document.getElementById('addPaymentMethod').addEventListener('click', function()
         </button>`;
     document.getElementById('paymentMethods').appendChild(div);
     pmIndex++;
+});
+
+document.getElementById('branchSelect').addEventListener('change', function() {
+    cart = [];
+    renderCart();
+    document.getElementById('searchInput').value = '';
+    document.getElementById('searchResults').classList.add('hidden');
 });
 
 function buildHiddenInputs() {

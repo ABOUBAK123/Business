@@ -11,6 +11,7 @@ use App\Models\SaleItem;
 use App\Models\StockMovement;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class SaleController extends Controller
 {
@@ -70,10 +71,33 @@ class SaleController extends Controller
             'notes' => 'nullable|string',
         ]);
 
+        $branchIds = $this->getBranchIds($request->user());
+        if (!in_array((int) $request->branch_id, array_map('intval', $branchIds), true)) {
+            abort(403, 'Vous ne pouvez pas vendre sur cette succursale.');
+        }
+
         DB::transaction(function () use ($request) {
             $subtotalHt = 0;
             $taxAmount = 0;
             $discountAmount = 0;
+
+            $articleIds = collect($request->items)->pluck('article_id')->map(fn($id) => (int) $id)->unique()->values();
+            $branchStocks = ArticleBranchStock::where('branch_id', $request->branch_id)
+                ->whereIn('article_id', $articleIds)
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('article_id');
+
+            foreach ($request->items as $index => $item) {
+                $requiredQty = (int) $item['quantity'];
+                $availableQty = (int) optional($branchStocks->get((int) $item['article_id']))->quantity;
+
+                if ($requiredQty > $availableQty) {
+                    throw ValidationException::withMessages([
+                        "items.$index.quantity" => "Stock insuffisant pour l'article sélectionné (disponible: {$availableQty}).",
+                    ]);
+                }
+            }
 
             foreach ($request->items as $item) {
                 $article = Article::findOrFail($item['article_id']);
