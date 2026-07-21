@@ -18,6 +18,7 @@ use App\Http\Controllers\MeetingRoomController;
 use App\Http\Controllers\MeetingAttendanceController;
 use App\Http\Controllers\DebugController;
 use App\Http\Controllers\SessionDebugController;
+use App\Http\Controllers\SaleController;
 use App\Http\Controllers\Admin\AppSettingController;
 use App\Http\Controllers\Admin\AdminController;
 use App\Http\Controllers\Admin\IssuingAdministrationController;
@@ -304,6 +305,11 @@ Route::middleware('auth')->group(function () {
     Route::post('/profile/display-name', [ProfileController::class, 'updateDisplayName'])->name('profile.display-name');
     Route::post('/profile/password',     [ProfileController::class, 'updatePassword'])->name('profile.password');
     Route::post('/profile/language',     [ProfileController::class, 'updateLanguage'])->name('profile.language');
+
+    // Ventes
+    Route::get('/ventes/nouvelle', [SaleController::class, 'create'])->name('sales.create');
+    Route::get('/ventes/historique', [SaleController::class, 'history'])->name('sales.history');
+    Route::post('/ventes', [SaleController::class, 'store'])->name('sales.store');
 
     // Admin (page unifiée) — réservé aux utilisateurs avec rôle admin
     Route::prefix('admin')->name('admin.')->middleware('admin')->group(function () {

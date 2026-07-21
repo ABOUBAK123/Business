@@ -1550,26 +1550,45 @@ class DocumentController extends Controller
                 return null;
             }
 
-            $xml = @simplexml_load_string($body);
-            if (!$xml) {
-                Log::warning('OnlyOffice conversion response invalid', ['filetype' => $ext, 'body' => substr($body, 0, 500)]);
-                return null;
+            $error = null;
+            $pdfUrl = null;
+
+            // Essayer de parser en JSON d'abord
+            if (strpos($body, '{') !== false) {
+                $json = @json_decode($body, true);
+                if ($json) {
+                    $error = $json['error'] ?? null;
+                    $pdfUrl = $json['fileUrl'] ?? null;
+                    if ($error !== null || $pdfUrl) {
+                        Log::info('OnlyOffice JSON response parsed', ['error' => $error, 'has_fileUrl' => !!$pdfUrl]);
+                    }
+                }
             }
 
-            $error = $xml->Error ?? null;
+            // Fallback: essayer de parser en XML
+            if (!$json || (!$error && !$pdfUrl)) {
+                $xml = @simplexml_load_string($body);
+                if ($xml) {
+                    $error = (int)($xml->Error ?? 0);
+                    $pdfUrl = (string)($xml->FileUrl ?? null);
+                    if ($error || $pdfUrl) {
+                        Log::info('OnlyOffice XML response parsed', ['error' => $error, 'has_fileUrl' => !!$pdfUrl]);
+                    }
+                }
+            }
+
             if ($error && (int)$error !== 0) {
                 Log::warning('OnlyOffice conversion error', [
                     'filetype' => $ext,
-                    'error' => (string)$error,
-                    'response' => $body,
+                    'error' => $error,
+                    'response' => substr($body, 0, 500),
                 ]);
                 return null;
             }
 
-            $pdfUrl = (string)($xml->FileUrl ?? null);
             if (!$pdfUrl) {
                 Log::warning('OnlyOffice conversion failed - no fileUrl', [
-                    'response' => $body,
+                    'response' => substr($body, 0, 500),
                     'filetype' => $ext,
                 ]);
                 return null;
