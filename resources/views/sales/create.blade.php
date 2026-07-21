@@ -88,6 +88,7 @@
                         <p class="text-xs uppercase tracking-wide text-slate-500">Article choisi</p>
                         <p id="selected-name" class="mt-1 text-base font-bold text-slate-900">{{ $selectedArticle?->name }}</p>
                         <p id="selected-ref" class="text-sm text-slate-600">{{ $selectedArticle?->reference }}</p>
+                        <p id="selected-stock" class="text-xs text-slate-500 mt-1"></p>
                     </div>
 
                     <form method="POST" action="{{ route('sales.store') }}" id="sale-form" class="space-y-4">
@@ -135,6 +136,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const saleTotal = document.getElementById('sale-total');
     const selectedName = document.getElementById('selected-name');
     const selectedRef = document.getElementById('selected-ref');
+    const selectedStock = document.getElementById('selected-stock');
     const searchInput = document.querySelector('input[name="q"]');
 
     function formatCurrency(value) {
@@ -165,6 +167,30 @@ document.addEventListener('DOMContentLoaded', function () {
         if (Number.isNaN(current) || current <= 0) {
             quantityInput.value = isMeasured ? '0.001' : '1';
         }
+
+        return isMeasured;
+    }
+
+    function applyStockRules(card) {
+        if (!quantityInput) {
+            return;
+        }
+
+        const stock = parseFloat(card.dataset.articleStock || '0');
+        if (stock > 0) {
+            quantityInput.max = String(stock);
+        } else {
+            quantityInput.removeAttribute('max');
+        }
+
+        const quantity = parseFloat(quantityInput.value || '0');
+        if (!Number.isNaN(quantity) && stock > 0 && quantity > stock) {
+            quantityInput.value = String(stock);
+        }
+
+        if (selectedStock) {
+            selectedStock.textContent = 'Stock disponible: ' + stock.toLocaleString('fr-FR', { maximumFractionDigits: 3 }) + ' ' + (card.dataset.articleUnit || '');
+        }
     }
 
     function selectCard(card) {
@@ -174,6 +200,7 @@ document.addEventListener('DOMContentLoaded', function () {
         selectedEmpty.classList.add('hidden');
         selectedPanel.classList.remove('hidden');
         applyQuantityRules(card.dataset.articleUnit);
+        applyStockRules(card);
 
         cards.forEach(item => {
             item.classList.remove('border-slate-900', 'ring-2', 'ring-slate-200');
@@ -224,7 +251,17 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 
     if (quantityInput) {
-        quantityInput.addEventListener('input', updateTotal);
+        quantityInput.addEventListener('input', function () {
+            const activeCard = cards.find(card => card.dataset.articleId === articleIdInput.value);
+            if (activeCard) {
+                const stock = parseFloat(activeCard.dataset.articleStock || '0');
+                const quantity = parseFloat(quantityInput.value || '0');
+                if (!Number.isNaN(stock) && stock > 0 && !Number.isNaN(quantity) && quantity > stock) {
+                    quantityInput.value = String(stock);
+                }
+            }
+            updateTotal();
+        });
     }
 
     if (searchInput) {
