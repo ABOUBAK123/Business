@@ -130,11 +130,19 @@
 let cart = [];
 let pmIndex = 1;
 let searchResultsData = [];
+const searchEndpoint = @json(route('articles.search', [], false));
+const saleForm = document.getElementById('saleForm');
 
 // Search
 let searchTimeout;
 const searchInput = document.getElementById('searchInput');
 const searchResults = document.getElementById('searchResults');
+
+saleForm.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && document.activeElement === searchInput) {
+        e.preventDefault();
+    }
+});
 
 searchInput.addEventListener('input', function() {
     clearTimeout(searchTimeout);
@@ -185,8 +193,14 @@ searchInput.addEventListener('keydown', async function(e) {
 
 function searchArticles(q) {
     const branchId = document.getElementById('branchSelect').value;
-    return fetch(`{{ route('articles.search') }}?q=${encodeURIComponent(q)}&branch_id=${branchId}`)
-        .then(r => r.json())
+    return fetch(`${searchEndpoint}?q=${encodeURIComponent(q)}&branch_id=${branchId}`)
+        .then(r => {
+            if (!r.ok) {
+                throw new Error(`HTTP ${r.status}`);
+            }
+
+            return r.json();
+        })
         .then(articles => {
             searchResultsData = Array.isArray(articles) ? articles : [];
             searchResults.innerHTML = searchResultsData.map(a => `
@@ -204,9 +218,10 @@ function searchArticles(q) {
             `).join('') || '<div class="text-center text-gray-400 text-sm py-3">Aucun article trouvé</div>';
             searchResults.classList.remove('hidden');
         })
-        .catch(() => {
+        .catch((error) => {
             searchResultsData = [];
-            searchResults.classList.add('hidden');
+            searchResults.classList.remove('hidden');
+            searchResults.innerHTML = `<div class="text-center text-red-500 text-sm py-3">Recherche indisponible (${error.message}).</div>`;
         });
 }
 
