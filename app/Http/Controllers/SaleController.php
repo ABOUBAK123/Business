@@ -64,7 +64,7 @@ class SaleController extends Controller
             'items.*.quantity' => 'required|integer|min:1',
             'items.*.unit_price_ttc' => 'required|numeric|min:0',
             'items.*.discount_amount' => 'nullable|numeric|min:0',
-            'payment_methods' => 'required|array',
+            'payment_methods' => 'required|array|min:1',
             'payment_methods.*.method' => 'required|string',
             'payment_methods.*.amount' => 'required|numeric|min:0',
             'customer_id' => 'nullable|exists:customers,id',
@@ -108,15 +108,17 @@ class SaleController extends Controller
             }
 
             $totalTtc = $subtotalHt + $taxAmount;
-            $amountPaid = collect($request->payment_methods)->sum('amount');
+            $paymentMethods = collect($request->payment_methods);
+            $amountPaid = (float) $paymentMethods->sum('amount');
+            $usesCredit = $paymentMethods->contains(fn($pm) => ($pm['method'] ?? null) === 'credit');
 
-            $paymentStatus = 'paid';
-            foreach ($request->payment_methods as $pm) {
-                if ($pm['method'] === 'credit') {
-                    $paymentStatus = $amountPaid >= $totalTtc ? 'partial' : 'credit';
-                    break;
-                }
+            if ($usesCredit && !$request->customer_id) {
+                throw ValidationException::withMessages([
+                    'customer_id' => 'Un client est obligatoire pour un paiement a credit.',
+                ]);
             }
+
+            $paymentStatus = $this->resolvePaymentStatus($amountPaid, (float) $totalTtc, $usesCredit);
 
             $sale = Sale::create([
                 'tenant_id' => app('currentTenant')->id,
@@ -262,5 +264,18 @@ class SaleController extends Controller
             return Branch::pluck('id')->toArray();
         }
         return [$user->branch_id];
+    }
+
+    private function resolvePaymentStatus(float $amountPaid, float $totalTtc, bool $usesCredit): string
+    {
+        if ($amountPaid + 0.00001 >= $totalTtc) {
+            return 'paid';
+        }
+
+        if ($usesCredit) {
+            return 'credit';
+        }
+
+        return $amountPaid > 0 ? 'partial' : 'unpaid';
     }
 }

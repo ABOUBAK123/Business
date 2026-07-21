@@ -12,6 +12,7 @@ use App\Models\SaleItem;
 use App\Models\StockMovement;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class SaleController extends Controller
 {
@@ -65,12 +66,35 @@ class SaleController extends Controller
             'notes'                            => 'nullable|string',
         ]);
 
+        $branchIds = $this->getBranchIds($request->user());
+        if (!in_array((int) $request->branch_id, array_map('intval', $branchIds), true)) {
+            abort(403, 'Vous ne pouvez pas vendre sur cette succursale.');
+        }
+
         $saleId = null;
 
         DB::transaction(function () use ($request, &$saleId) {
             $subtotalHt    = 0;
             $taxAmount     = 0;
             $discountAmount = 0;
+
+            $articleIds = collect($request->items)->pluck('article_id')->map(fn($id) => (int) $id)->unique()->values();
+            $branchStocks = ArticleBranchStock::where('branch_id', $request->branch_id)
+                ->whereIn('article_id', $articleIds)
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('article_id');
+
+            foreach ($request->items as $index => $item) {
+                $requiredQty = (int) $item['quantity'];
+                $availableQty = (int) optional($branchStocks->get((int) $item['article_id']))->quantity;
+
+                if ($requiredQty > $availableQty) {
+                    throw ValidationException::withMessages([
+                        "items.$index.quantity" => "Stock insuffisant pour l'article sélectionné (disponible: {$availableQty}).",
+                    ]);
+                }
+            }
 
             foreach ($request->items as $item) {
                 $article    = Article::findOrFail($item['article_id']);
@@ -81,16 +105,18 @@ class SaleController extends Controller
                 $discountAmount += $item['discount_amount'] ?? 0;
             }
 
-            $totalTtc   = $subtotalHt + $taxAmount;
-            $amountPaid = collect($request->payment_methods)->sum('amount');
+            $totalTtc = $subtotalHt + $taxAmount;
+            $paymentMethods = collect($request->payment_methods);
+            $amountPaid = (float) $paymentMethods->sum('amount');
+            $usesCredit = $paymentMethods->contains(fn($pm) => ($pm['method'] ?? null) === 'credit');
 
-            $paymentStatus = 'paid';
-            foreach ($request->payment_methods as $pm) {
-                if ($pm['method'] === 'credit') {
-                    $paymentStatus = $amountPaid >= $totalTtc ? 'partial' : 'credit';
-                    break;
-                }
+            if ($usesCredit && !$request->customer_id) {
+                throw ValidationException::withMessages([
+                    'customer_id' => 'Un client est obligatoire pour un paiement a credit.',
+                ]);
             }
+
+            $paymentStatus = $this->resolvePaymentStatus($amountPaid, (float) $totalTtc, $usesCredit);
 
             $sale = Sale::create([
                 'tenant_id'       => app('currentTenant')->id,
@@ -169,5 +195,18 @@ class SaleController extends Controller
             return Branch::pluck('id')->toArray();
         }
         return array_filter([$user->branch_id]);
+    }
+
+    private function resolvePaymentStatus(float $amountPaid, float $totalTtc, bool $usesCredit): string
+    {
+        if ($amountPaid + 0.00001 >= $totalTtc) {
+            return 'paid';
+        }
+
+        if ($usesCredit) {
+            return 'credit';
+        }
+
+        return $amountPaid > 0 ? 'partial' : 'unpaid';
     }
 }
