@@ -129,57 +129,112 @@
 <script>
 let cart = [];
 let pmIndex = 1;
+let searchResultsData = [];
 
 // Search
 let searchTimeout;
-document.getElementById('searchInput').addEventListener('input', function() {
+const searchInput = document.getElementById('searchInput');
+const searchResults = document.getElementById('searchResults');
+
+searchInput.addEventListener('input', function() {
     clearTimeout(searchTimeout);
     const q = this.value.trim();
-    if (q.length < 2) { document.getElementById('searchResults').classList.add('hidden'); return; }
+    if (q.length < 2) {
+        searchResultsData = [];
+        searchResults.classList.add('hidden');
+        return;
+    }
+
     searchTimeout = setTimeout(() => {
-        const branchId = document.getElementById('branchSelect').value;
-        fetch(`{{ route('articles.search') }}?q=${encodeURIComponent(q)}&branch_id=${branchId}`)
-            .then(r => r.json())
-            .then(articles => {
-                const el = document.getElementById('searchResults');
-                el.innerHTML = articles.map(a => `
-                    <div class="flex items-center justify-between p-2 rounded-lg hover:bg-blue-50 cursor-pointer"
-                         onclick="addToCart(${JSON.stringify(a).replace(/"/g,'&quot;')})">
-                        <div>
-                            <span class="text-sm font-medium text-gray-800">${a.designation}</span>
-                            <span class="text-xs text-gray-400 ml-2">${a.reference || ''}</span>
-                        </div>
-                        <div class="text-right flex-shrink-0 ml-4">
-                            <span class="text-sm font-bold text-blue-700">${formatPrice(a.sale_price_ttc)}</span>
-                            <span class="text-xs text-gray-400 block">Stock: ${a.stock}</span>
-                        </div>
-                    </div>
-                `).join('') || '<div class="text-center text-gray-400 text-sm py-3">Aucun article trouvé</div>';
-                el.classList.remove('hidden');
-            });
+        searchArticles(q);
     }, 300);
 });
+
+searchInput.addEventListener('keydown', async function(e) {
+    if (e.key !== 'Enter') return;
+
+    e.preventDefault();
+
+    const q = this.value.trim();
+    if (q.length < 2) return;
+
+    if (!searchResultsData.length) {
+        await searchArticles(q);
+    }
+
+    if (!searchResultsData.length) return;
+
+    const queryLower = q.toLowerCase();
+    const exactMatch = searchResultsData.find(a =>
+        (a.reference || '').toLowerCase() === queryLower ||
+        (a.designation || '').toLowerCase() === queryLower
+    );
+
+    const articleToAdd = exactMatch || searchResultsData[0];
+    const rowIndex = addToCart(articleToAdd);
+    if (rowIndex === null) return;
+
+    requestAnimationFrame(() => {
+        const qtyInput = document.getElementById(`qty-${rowIndex}`);
+        if (qtyInput) {
+            qtyInput.focus();
+            qtyInput.select();
+        }
+    });
+});
+
+function searchArticles(q) {
+    const branchId = document.getElementById('branchSelect').value;
+    return fetch(`{{ route('articles.search') }}?q=${encodeURIComponent(q)}&branch_id=${branchId}`)
+        .then(r => r.json())
+        .then(articles => {
+            searchResultsData = Array.isArray(articles) ? articles : [];
+            searchResults.innerHTML = searchResultsData.map(a => `
+                <div class="flex items-center justify-between p-2 rounded-lg hover:bg-blue-50 cursor-pointer"
+                     onclick="addToCart(${JSON.stringify(a).replace(/"/g,'&quot;')})">
+                    <div>
+                        <span class="text-sm font-medium text-gray-800">${a.designation}</span>
+                        <span class="text-xs text-gray-400 ml-2">${a.reference || ''}</span>
+                    </div>
+                    <div class="text-right flex-shrink-0 ml-4">
+                        <span class="text-sm font-bold text-blue-700">${formatPrice(a.sale_price_ttc)}</span>
+                        <span class="text-xs text-gray-400 block">Stock: ${a.stock}</span>
+                    </div>
+                </div>
+            `).join('') || '<div class="text-center text-gray-400 text-sm py-3">Aucun article trouvé</div>';
+            searchResults.classList.remove('hidden');
+        })
+        .catch(() => {
+            searchResultsData = [];
+            searchResults.classList.add('hidden');
+        });
+}
 
 function addToCart(article) {
     const availableStock = parseInt(article.stock ?? 0, 10);
     if (availableStock <= 0) {
         alert('Stock indisponible pour cet article dans cette succursale.');
-        return;
+        return null;
     }
 
     const existing = cart.find(i => i.id === article.id);
+    let rowIndex = null;
     if (existing) {
         if (existing.quantity >= availableStock) {
             alert(`Quantite maximale atteinte (stock: ${availableStock}).`);
-            return;
+            return null;
         }
         existing.quantity++;
+        rowIndex = cart.findIndex(i => i.id === article.id);
     } else {
         cart.push({ ...article, stock: availableStock, quantity: 1, discount: 0 });
+        rowIndex = cart.length - 1;
     }
-    document.getElementById('searchInput').value = '';
-    document.getElementById('searchResults').classList.add('hidden');
+    searchInput.value = '';
+    searchResultsData = [];
+    searchResults.classList.add('hidden');
     renderCart();
+    return rowIndex;
 }
 
 function renderCart() {
@@ -310,8 +365,9 @@ document.getElementById('addPaymentMethod').addEventListener('click', function()
 document.getElementById('branchSelect').addEventListener('change', function() {
     cart = [];
     renderCart();
-    document.getElementById('searchInput').value = '';
-    document.getElementById('searchResults').classList.add('hidden');
+    searchInput.value = '';
+    searchResultsData = [];
+    searchResults.classList.add('hidden');
 });
 
 function buildHiddenInputs() {
