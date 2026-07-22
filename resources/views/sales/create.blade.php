@@ -287,12 +287,6 @@ function addToCart(article) {
         return null;
     }
 
-    const sameArticleCount = cart.filter(i => i.id === article.id).length;
-    if (sameArticleCount >= availableStock) {
-        alert(`Quantite maximale atteinte (stock: ${availableStock}).`);
-        return null;
-    }
-
     cart.push({ ...article, stock: availableStock, quantity: 1, discount: 0 });
     const rowIndex = cart.length - 1;
     searchInput.value = '';
@@ -328,7 +322,12 @@ document.getElementById('addSelectedArticles').addEventListener('click', () => {
     if (!searchResultsData.length || !selectedSearchArticleIds.size) return;
 
     const articlesToAdd = searchResultsData.filter(article => selectedSearchArticleIds.has(article.id));
-    articlesToAdd.forEach(article => addToCart(article));
+    articlesToAdd.forEach(article => {
+        const createdIndex = addToCart(article);
+        if (createdIndex === null) {
+            return;
+        }
+    });
     selectedSearchArticleIds.clear();
     updateBulkAddState();
     searchResults.classList.add('hidden');
