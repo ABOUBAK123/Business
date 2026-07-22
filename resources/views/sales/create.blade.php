@@ -287,8 +287,21 @@ function addToCart(article) {
         return null;
     }
 
-    cart.push({ ...article, stock: availableStock, quantity: 1, discount: 0 });
-    const rowIndex = cart.length - 1;
+    const existing = cart.find(i => i.id === article.id);
+    let rowIndex = null;
+
+    if (existing) {
+        if (existing.quantity >= availableStock) {
+            alert(`Quantite maximale atteinte (stock: ${availableStock}).`);
+            return null;
+        }
+
+        existing.quantity++;
+        rowIndex = cart.findIndex(i => i.id === article.id);
+    } else {
+        cart.push({ ...article, stock: availableStock, quantity: 1, discount: 0 });
+        rowIndex = cart.length - 1;
+    }
     searchInput.value = '';
     searchResultsData = [];
     selectedSearchArticleIds.clear();
@@ -337,8 +350,7 @@ document.getElementById('addSelectedArticles').addEventListener('click', () => {
 function renderCart() {
     const el = document.getElementById('cartItems');
     const empty = document.getElementById('emptyCart');
-    const totalPieces = cart.reduce((sum, item) => sum + (parseInt(item.quantity, 10) || 0), 0);
-    document.getElementById('cartCount').textContent = totalPieces + ' pièce(s)';
+    document.getElementById('cartCount').textContent = cart.length + ' article(s)';
 
     if (cart.length === 0) {
         el.innerHTML = '';
