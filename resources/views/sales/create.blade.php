@@ -44,7 +44,7 @@
                 <h3 class="text-sm font-semibold text-gray-700">Panier</h3>
                 <span id="cartCount" class="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-0.5 rounded-full">0 article(s)</span>
             </div>
-            <div id="cartItems" class="divide-y divide-gray-50 min-h-[80px]">
+            <div id="cartItems" class="divide-y divide-gray-50 min-h-[80px] max-h-[360px] overflow-y-auto">
                 <div id="emptyCart" class="flex items-center justify-center py-10 text-gray-400 text-sm">
                     <div class="text-center"><i class="fas fa-shopping-cart text-2xl mb-2 block"></i>Panier vide</div>
                 </div>
@@ -383,6 +383,7 @@ function renderCart() {
     document.getElementById('submitBtn').disabled = false;
     updateTotals();
     buildHiddenInputs();
+    el.scrollTop = el.scrollHeight;
 }
 
 function changeQty(i, delta) {
