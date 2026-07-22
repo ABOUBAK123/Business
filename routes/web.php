@@ -39,6 +39,10 @@ require __DIR__.'/auth.php';
 // Subscription expired page
 Route::get('/subscription/expired', fn() => view('subscription.expired'))->name('subscription.expired');
 
+// Payment provider callbacks
+Route::get('/payment/cinetpay/return', [AccountActivationController::class, 'cinetpayReturn'])->name('payment.cinetpay.return');
+Route::post('/payment/cinetpay/notify', [AccountActivationController::class, 'cinetpayNotify'])->name('payment.cinetpay.notify');
+
 // Account activation / renewal
 Route::middleware(['auth'])->group(function () {
     Route::get('/account/activation', [AccountActivationController::class, 'index'])->name('account.activation.index');

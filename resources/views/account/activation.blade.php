@@ -21,6 +21,10 @@
             <div class="bg-green-50 border border-green-200 text-green-700 rounded-lg px-4 py-3 text-sm">{{ session('success') }}</div>
         @endif
 
+        @if($errors->has('payment'))
+            <div class="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">{{ $errors->first('payment') }}</div>
+        @endif
+
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             @foreach($plans as $plan)
                 <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex flex-col">
@@ -127,18 +131,25 @@
             </div>
 
             <div>
-                <label class="block text-xs font-medium text-gray-600 mb-1">Méthode de paiement</label>
-                <select name="payment_method" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" required>
-                    <option value="mobile_money">Mobile Money</option>
-                    <option value="cash">Espèces</option>
-                    <option value="card">Carte bancaire</option>
-                    <option value="bank_transfer">Virement bancaire</option>
-                </select>
+                <label class="block text-xs font-medium text-gray-600 mb-2">Moyen de paiement</label>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    @foreach($paymentMethods as $key => $method)
+                        <label class="cursor-pointer rounded-xl border border-gray-200 p-3 transition hover:border-blue-400 hover:bg-blue-50/40">
+                            <input type="radio" name="payment_method" value="{{ $key }}" class="sr-only peer" {{ $loop->first ? 'checked' : '' }}>
+                            <div class="flex items-center justify-between gap-3">
+                                <div>
+                                    <div class="text-sm font-semibold text-gray-800">{{ $method['label'] }}</div>
+                                    <div class="text-xs text-gray-500 mt-0.5">{{ $method['description'] }}</div>
+                                </div>
+                                <span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-700">{{ $method['badge'] }}</span>
+                            </div>
+                        </label>
+                    @endforeach
+                </div>
             </div>
 
-            <div>
-                <label class="block text-xs font-medium text-gray-600 mb-1">Référence paiement</label>
-                <input type="text" name="payment_reference" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" placeholder="Numéro de transaction ou reçu">
+            <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                Choisissez l’un des moyens de paiement configurés dans le panneau Super Admin.
             </div>
 
             <div class="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2 text-xs text-gray-600">
@@ -146,7 +157,7 @@
             </div>
 
             <button type="submit" class="w-full bg-blue-600 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-700">
-                Confirmer et réactiver le compte
+                Continuer vers le paiement sécurisé
             </button>
         </form>
     </div>

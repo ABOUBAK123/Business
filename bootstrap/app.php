@@ -20,6 +20,10 @@ return Application::configure(basePath: dirname(__DIR__))
             SetTenantContext::class,
         ]);
 
+        $middleware->validateCsrfTokens(except: [
+            'payment/cinetpay/notify',
+        ]);
+
         $middleware->alias([
             'tenant.active' => CheckTenantActive::class,
             'super.admin' => SuperAdminOnly::class,
