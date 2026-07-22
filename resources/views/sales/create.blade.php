@@ -354,13 +354,23 @@ function renderCart() {
 
     if (cart.length === 0) {
         el.innerHTML = '';
-        el.appendChild(empty);
+        if (empty) {
+            el.appendChild(empty);
+        } else {
+            el.innerHTML = `
+                <div id="emptyCart" class="flex items-center justify-center py-10 text-gray-400 text-sm">
+                    <div class="text-center"><i class="fas fa-shopping-cart text-2xl mb-2 block"></i>Panier vide</div>
+                </div>
+            `;
+        }
         document.getElementById('submitBtn').disabled = true;
         updateTotals();
         return;
     }
 
-    empty.remove();
+    if (empty) {
+        empty.remove();
+    }
     el.innerHTML = cart.map((item, i) => `
         <div class="flex items-center gap-3 px-4 py-3">
             <div class="flex-1 min-w-0">
