@@ -33,7 +33,7 @@ class UserManagementController extends Controller
     public function create()
     {
         $tenantId = $this->getTenantId(request());
-        $roles = Role::all();
+        $roles = $this->getRolesForCreate(request());
         $branches = Branch::where('tenant_id', $tenantId)
             ->where('is_active', true)
             ->get();
@@ -69,6 +69,14 @@ class UserManagementController extends Controller
                 },
             ],
         ]);
+
+        if ($request->user()->hasRole('proprietaire') && in_array($data['role'], ['proprietaire', 'admin_boutique'], true)) {
+            $data['role'] = 'gerant';
+        }
+
+        if ($data['role'] === 'gerant') {
+            $this->ensureGerantRole();
+        }
 
         $user = User::create([
             'tenant_id' => $tenant->id,
@@ -169,5 +177,34 @@ class UserManagementController extends Controller
         return User::where('tenant_id', $tenantId)
             ->where('is_super_admin', false)
             ->findOrFail($userId);
+    }
+
+    private function getRolesForCreate(Request $request)
+    {
+        if ($request->user()->hasRole('proprietaire')) {
+            $this->ensureGerantRole();
+
+            return Role::whereNotIn('name', ['proprietaire', 'admin_boutique'])
+                ->orderBy('name')
+                ->get();
+        }
+
+        return Role::orderBy('name')->get();
+    }
+
+    private function ensureGerantRole(): Role
+    {
+        $gerant = Role::firstOrCreate(['name' => 'gerant', 'guard_name' => 'web']);
+
+        if (!$gerant->permissions()->exists()) {
+            $sourceRole = Role::where('name', 'admin_boutique')->first()
+                ?? Role::where('name', 'responsable_succursale')->first();
+
+            if ($sourceRole) {
+                $gerant->syncPermissions($sourceRole->permissions);
+            }
+        }
+
+        return $gerant;
     }
 }
