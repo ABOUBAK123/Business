@@ -12,7 +12,11 @@ class UserManagementController extends Controller
 {
     public function index(Request $request)
     {
-        $query = User::with(['roles', 'branch'])->where('is_super_admin', false);
+        $tenantId = $this->getTenantId($request);
+
+        $query = User::with(['roles', 'branch'])
+            ->where('is_super_admin', false)
+            ->where('tenant_id', $tenantId);
 
         if ($request->search) {
             $query->where(function ($q) use ($request) {
@@ -27,14 +31,19 @@ class UserManagementController extends Controller
 
     public function create()
     {
+        $tenantId = $this->getTenantId(request());
         $roles = Role::all();
-        $branches = Branch::where('is_active', true)->get();
+        $branches = Branch::where('tenant_id', $tenantId)
+            ->where('is_active', true)
+            ->get();
         return view('users.form', ['user' => new User(), 'roles' => $roles, 'branches' => $branches]);
     }
 
     public function store(Request $request)
     {
         $tenant = app('currentTenant');
+        $tenantId = $this->getTenantId($request);
+
         if (!$tenant->canAddUser()) {
             return back()->with('error', 'Limite d\'utilisateurs atteinte pour votre plan.');
         }
@@ -45,7 +54,15 @@ class UserManagementController extends Controller
             'password' => 'required|min:8|confirmed',
             'phone' => 'nullable|string|max:20',
             'role' => 'required|exists:roles,name',
-            'branch_id' => 'nullable|exists:branches,id',
+            'branch_id' => [
+                'nullable',
+                'exists:branches,id',
+                function ($attribute, $value, $fail) use ($tenantId) {
+                    if ($value && !Branch::where('id', $value)->where('tenant_id', $tenantId)->exists()) {
+                        $fail('La succursale sélectionnée est invalide.');
+                    }
+                },
+            ],
         ]);
 
         $user = User::create([
@@ -64,18 +81,34 @@ class UserManagementController extends Controller
 
     public function edit(User $user)
     {
+        $user = $this->findTenantUserOrFail(request(), $user->id);
+        $tenantId = $this->getTenantId(request());
+
         $roles = Role::all();
-        $branches = Branch::where('is_active', true)->get();
+        $branches = Branch::where('tenant_id', $tenantId)
+            ->where('is_active', true)
+            ->get();
         return view('users.form', compact('user', 'roles', 'branches'));
     }
 
     public function update(Request $request, User $user)
     {
+        $user = $this->findTenantUserOrFail($request, $user->id);
+        $tenantId = $this->getTenantId($request);
+
         $data = $request->validate([
             'name' => 'required|string|max:191',
             'phone' => 'nullable|string|max:20',
             'role' => 'required|exists:roles,name',
-            'branch_id' => 'nullable|exists:branches,id',
+            'branch_id' => [
+                'nullable',
+                'exists:branches,id',
+                function ($attribute, $value, $fail) use ($tenantId) {
+                    if ($value && !Branch::where('id', $value)->where('tenant_id', $tenantId)->exists()) {
+                        $fail('La succursale sélectionnée est invalide.');
+                    }
+                },
+            ],
             'is_active' => 'boolean',
         ]);
 
@@ -92,7 +125,24 @@ class UserManagementController extends Controller
 
     public function toggleActive(User $user)
     {
+        $user = $this->findTenantUserOrFail(request(), $user->id);
         $user->update(['is_active' => !$user->is_active]);
         return back()->with('success', 'Statut de l\'utilisateur modifié.');
+    }
+
+    private function getTenantId(Request $request): int
+    {
+        return (int) (app()->bound('currentTenant')
+            ? app('currentTenant')->id
+            : $request->user()->tenant_id);
+    }
+
+    private function findTenantUserOrFail(Request $request, int $userId): User
+    {
+        $tenantId = $this->getTenantId($request);
+
+        return User::where('tenant_id', $tenantId)
+            ->where('is_super_admin', false)
+            ->findOrFail($userId);
     }
 }
