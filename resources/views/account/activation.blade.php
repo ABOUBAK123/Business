@@ -45,41 +45,22 @@
                         <li>Utilisateurs: {{ $plan->max_users == -1 ? 'illimités' : $plan->max_users }}</li>
                     </ul>
 
-                    <form method="POST" action="{{ route('account.activation.store') }}" class="mt-5 space-y-3 activation-form" data-monthly-date="{{ now()->addMonth()->format('d/m/Y') }}" data-annual-date="{{ now()->addYear()->format('d/m/Y') }}">
-                        @csrf
-                        <input type="hidden" name="plan_id" value="{{ $plan->id }}">
-
-                        <div>
-                            <label class="block text-xs font-medium text-gray-600 mb-1">Cycle de paiement</label>
-                            <select name="billing_cycle" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
-                                <option value="monthly">Mensuel</option>
-                                <option value="annual">Annuel</option>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label class="block text-xs font-medium text-gray-600 mb-1">Méthode de paiement</label>
-                            <select name="payment_method" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" required>
-                                <option value="cash">Espèces</option>
-                                <option value="mobile_money">Mobile Money</option>
-                                <option value="card">Carte bancaire</option>
-                                <option value="bank_transfer">Virement bancaire</option>
-                            </select>
-                        </div>
-
-                        <div>
-                            <label class="block text-xs font-medium text-gray-600 mb-1">Référence paiement (optionnel)</label>
-                            <input type="text" name="payment_reference" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" placeholder="N° transaction, reçu, etc.">
-                        </div>
-
+                    <div class="mt-5 space-y-3">
                         <div class="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2 text-xs text-gray-600">
                             Prochaine échéance: <span class="font-semibold text-blue-700 activation-date">{{ now()->addMonth()->format('d/m/Y') }}</span>
                         </div>
 
-                        <button type="submit" class="w-full bg-blue-600 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-700">
-                            Réactiver avec ce forfait
+                        <button type="button"
+                                class="w-full bg-blue-600 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-700 flex items-center justify-center gap-2 open-payment-modal"
+                                data-plan-id="{{ $plan->id }}"
+                                data-plan-name="{{ $plan->name }}"
+                                data-monthly-price="{{ (float) $plan->monthly_price }}"
+                                data-annual-price="{{ (float) $plan->annual_price }}"
+                                data-monthly-date="{{ now()->addMonth()->format('d/m/Y') }}"
+                                data-annual-date="{{ now()->addYear()->format('d/m/Y') }}">
+                            <i class="fas fa-mobile-alt"></i> Paiement en ligne / Mobile Money
                         </button>
-                    </form>
+                    </div>
                 </div>
             @endforeach
         </div>
@@ -103,22 +84,136 @@
         </div>
     </div>
 </div>
+
+<div id="paymentModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/50 px-4">
+    <div class="w-full max-w-lg bg-white rounded-2xl shadow-xl overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
+            <div>
+                <h3 class="font-bold text-gray-900">Paiement en ligne / Mobile Money</h3>
+                <p class="text-xs text-gray-500">Confirmez le paiement pour réactiver le compte.</p>
+            </div>
+            <button type="button" id="closePaymentModal" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+
+        <form id="paymentModalForm" method="POST" action="{{ route('account.activation.store') }}" class="p-5 space-y-4">
+            @csrf
+            <input type="hidden" name="plan_id" id="modalPlanId">
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Forfait</label>
+                    <input type="text" id="modalPlanName" disabled class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Cycle</label>
+                    <select name="billing_cycle" id="modalBillingCycle" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
+                        <option value="monthly">Mensuel</option>
+                        <option value="annual">Annuel</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div class="rounded-xl bg-blue-50 border border-blue-100 p-4">
+                    <p class="text-xs text-blue-700 font-medium">Montant mensuel</p>
+                    <p class="text-2xl font-bold text-blue-900" id="modalMonthlyPrice">0 FCFA</p>
+                </div>
+                <div class="rounded-xl bg-indigo-50 border border-indigo-100 p-4">
+                    <p class="text-xs text-indigo-700 font-medium">Montant annuel</p>
+                    <p class="text-2xl font-bold text-indigo-900" id="modalAnnualPrice">0 FCFA</p>
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Méthode de paiement</label>
+                <select name="payment_method" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" required>
+                    <option value="mobile_money">Mobile Money</option>
+                    <option value="cash">Espèces</option>
+                    <option value="card">Carte bancaire</option>
+                    <option value="bank_transfer">Virement bancaire</option>
+                </select>
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Référence paiement</label>
+                <input type="text" name="payment_reference" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500" placeholder="Numéro de transaction ou reçu">
+            </div>
+
+            <div class="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2 text-xs text-gray-600">
+                Prochaine échéance: <span class="font-semibold text-blue-700" id="modalNextDate">—</span>
+            </div>
+
+            <button type="submit" class="w-full bg-blue-600 text-white py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-700">
+                Confirmer et réactiver le compte
+            </button>
+        </form>
+    </div>
+</div>
+
 @push('scripts')
 <script>
-document.querySelectorAll('.activation-form').forEach(form => {
-    const cycleSelect = form.querySelector('select[name="billing_cycle"]');
-    const dateLabel = form.querySelector('.activation-date');
+const paymentModal = document.getElementById('paymentModal');
+const paymentModalForm = document.getElementById('paymentModalForm');
+const modalPlanId = document.getElementById('modalPlanId');
+const modalPlanName = document.getElementById('modalPlanName');
+const modalBillingCycle = document.getElementById('modalBillingCycle');
+const modalMonthlyPrice = document.getElementById('modalMonthlyPrice');
+const modalAnnualPrice = document.getElementById('modalAnnualPrice');
+const modalNextDate = document.getElementById('modalNextDate');
+let activeButtonData = null;
 
-    const refreshDate = () => {
-        const nextDate = cycleSelect.value === 'annual'
-            ? form.dataset.annualDate
-            : form.dataset.monthlyDate;
+function formatCurrency(amount) {
+    return Math.round(amount).toLocaleString('fr-FR') + ' FCFA';
+}
 
-        dateLabel.textContent = nextDate;
-    };
+function refreshModalPricing() {
+    if (!activeButtonData) return;
 
-    cycleSelect.addEventListener('change', refreshDate);
-    refreshDate();
+    modalMonthlyPrice.textContent = formatCurrency(activeButtonData.monthlyPrice);
+    modalAnnualPrice.textContent = formatCurrency(activeButtonData.annualPrice);
+    modalNextDate.textContent = modalBillingCycle.value === 'annual'
+        ? activeButtonData.annualDate
+        : activeButtonData.monthlyDate;
+}
+
+document.querySelectorAll('.open-payment-modal').forEach(button => {
+    button.addEventListener('click', () => {
+        activeButtonData = {
+            planId: button.dataset.planId,
+            planName: button.dataset.planName,
+            monthlyPrice: parseFloat(button.dataset.monthlyPrice || '0'),
+            annualPrice: parseFloat(button.dataset.annualPrice || '0'),
+            monthlyDate: button.dataset.monthlyDate,
+            annualDate: button.dataset.annualDate,
+        };
+
+        modalPlanId.value = activeButtonData.planId;
+        modalPlanName.value = activeButtonData.planName;
+        modalBillingCycle.value = 'monthly';
+        refreshModalPricing();
+        paymentModal.classList.remove('hidden');
+        paymentModal.classList.add('flex');
+    });
+});
+
+modalBillingCycle.addEventListener('change', refreshModalPricing);
+
+document.getElementById('closePaymentModal').addEventListener('click', () => {
+    paymentModal.classList.add('hidden');
+    paymentModal.classList.remove('flex');
+});
+
+paymentModal.addEventListener('click', (event) => {
+    if (event.target === paymentModal) {
+        paymentModal.classList.add('hidden');
+        paymentModal.classList.remove('flex');
+    }
+});
+
+paymentModalForm.addEventListener('submit', () => {
+    document.getElementById('closePaymentModal').disabled = true;
 });
 </script>
 @endpush
