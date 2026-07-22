@@ -131,6 +131,7 @@ let cart = [];
 let pmIndex = 1;
 let searchResultsData = [];
 const searchEndpoint = @json(route('articles.search', [], false));
+const fallbackSearchEndpoint = '/sales/articles/search';
 const saleForm = document.getElementById('saleForm');
 
 // Search
@@ -194,28 +195,49 @@ searchInput.addEventListener('keydown', async function(e) {
 async function searchArticles(q) {
     const branchId = document.getElementById('branchSelect').value;
     try {
-        const r = await fetch(`${searchEndpoint}?q=${encodeURIComponent(q)}&branch_id=${branchId}`, {
-            headers: {
-                'Accept': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest',
-            },
-            credentials: 'same-origin',
-        });
+        const endpointsToTry = [searchEndpoint, fallbackSearchEndpoint]
+            .filter((value, index, array) => value && array.indexOf(value) === index);
 
-        if (r.redirected) {
-            throw new Error('session expiree, reconnectez-vous');
+        let response = null;
+        let lastError = null;
+
+        for (const endpoint of endpointsToTry) {
+            const candidate = await fetch(`${endpoint}?q=${encodeURIComponent(q)}&branch_id=${branchId}`, {
+                headers: {
+                    'Accept': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                credentials: 'same-origin',
+            });
+
+            if (candidate.redirected) {
+                lastError = new Error('session expiree, reconnectez-vous');
+                continue;
+            }
+
+            if (!candidate.ok) {
+                lastError = new Error(`HTTP ${candidate.status}`);
+                if (candidate.status === 401 || candidate.status === 403) {
+                    continue;
+                }
+                throw lastError;
+            }
+
+            const contentType = candidate.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+                lastError = new Error('reponse serveur non JSON');
+                continue;
+            }
+
+            response = candidate;
+            break;
         }
 
-        if (!r.ok) {
-            throw new Error(`HTTP ${r.status}`);
+        if (!response) {
+            throw lastError || new Error('endpoint indisponible');
         }
 
-        const contentType = r.headers.get('content-type') || '';
-        if (!contentType.includes('application/json')) {
-            throw new Error('reponse serveur non JSON');
-        }
-
-        const articles = await r.json();
+        const articles = await response.json();
         searchResultsData = Array.isArray(articles) ? articles : [];
         searchResults.innerHTML = searchResultsData.map(a => `
             <div class="flex items-center justify-between p-2 rounded-lg hover:bg-blue-50 cursor-pointer"
