@@ -191,38 +191,51 @@ searchInput.addEventListener('keydown', async function(e) {
     });
 });
 
-function searchArticles(q) {
+async function searchArticles(q) {
     const branchId = document.getElementById('branchSelect').value;
-    return fetch(`${searchEndpoint}?q=${encodeURIComponent(q)}&branch_id=${branchId}`)
-        .then(r => {
-            if (!r.ok) {
-                throw new Error(`HTTP ${r.status}`);
-            }
-
-            return r.json();
-        })
-        .then(articles => {
-            searchResultsData = Array.isArray(articles) ? articles : [];
-            searchResults.innerHTML = searchResultsData.map(a => `
-                <div class="flex items-center justify-between p-2 rounded-lg hover:bg-blue-50 cursor-pointer"
-                     onclick="addToCart(${JSON.stringify(a).replace(/"/g,'&quot;')})">
-                    <div>
-                        <span class="text-sm font-medium text-gray-800">${a.designation}</span>
-                        <span class="text-xs text-gray-400 ml-2">${a.reference || ''}</span>
-                    </div>
-                    <div class="text-right flex-shrink-0 ml-4">
-                        <span class="text-sm font-bold text-blue-700">${formatPrice(a.sale_price_ttc)}</span>
-                        <span class="text-xs text-gray-400 block">Stock: ${a.stock}</span>
-                    </div>
-                </div>
-            `).join('') || '<div class="text-center text-gray-400 text-sm py-3">Aucun article trouvé</div>';
-            searchResults.classList.remove('hidden');
-        })
-        .catch((error) => {
-            searchResultsData = [];
-            searchResults.classList.remove('hidden');
-            searchResults.innerHTML = `<div class="text-center text-red-500 text-sm py-3">Recherche indisponible (${error.message}).</div>`;
+    try {
+        const r = await fetch(`${searchEndpoint}?q=${encodeURIComponent(q)}&branch_id=${branchId}`, {
+            headers: {
+                'Accept': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+            credentials: 'same-origin',
         });
+
+        if (r.redirected) {
+            throw new Error('session expiree, reconnectez-vous');
+        }
+
+        if (!r.ok) {
+            throw new Error(`HTTP ${r.status}`);
+        }
+
+        const contentType = r.headers.get('content-type') || '';
+        if (!contentType.includes('application/json')) {
+            throw new Error('reponse serveur non JSON');
+        }
+
+        const articles = await r.json();
+        searchResultsData = Array.isArray(articles) ? articles : [];
+        searchResults.innerHTML = searchResultsData.map(a => `
+            <div class="flex items-center justify-between p-2 rounded-lg hover:bg-blue-50 cursor-pointer"
+                 onclick="addToCart(${JSON.stringify(a).replace(/"/g,'&quot;')})">
+                <div>
+                    <span class="text-sm font-medium text-gray-800">${a.designation}</span>
+                    <span class="text-xs text-gray-400 ml-2">${a.reference || ''}</span>
+                </div>
+                <div class="text-right flex-shrink-0 ml-4">
+                    <span class="text-sm font-bold text-blue-700">${formatPrice(a.sale_price_ttc)}</span>
+                    <span class="text-xs text-gray-400 block">Stock: ${a.stock}</span>
+                </div>
+            </div>
+        `).join('') || '<div class="text-center text-gray-400 text-sm py-3">Aucun article trouvé</div>';
+        searchResults.classList.remove('hidden');
+    } catch (error) {
+        searchResultsData = [];
+        searchResults.classList.remove('hidden');
+        searchResults.innerHTML = `<div class="text-center text-red-500 text-sm py-3">Recherche indisponible (${error.message}).</div>`;
+    }
 }
 
 function addToCart(article) {
