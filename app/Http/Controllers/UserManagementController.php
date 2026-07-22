@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Branch;
+use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -41,7 +42,11 @@ class UserManagementController extends Controller
 
     public function store(Request $request)
     {
-        $tenant = app('currentTenant');
+        $tenant = $this->resolveCurrentTenant($request);
+        if (!$tenant) {
+            return back()->with('error', 'Contexte de boutique introuvable. Reconnectez-vous puis reessayez.');
+        }
+
         $tenantId = $this->getTenantId($request);
 
         if (!$tenant->canAddUser()) {
@@ -132,9 +137,29 @@ class UserManagementController extends Controller
 
     private function getTenantId(Request $request): int
     {
-        return (int) (app()->bound('currentTenant')
+        $tenantId = (int) (app()->bound('currentTenant')
             ? app('currentTenant')->id
             : $request->user()->tenant_id);
+
+        if ($tenantId <= 0) {
+            abort(403, 'Contexte boutique introuvable.');
+        }
+
+        return $tenantId;
+    }
+
+    private function resolveCurrentTenant(Request $request): ?Tenant
+    {
+        if (app()->bound('currentTenant')) {
+            return app('currentTenant');
+        }
+
+        $user = $request->user();
+        if (!$user || !$user->tenant_id) {
+            return null;
+        }
+
+        return Tenant::withoutGlobalScopes()->find($user->tenant_id);
     }
 
     private function findTenantUserOrFail(Request $request, int $userId): User
