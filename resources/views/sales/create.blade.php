@@ -287,19 +287,14 @@ function addToCart(article) {
         return null;
     }
 
-    const existing = cart.find(i => i.id === article.id);
-    let rowIndex = null;
-    if (existing) {
-        if (existing.quantity >= availableStock) {
-            alert(`Quantite maximale atteinte (stock: ${availableStock}).`);
-            return null;
-        }
-        existing.quantity++;
-        rowIndex = cart.findIndex(i => i.id === article.id);
-    } else {
-        cart.push({ ...article, stock: availableStock, quantity: 1, discount: 0 });
-        rowIndex = cart.length - 1;
+    const sameArticleCount = cart.filter(i => i.id === article.id).length;
+    if (sameArticleCount >= availableStock) {
+        alert(`Quantite maximale atteinte (stock: ${availableStock}).`);
+        return null;
     }
+
+    cart.push({ ...article, stock: availableStock, quantity: 1, discount: 0 });
+    const rowIndex = cart.length - 1;
     searchInput.value = '';
     searchResultsData = [];
     selectedSearchArticleIds.clear();

@@ -81,14 +81,32 @@ class SaleController extends Controller
             $taxAmount = 0;
             $discountAmount = 0;
 
-            $articleIds = collect($request->items)->pluck('article_id')->map(fn($id) => (int) $id)->unique()->values();
+            $items = collect($request->items)
+                ->map(fn ($item) => [
+                    'article_id' => (int) $item['article_id'],
+                    'quantity' => (int) $item['quantity'],
+                    'unit_price_ttc' => (float) $item['unit_price_ttc'],
+                    'discount_amount' => (float) ($item['discount_amount'] ?? 0),
+                ])
+                ->values();
+
+            $itemsByArticle = $items->groupBy('article_id')->map(function ($group) {
+                return [
+                    'article_id' => (int) $group->first()['article_id'],
+                    'quantity' => (int) $group->sum('quantity'),
+                    'unit_price_ttc' => (float) $group->first()['unit_price_ttc'],
+                    'discount_amount' => (float) $group->sum('discount_amount'),
+                ];
+            })->values();
+
+            $articleIds = $itemsByArticle->pluck('article_id')->unique()->values();
             $branchStocks = ArticleBranchStock::where('branch_id', $request->branch_id)
                 ->whereIn('article_id', $articleIds)
                 ->lockForUpdate()
                 ->get()
                 ->keyBy('article_id');
 
-            foreach ($request->items as $index => $item) {
+            foreach ($itemsByArticle as $index => $item) {
                 $requiredQty = (int) $item['quantity'];
                 $availableQty = (int) optional($branchStocks->get((int) $item['article_id']))->quantity;
 
@@ -99,12 +117,12 @@ class SaleController extends Controller
                 }
             }
 
-            foreach ($request->items as $item) {
+            foreach ($items as $item) {
                 $article = Article::findOrFail($item['article_id']);
-                $itemTotal = ($item['unit_price_ttc'] * $item['quantity']) - ($item['discount_amount'] ?? 0);
+                $itemTotal = ($item['unit_price_ttc'] * $item['quantity']) - $item['discount_amount'];
                 $subtotalHt += $itemTotal / (1 + $article->tax_rate / 100);
                 $taxAmount += $itemTotal - ($itemTotal / (1 + $article->tax_rate / 100));
-                $discountAmount += $item['discount_amount'] ?? 0;
+                $discountAmount += $item['discount_amount'];
             }
 
             $totalTtc = $subtotalHt + $taxAmount;
@@ -136,7 +154,7 @@ class SaleController extends Controller
                 'notes' => $request->notes,
             ]);
 
-            foreach ($request->items as $item) {
+            foreach ($items as $item) {
                 $article = Article::find($item['article_id']);
                 SaleItem::create([
                     'sale_id' => $sale->id,
@@ -145,8 +163,8 @@ class SaleController extends Controller
                     'unit' => $article->unit,
                     'quantity' => $item['quantity'],
                     'unit_price_ttc' => $item['unit_price_ttc'],
-                    'discount_amount' => $item['discount_amount'] ?? 0,
-                    'total_ttc' => ($item['unit_price_ttc'] * $item['quantity']) - ($item['discount_amount'] ?? 0),
+                    'discount_amount' => $item['discount_amount'],
+                    'total_ttc' => ($item['unit_price_ttc'] * $item['quantity']) - $item['discount_amount'],
                 ]);
 
                 $stock = ArticleBranchStock::firstOrCreate(
