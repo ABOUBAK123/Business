@@ -75,8 +75,8 @@ class UserManagementController extends Controller
             'name' => $data['name'],
             'email' => $data['email'],
             'password' => Hash::make($data['password']),
-            'phone' => $data['phone'],
-            'branch_id' => $data['branch_id'],
+            'phone' => $data['phone'] ?? null,
+            'branch_id' => $data['branch_id'] ?? null,
             'is_active' => true,
         ]);
 
@@ -119,8 +119,8 @@ class UserManagementController extends Controller
 
         $user->update([
             'name' => $data['name'],
-            'phone' => $data['phone'],
-            'branch_id' => $data['branch_id'],
+            'phone' => $data['phone'] ?? null,
+            'branch_id' => $data['branch_id'] ?? null,
             'is_active' => $data['is_active'] ?? true,
         ]);
 

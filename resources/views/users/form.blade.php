@@ -1,6 +1,10 @@
+@php
+    $isEdit = isset($user) && $user->exists;
+@endphp
+
 @extends('layouts.app')
-@section('title', isset($user) ? 'Modifier utilisateur' : 'Nouvel utilisateur')
-@section('page-title', isset($user) ? 'Modifier : ' . $user->name : 'Nouvel utilisateur')
+@section('title', $isEdit ? 'Modifier utilisateur' : 'Nouvel utilisateur')
+@section('page-title', $isEdit ? 'Modifier : ' . $user->name : 'Nouvel utilisateur')
 
 @section('content')
 <div class="max-w-lg">
@@ -13,9 +17,9 @@
         </div>
         @endif
 
-        <form method="POST" action="{{ isset($user) ? route('users.update', $user) : route('users.store') }}">
+        <form method="POST" action="{{ $isEdit ? route('users.update', $user) : route('users.store') }}">
             @csrf
-            @if(isset($user)) @method('PUT') @endif
+            @if($isEdit) @method('PUT') @endif
 
             <div class="space-y-4">
                 <div>
@@ -34,7 +38,7 @@
                            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
                 </div>
 
-                @if(!isset($user))
+                @if(!$isEdit)
                 <div class="grid grid-cols-2 gap-3">
                     <div>
                         <label class="block text-xs font-medium text-gray-600 mb-1">Mot de passe *</label>
@@ -87,7 +91,7 @@
                     </select>
                 </div>
 
-                @if(isset($user) && $user->id !== auth()->id())
+                @if($isEdit && $user->id !== auth()->id())
                 <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
                     <input type="checkbox" name="is_active" value="1"
                            {{ old('is_active', $user->is_active ?? true) ? 'checked' : '' }}
@@ -99,7 +103,7 @@
 
             <div class="flex gap-3 mt-6">
                 <button type="submit" class="bg-blue-600 text-white px-6 py-2.5 rounded-lg text-sm font-semibold hover:bg-blue-700">
-                    {{ isset($user) ? 'Enregistrer' : 'Créer l\'utilisateur' }}
+                    {{ $isEdit ? 'Enregistrer' : 'Créer l\'utilisateur' }}
                 </button>
                 <a href="{{ route('users.index') }}" class="px-6 py-2.5 border border-gray-200 text-gray-600 rounded-lg text-sm hover:bg-gray-50">
                     Annuler
