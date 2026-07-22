@@ -12,6 +12,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SaleController;
+use App\Http\Controllers\AccountActivationController;
 use App\Http\Controllers\TenantRegistrationController;
 use App\Http\Controllers\ArticleImportController;
 use App\Http\Controllers\CashClosingController;
@@ -37,6 +38,12 @@ require __DIR__.'/auth.php';
 
 // Subscription expired page
 Route::get('/subscription/expired', fn() => view('subscription.expired'))->name('subscription.expired');
+
+// Account activation / renewal
+Route::middleware(['auth'])->group(function () {
+    Route::get('/account/activation', [AccountActivationController::class, 'index'])->name('account.activation.index');
+    Route::post('/account/activation', [AccountActivationController::class, 'store'])->name('account.activation.store');
+});
 
 // ─── Super Admin routes ───────────────────────────────────────────────────────
 Route::middleware(['auth', 'super.admin'])->prefix('super-admin')->name('super-admin.')->group(function () {

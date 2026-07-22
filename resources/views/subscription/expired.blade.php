@@ -32,9 +32,13 @@
             @endauth
 
             <div class="space-y-2">
-                <a href="{{ route('plans') }}"
+                <a href="{{ route('account.activation.index') }}"
                    class="block w-full bg-blue-600 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-blue-700">
-                    Voir les plans
+                    Réactiver mon compte
+                </a>
+                <a href="{{ route('plans') }}"
+                   class="block w-full bg-gray-100 text-gray-700 py-2.5 rounded-xl text-sm font-semibold hover:bg-gray-200">
+                    Voir les plans publics
                 </a>
                 <form method="POST" action="{{ route('logout') }}">
                     @csrf

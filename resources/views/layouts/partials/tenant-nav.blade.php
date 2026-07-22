@@ -5,6 +5,13 @@
     <i class="fas fa-tachometer-alt w-4"></i> Tableau de bord
 </a>
 
+@if(auth()->user()->hasRole('proprietaire'))
+<a href="{{ route('account.activation.index') }}"
+   class="flex items-center gap-3 px-3 py-2 rounded-lg text-blue-100 hover:bg-white/10 {{ request()->routeIs('account.activation.*') ? 'bg-white/20 font-semibold' : '' }}">
+    <i class="fas fa-credit-card w-4"></i> Activation de compte
+</a>
+@endif
+
 <div class="pt-3 pb-1 px-3 text-blue-400 text-xs uppercase tracking-wider">Ventes</div>
 
 <a href="{{ route('sales.create') }}"
