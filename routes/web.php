@@ -123,8 +123,8 @@ Route::middleware(['auth', 'tenant.active'])->group(function () {
     Route::get('sales/{sale}', [SaleController::class, 'show'])->name('sales.show');
     Route::get('sales/{sale}/receipt', [SaleController::class, 'receipt'])->name('sales.receipt');
     Route::get('sales/{sale}/invoice', [SaleController::class, 'invoice'])->name('sales.invoice');
-    Route::get('api/articles/search', [SaleController::class, 'searchArticle'])->name('articles.search');
-    Route::post('api/sales/scan-qr', [SaleController::class, 'scanQr'])->name('sales.scan-qr');
+    Route::get('sales/articles/search', [SaleController::class, 'searchArticle'])->name('articles.search');
+    Route::post('sales/scan-qr', [SaleController::class, 'scanQr'])->name('sales.scan-qr');
 
     // Branches
     Route::resource('branches', BranchController::class)->only(['index', 'create', 'store', 'edit', 'update']);
