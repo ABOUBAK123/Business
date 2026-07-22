@@ -27,6 +27,14 @@
                        class="w-full border border-gray-200 rounded-lg pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
             </div>
+            <div class="mt-2 flex items-center justify-between gap-3">
+                <p class="text-xs text-gray-500">Vous pouvez sélectionner plusieurs articles avant de les ajouter au panier.</p>
+                <button type="button" id="addSelectedArticles"
+                        class="text-xs font-semibold text-blue-600 hover:text-blue-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                        disabled>
+                    Ajouter la sélection
+                </button>
+            </div>
             <div id="searchResults" class="mt-2 space-y-1 max-h-56 overflow-y-auto hidden"></div>
         </div>
 
@@ -130,6 +138,7 @@
 let cart = [];
 let pmIndex = 1;
 let searchResultsData = [];
+let selectedSearchArticleIds = new Set();
 const searchEndpoint = @json(route('articles.search', [], false));
 const fallbackSearchEndpoint = '/sales/articles/search';
 const saleForm = document.getElementById('saleForm');
@@ -150,6 +159,8 @@ searchInput.addEventListener('input', function() {
     const q = this.value.trim();
     if (q.length < 2) {
         searchResultsData = [];
+        selectedSearchArticleIds.clear();
+        updateBulkAddState();
         searchResults.classList.add('hidden');
         return;
     }
@@ -239,22 +250,31 @@ async function searchArticles(q) {
 
         const articles = await response.json();
         searchResultsData = Array.isArray(articles) ? articles : [];
+        selectedSearchArticleIds.clear();
         searchResults.innerHTML = searchResultsData.map(a => `
-            <div class="flex items-center justify-between p-2 rounded-lg hover:bg-blue-50 cursor-pointer"
-                 onclick="addToCart(${JSON.stringify(a).replace(/"/g,'&quot;')})">
+            <label class="flex items-center justify-between gap-3 p-2 rounded-lg hover:bg-blue-50 cursor-pointer">
                 <div>
                     <span class="text-sm font-medium text-gray-800">${a.designation}</span>
                     <span class="text-xs text-gray-400 ml-2">${a.reference || ''}</span>
                 </div>
-                <div class="text-right flex-shrink-0 ml-4">
-                    <span class="text-sm font-bold text-blue-700">${formatPrice(a.sale_price_ttc)}</span>
-                    <span class="text-xs text-gray-400 block">Stock: ${a.stock}</span>
+                <div class="flex items-center gap-3 flex-shrink-0 ml-4">
+                    <div class="text-right">
+                        <span class="text-sm font-bold text-blue-700">${formatPrice(a.sale_price_ttc)}</span>
+                        <span class="text-xs text-gray-400 block">Stock: ${a.stock}</span>
+                    </div>
+                    <input type="checkbox"
+                           class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 search-article-checkbox"
+                           data-article-id="${a.id}">
                 </div>
-            </div>
+            </label>
         `).join('') || '<div class="text-center text-gray-400 text-sm py-3">Aucun article trouvé</div>';
         searchResults.classList.remove('hidden');
+        syncSearchSelectionListeners();
+        updateBulkAddState();
     } catch (error) {
         searchResultsData = [];
+        selectedSearchArticleIds.clear();
+        updateBulkAddState();
         searchResults.classList.remove('hidden');
         searchResults.innerHTML = `<div class="text-center text-red-500 text-sm py-3">Recherche indisponible (${error.message}).</div>`;
     }
@@ -282,15 +302,49 @@ function addToCart(article) {
     }
     searchInput.value = '';
     searchResultsData = [];
+    selectedSearchArticleIds.clear();
+    updateBulkAddState();
     searchResults.classList.add('hidden');
     renderCart();
     return rowIndex;
 }
 
+function syncSearchSelectionListeners() {
+    document.querySelectorAll('.search-article-checkbox').forEach(checkbox => {
+        checkbox.addEventListener('change', () => {
+            const articleId = parseInt(checkbox.dataset.articleId, 10);
+            if (checkbox.checked) {
+                selectedSearchArticleIds.add(articleId);
+            } else {
+                selectedSearchArticleIds.delete(articleId);
+            }
+            updateBulkAddState();
+        });
+    });
+}
+
+function updateBulkAddState() {
+    const bulkButton = document.getElementById('addSelectedArticles');
+    if (!bulkButton) return;
+    bulkButton.disabled = selectedSearchArticleIds.size === 0;
+}
+
+document.getElementById('addSelectedArticles').addEventListener('click', () => {
+    if (!searchResultsData.length || !selectedSearchArticleIds.size) return;
+
+    const articlesToAdd = searchResultsData.filter(article => selectedSearchArticleIds.has(article.id));
+    articlesToAdd.forEach(article => addToCart(article));
+    selectedSearchArticleIds.clear();
+    updateBulkAddState();
+    searchResults.classList.add('hidden');
+    searchInput.value = '';
+});
+
 function renderCart() {
     const el = document.getElementById('cartItems');
     const empty = document.getElementById('emptyCart');
-    document.getElementById('cartCount').textContent = cart.length + ' article(s)';
+    const totalPieces = cart.reduce((sum, item) => sum + (parseInt(item.quantity, 10) || 0), 0);
+    document.getElementById('cartCount').textContent = totalPieces + ' pièce(s)';
 
     if (cart.length === 0) {
         el.innerHTML = '';
@@ -417,6 +471,8 @@ document.getElementById('branchSelect').addEventListener('change', function() {
     renderCart();
     searchInput.value = '';
     searchResultsData = [];
+    selectedSearchArticleIds.clear();
+    updateBulkAddState();
     searchResults.classList.add('hidden');
 });
 

@@ -29,6 +29,13 @@
                     <span class="text-red-600 font-medium capitalize">{{ auth()->user()->tenant?->status }}</span>
                 </div>
             </div>
+
+            @if(auth()->user()->isOwner())
+            <a href="{{ route('account.activation.index') }}"
+               class="block w-full bg-blue-600 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-blue-700 mb-3">
+                Ouvrir l’activation de compte
+            </a>
+            @endif
             @endauth
 
             <div class="space-y-2">
