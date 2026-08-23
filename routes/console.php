@@ -7,11 +7,96 @@ use App\Models\Tenant;
 use App\Services\Payments\MtnMomoCollectionGateway;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
 })->purpose('Display an inspiring quote');
+
+Artisan::command('mtn:provision-sandbox
+    {--subscription-key= : Cle d abonnement Collection (sinon MTN_MOMO_SUBSCRIPTION_KEY)}
+    {--callback-host= : Hote de callback a declarer (sinon deduit de APP_URL)}
+    {--base-url=https://sandbox.momodeveloper.mtn.com : URL de base sandbox}', function () {
+    $subscriptionKey = $this->option('subscription-key') ?: config('services.mtn_momo.subscription_key');
+    if (! $subscriptionKey) {
+        $this->error('Aucune subscription key fournie. Utilisez --subscription-key=... ou definissez MTN_MOMO_SUBSCRIPTION_KEY.');
+        return self::FAILURE;
+    }
+
+    $callbackHost = $this->option('callback-host') ?: parse_url((string) config('app.url'), PHP_URL_HOST);
+    if (! $callbackHost) {
+        $this->error('Impossible de determiner le callback host. Utilisez --callback-host=votredomaine.com');
+        return self::FAILURE;
+    }
+
+    $baseUrl = rtrim((string) $this->option('base-url'), '/');
+    $referenceId = (string) Str::uuid();
+
+    $this->info("Creation de l API user (X-Reference-Id: {$referenceId})...");
+
+    $createResponse = Http::acceptJson()
+        ->withHeaders([
+            'Ocp-Apim-Subscription-Key' => $subscriptionKey,
+            'X-Reference-Id' => $referenceId,
+            'Content-Type' => 'application/json',
+        ])
+        ->post($baseUrl . '/v1_0/apiuser', [
+            'providerCallbackHost' => $callbackHost,
+        ]);
+
+    if ($createResponse->status() === 409) {
+        $this->error("Conflit: le X-Reference-Id {$referenceId} est deja utilise (RESOURCE_ALREADY_EXIST). Relancez la commande pour generer un nouveau UUID.");
+        $this->line($createResponse->body());
+        return self::FAILURE;
+    }
+
+    if ($createResponse->status() !== 201) {
+        $this->error('Echec de creation de l API user: HTTP ' . $createResponse->status());
+        $this->line($createResponse->body());
+        return self::FAILURE;
+    }
+
+    $this->info('API user cree. Verification via GET /v1_0/apiuser/{X-Reference-Id}...');
+
+    $checkResponse = Http::acceptJson()
+        ->withHeaders(['Ocp-Apim-Subscription-Key' => $subscriptionKey])
+        ->get($baseUrl . "/v1_0/apiuser/{$referenceId}");
+
+    if (! $checkResponse->successful()) {
+        $this->error('API user introuvable apres creation: HTTP ' . $checkResponse->status());
+        $this->line($checkResponse->body());
+        return self::FAILURE;
+    }
+
+    $this->info('API user confirme. Generation de la cle API...');
+
+    $keyResponse = Http::acceptJson()
+        ->withHeaders([
+            'Ocp-Apim-Subscription-Key' => $subscriptionKey,
+        ])
+        ->post($baseUrl . "/v1_0/apiuser/{$referenceId}/apikey");
+
+    if ($keyResponse->status() !== 201 || ! $keyResponse->json('apiKey')) {
+        $this->error('Echec de generation de la cle API: HTTP ' . $keyResponse->status());
+        $this->line($keyResponse->body());
+        return self::FAILURE;
+    }
+
+    $apiKey = $keyResponse->json('apiKey');
+
+    $this->newLine();
+    $this->info('Provisioning reussi. Valeurs a copier dans .env (ou dans Super Admin > Parametres > Mobile Money) :');
+    $this->table(['Variable', 'Valeur'], [
+        ['MTN_MOMO_API_USER_ID', $referenceId],
+        ['MTN_MOMO_API_KEY', $apiKey],
+        ['MTN_MOMO_SUBSCRIPTION_KEY', $subscriptionKey],
+        ['MTN_MOMO_BASE_URL', $baseUrl],
+        ['MTN_MOMO_TARGET_ENVIRONMENT', 'sandbox'],
+    ]);
+
+    return self::SUCCESS;
+})->purpose('Provisionner un API user + API key MTN MoMo sandbox (creation en 2 etapes)');
 
 Artisan::command('mtn:test-sandbox
     {--scenario=* : Noms des scenarios a executer}
