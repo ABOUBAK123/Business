@@ -211,7 +211,7 @@ class ArticleController extends Controller
             'quantity' => $data['quantity'] - $stockBefore,
             'stock_before' => $stockBefore,
             'stock_after' => $data['quantity'],
-            'notes' => $data['notes'],
+            'notes' => $data['notes'] ?? null,
         ]);
 
         return back()->with('success', 'Stock ajusté.');
