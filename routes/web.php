@@ -67,6 +67,7 @@ Route::middleware(['auth', 'super.admin'])->prefix('super-admin')->name('super-a
     Route::resource('commissioners', CommissionerManagementController::class)->only(['index', 'create', 'store', 'destroy']);
     Route::get('settings', [SettingController::class, 'index'])->name('settings.index');
     Route::post('settings/{group}', [SettingController::class, 'update'])->name('settings.update');
+    Route::post('settings/email/test', [SettingController::class, 'testEmail'])->name('settings.email.test');
 });
 
 // ─── Commissioner routes ──────────────────────────────────────────────────────

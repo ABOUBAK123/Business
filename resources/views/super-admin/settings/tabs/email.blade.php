@@ -117,6 +117,23 @@
             </button>
         </div>
     </form>
+
+    {{-- Test d'envoi — utilise la configuration actuellement enregistrée --}}
+    <div class="mt-4 pt-4 border-t border-gray-100">
+        <p class="text-xs font-medium text-gray-600 mb-2">Tester l'envoi (avec la configuration enregistrée ci-dessus)</p>
+        <form method="POST" action="{{ route('super-admin.settings.email.test') }}" class="flex gap-2">
+            @csrf
+            <input type="email" name="test_email" required
+                   value="{{ old('test_email', auth()->user()->email ?? '') }}"
+                   placeholder="destinataire@example.com"
+                   class="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500">
+            <button type="submit"
+                    class="flex-shrink-0 border border-purple-200 text-purple-700 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-purple-50 transition">
+                <i class="fas fa-paper-plane mr-1.5"></i> Tester l'envoi
+            </button>
+        </form>
+        <p class="text-[11px] text-gray-400 mt-1">Enregistre d'abord tes modifications ci-dessus, puis teste avec l'adresse de ton choix.</p>
+    </div>
 </div>
 
 @push('scripts')
