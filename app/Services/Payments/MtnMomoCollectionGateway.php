@@ -76,11 +76,11 @@ class MtnMomoCollectionGateway
                         'partyId' => $normalizedPhone,
                     ],
                     'payerMessage' => 'Renouvellement abonnement boutique',
-                    'payeeNote' => 'Subscription payment #' . $payment->id,
+                    'payeeNote' => 'Subscription payment ' . $payment->id,
                 ]);
         });
 
-        if (! $requestResponse || ! in_array($requestResponse->status(), [200, 201, 202], true)) {
+        if (! $requestResponse || $requestResponse->status() !== 202) {
             return [
                 'success' => false,
                 'message' => 'La demande de paiement MTN a ete refusee.',
@@ -165,6 +165,7 @@ class MtnMomoCollectionGateway
                 ->withHeaders([
                     'Ocp-Apim-Subscription-Key' => $config['subscription_key'],
                 ])
+                ->withOptions(['body' => ''])
                 ->post(rtrim($config['base_url'], '/') . '/collection/token/');
         });
 
