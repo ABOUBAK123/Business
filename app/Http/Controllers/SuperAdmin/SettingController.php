@@ -7,11 +7,14 @@ use App\Models\Setting;
 use App\Models\Tenant;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
 
 class SettingController extends Controller
 {
     private const GROUPS = ['sms', 'whatsapp', 'email', 'mobile_money', 'code_article'];
+
+    private const MOBILE_MONEY_PROVIDERS = ['orange_money', 'mtn_momo', 'wave', 'moov_money'];
 
     public function index(Request $request): View
     {
@@ -85,11 +88,38 @@ class SettingController extends Controller
             $data[$key] = $request->boolean($key) ? '1' : '0';
         }
 
+        if ($group === 'mobile_money') {
+            $this->handleProviderLogoUploads($request);
+        }
+
         Setting::bulkSet($data, $group, $secrets);
 
         return redirect()
             ->route('super-admin.settings.index', ['tab' => $group])
             ->with('success', 'Configuration ' . $this->groupLabel($group) . ' enregistrée.');
+    }
+
+    private function handleProviderLogoUploads(Request $request): void
+    {
+        foreach (self::MOBILE_MONEY_PROVIDERS as $provider) {
+            $field = "{$provider}_logo";
+
+            if (! $request->hasFile($field)) {
+                continue;
+            }
+
+            $request->validate([
+                $field => 'image|mimes:png,jpg,jpeg,svg,webp|max:1024',
+            ]);
+
+            $previousPath = Setting::get("{$provider}_logo_path");
+            if ($previousPath) {
+                Storage::disk('public')->delete($previousPath);
+            }
+
+            $path = $request->file($field)->store('payment-logos', 'public');
+            Setting::set("{$provider}_logo_path", $path, 'mobile_money', false);
+        }
     }
 
     private function secretKeys(string $group): array

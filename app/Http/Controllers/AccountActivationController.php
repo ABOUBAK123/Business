@@ -456,29 +456,40 @@ class AccountActivationController extends Controller
                 'description' => 'Paiement via Orange Money',
                 'enabled' => Setting::get('orange_money_enabled', '1') === '1',
                 'badge' => 'Orange',
+                'logo_url' => $this->providerLogoUrl('orange_money_logo_path'),
             ],
             'mtn_momo' => [
                 'label' => 'MTN Mobile Money',
                 'description' => 'Paiement via MTN MoMo',
                 'enabled' => Setting::get('mtn_momo_enabled', '1') === '1',
                 'badge' => 'MTN',
+                'logo_url' => $this->providerLogoUrl('mtn_momo_logo_path'),
             ],
             'wave' => [
                 'label' => 'Wave',
                 'description' => 'Paiement via Wave',
                 'enabled' => Setting::get('wave_enabled', '1') === '1',
                 'badge' => 'Wave',
+                'logo_url' => $this->providerLogoUrl('wave_logo_path'),
             ],
             'moov_money' => [
                 'label' => 'Moov Money',
                 'description' => 'Paiement via Moov Money',
                 'enabled' => Setting::get('moov_money_enabled', '1') === '1',
                 'badge' => 'Moov',
+                'logo_url' => $this->providerLogoUrl('moov_money_logo_path'),
             ],
         ];
 
         $enabled = array_filter($methods, static fn (array $method) => $method['enabled']);
 
         return $enabled !== [] ? $enabled : $methods;
+    }
+
+    private function providerLogoUrl(string $settingKey): ?string
+    {
+        $path = Setting::get($settingKey);
+
+        return $path ? asset('storage/' . $path) : null;
     }
 }

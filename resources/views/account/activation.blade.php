@@ -141,7 +141,11 @@
                                     <div class="text-sm font-semibold text-gray-800">{{ $method['label'] }}</div>
                                     <div class="text-xs text-gray-500 mt-0.5">{{ $method['description'] }}</div>
                                 </div>
-                                <span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-700">{{ $method['badge'] }}</span>
+                                @if($method['logo_url'] ?? null)
+                                    <img src="{{ $method['logo_url'] }}" alt="{{ $method['label'] }}" class="w-8 h-8 rounded-lg object-cover flex-shrink-0">
+                                @else
+                                    <span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-[11px] font-semibold text-gray-700">{{ $method['badge'] }}</span>
+                                @endif
                             </div>
                         </label>
                     @endforeach

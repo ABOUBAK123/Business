@@ -3,8 +3,12 @@
     {{-- ── Orange Money ─────────────────────────────────────────────────── --}}
     <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
         <div class="flex items-center gap-3 mb-5">
-            <div class="w-9 h-9 rounded-lg flex items-center justify-center" style="background:#ff6600">
-                <i class="fas fa-mobile-alt text-white"></i>
+            <div class="w-9 h-9 rounded-lg flex items-center justify-center overflow-hidden" style="background:#ff6600">
+                @if($settings['orange_money_logo_path'] ?? null)
+                    <img src="{{ asset('storage/'.$settings['orange_money_logo_path']) }}" alt="Orange Money" class="w-full h-full object-cover">
+                @else
+                    <i class="fas fa-mobile-alt text-white"></i>
+                @endif
             </div>
             <div>
                 <h3 class="text-sm font-semibold text-gray-800">Orange Money</h3>
@@ -12,7 +16,7 @@
             </div>
         </div>
 
-        <form method="POST" action="{{ route('super-admin.settings.update', 'mobile_money') }}" class="space-y-4">
+        <form method="POST" action="{{ route('super-admin.settings.update', 'mobile_money') }}" enctype="multipart/form-data" class="space-y-4">
             @csrf
             {{-- hidden: only Orange keys in this form --}}
             <input type="hidden" name="_provider" value="orange_money">
@@ -68,6 +72,12 @@
                        value="{{ $settings['orange_money_merchant_id'] ?? '' }}"
                        class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
             </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Logo</label>
+                <input type="file" name="orange_money_logo" accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                       class="w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100">
+                <p class="text-[11px] text-gray-400 mt-1">PNG, JPG, SVG ou WebP — 1 Mo max. Remplace l'icône par défaut.</p>
+            </div>
 
             <div class="pt-3 border-t border-gray-100 flex justify-end">
                 <button type="submit"
@@ -82,8 +92,12 @@
     {{-- ── MTN MoMo ──────────────────────────────────────────────────────── --}}
     <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
         <div class="flex items-center gap-3 mb-5">
-            <div class="w-9 h-9 bg-yellow-400 rounded-lg flex items-center justify-center">
-                <i class="fas fa-mobile-alt text-gray-900"></i>
+            <div class="w-9 h-9 bg-yellow-400 rounded-lg flex items-center justify-center overflow-hidden">
+                @if($settings['mtn_momo_logo_path'] ?? null)
+                    <img src="{{ asset('storage/'.$settings['mtn_momo_logo_path']) }}" alt="MTN MoMo" class="w-full h-full object-cover">
+                @else
+                    <i class="fas fa-mobile-alt text-gray-900"></i>
+                @endif
             </div>
             <div>
                 <h3 class="text-sm font-semibold text-gray-800">MTN Mobile Money</h3>
@@ -91,7 +105,7 @@
             </div>
         </div>
 
-        <form method="POST" action="{{ route('super-admin.settings.update', 'mobile_money') }}" class="space-y-4">
+        <form method="POST" action="{{ route('super-admin.settings.update', 'mobile_money') }}" enctype="multipart/form-data" class="space-y-4">
             @csrf
             <input type="hidden" name="_provider" value="mtn_momo">
             <input type="hidden" name="orange_money_enabled"    value="{{ $settings['orange_money_enabled']    ?? '0' }}">
@@ -170,6 +184,12 @@
                        placeholder="https://sandbox.momodeveloper.mtn.com">
                 <p class="text-[11px] text-gray-400 mt-1">Callback a configurer coté MTN: {{ route('payment.mtn.notify') }}</p>
             </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Logo</label>
+                <input type="file" name="mtn_momo_logo" accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                       class="w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-yellow-50 file:text-yellow-800 hover:file:bg-yellow-100">
+                <p class="text-[11px] text-gray-400 mt-1">PNG, JPG, SVG ou WebP — 1 Mo max. Remplace l'icône par défaut.</p>
+            </div>
 
             <div class="pt-3 border-t border-gray-100 flex justify-end">
                 <button type="submit"
@@ -183,8 +203,12 @@
     {{-- ── Wave ──────────────────────────────────────────────────────────── --}}
     <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
         <div class="flex items-center gap-3 mb-5">
-            <div class="w-9 h-9 bg-blue-500 rounded-lg flex items-center justify-center">
-                <i class="fas fa-water text-white"></i>
+            <div class="w-9 h-9 bg-blue-500 rounded-lg flex items-center justify-center overflow-hidden">
+                @if($settings['wave_logo_path'] ?? null)
+                    <img src="{{ asset('storage/'.$settings['wave_logo_path']) }}" alt="Wave" class="w-full h-full object-cover">
+                @else
+                    <i class="fas fa-water text-white"></i>
+                @endif
             </div>
             <div>
                 <h3 class="text-sm font-semibold text-gray-800">Wave</h3>
@@ -192,7 +216,7 @@
             </div>
         </div>
 
-        <form method="POST" action="{{ route('super-admin.settings.update', 'mobile_money') }}" class="space-y-4">
+        <form method="POST" action="{{ route('super-admin.settings.update', 'mobile_money') }}" enctype="multipart/form-data" class="space-y-4">
             @csrf
             <input type="hidden" name="_provider" value="wave">
             <input type="hidden" name="orange_money_enabled"    value="{{ $settings['orange_money_enabled']    ?? '0' }}">
@@ -251,6 +275,12 @@
                     </div>
                     <p class="text-[11px] text-gray-400 mt-1">Webhook à configurer côté Wave : {{ route('payment.wave.notify') }}</p>
                 </div>
+                <div class="col-span-2">
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Logo</label>
+                    <input type="file" name="wave_logo" accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                           class="w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                    <p class="text-[11px] text-gray-400 mt-1">PNG, JPG, SVG ou WebP — 1 Mo max. Remplace l'icône par défaut.</p>
+                </div>
             </div>
 
             <div class="pt-3 border-t border-gray-100 flex justify-end">
@@ -265,8 +295,12 @@
     {{-- ── Moov Money ────────────────────────────────────────────────────── --}}
     <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
         <div class="flex items-center gap-3 mb-5">
-            <div class="w-9 h-9 bg-red-600 rounded-lg flex items-center justify-center">
-                <i class="fas fa-mobile-alt text-white"></i>
+            <div class="w-9 h-9 bg-red-600 rounded-lg flex items-center justify-center overflow-hidden">
+                @if($settings['moov_money_logo_path'] ?? null)
+                    <img src="{{ asset('storage/'.$settings['moov_money_logo_path']) }}" alt="Moov Money" class="w-full h-full object-cover">
+                @else
+                    <i class="fas fa-mobile-alt text-white"></i>
+                @endif
             </div>
             <div>
                 <h3 class="text-sm font-semibold text-gray-800">Moov Money</h3>
@@ -274,7 +308,7 @@
             </div>
         </div>
 
-        <form method="POST" action="{{ route('super-admin.settings.update', 'mobile_money') }}" class="space-y-4">
+        <form method="POST" action="{{ route('super-admin.settings.update', 'mobile_money') }}" enctype="multipart/form-data" class="space-y-4">
             @csrf
             <input type="hidden" name="_provider" value="moov_money">
             <input type="hidden" name="orange_money_enabled"    value="{{ $settings['orange_money_enabled']    ?? '0' }}">
@@ -321,6 +355,12 @@
                            value="{{ $settings['moov_money_merchant_code'] ?? '' }}"
                            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                 </div>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Logo</label>
+                <input type="file" name="moov_money_logo" accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                       class="w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100">
+                <p class="text-[11px] text-gray-400 mt-1">PNG, JPG, SVG ou WebP — 1 Mo max. Remplace l'icône par défaut.</p>
             </div>
 
             <div class="pt-3 border-t border-gray-100 flex justify-end">
