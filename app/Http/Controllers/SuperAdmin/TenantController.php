@@ -3,13 +3,18 @@
 namespace App\Http\Controllers\SuperAdmin;
 
 use App\Http\Controllers\Controller;
+use App\Mail\WelcomeShopMail;
 use App\Models\SubscriptionPlan;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Support\AppliesMailSettings;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Mail;
 
 class TenantController extends Controller
 {
+    use AppliesMailSettings;
+
     public function index(Request $request)
     {
         $query = Tenant::withoutGlobalScopes()->with(['plan', 'owner']);
@@ -59,5 +64,28 @@ class TenantController extends Controller
         $tenant->update(['subscription_plan_id' => $request->plan_id]);
 
         return back()->with('success', 'Plan modifié avec succès.');
+    }
+
+    public function resendWelcome(int $id)
+    {
+        $tenant = Tenant::withoutGlobalScopes()->with('owner')->findOrFail($id);
+
+        if (! $tenant->owner?->email) {
+            return back()->withErrors(['email' => "Cette boutique n'a pas de propriétaire avec une adresse email."]);
+        }
+
+        if (! $this->mailSendingEnabled()) {
+            return back()->withErrors(['email' => "L'envoi d'emails est désactivé dans Paramètres > Email."]);
+        }
+
+        $this->applyMailSettings();
+
+        try {
+            Mail::to($tenant->owner->email)->send(new WelcomeShopMail($tenant));
+        } catch (\Throwable $e) {
+            return back()->withErrors(['email' => "Échec de l'envoi : " . $e->getMessage()]);
+        }
+
+        return back()->with('success', "Email de bienvenue renvoyé à {$tenant->owner->email}.");
     }
 }

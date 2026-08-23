@@ -79,6 +79,13 @@
                                 <i class="fas fa-{{ $tenant->status === 'active' ? 'ban' : 'check-circle' }}"></i>
                             </button>
                         </form>
+                        <form method="POST" action="{{ route('super-admin.tenants.resend-welcome', $tenant) }}" class="inline"
+                              onsubmit="return confirm('Renvoyer l\'email de bienvenue à {{ $tenant->owner?->email }} ?');">
+                            @csrf
+                            <button type="submit" class="text-gray-400 hover:text-purple-600" title="Renvoyer l'email de bienvenue">
+                                <i class="fas fa-envelope"></i>
+                            </button>
+                        </form>
                     </div>
                 </td>
             </tr>

@@ -63,6 +63,7 @@ Route::middleware(['auth', 'super.admin'])->prefix('super-admin')->name('super-a
     Route::resource('tenants', SuperAdminTenantController::class)->only(['index', 'show']);
     Route::patch('tenants/{id}/toggle-status', [SuperAdminTenantController::class, 'toggleStatus'])->name('tenants.toggle-status');
     Route::patch('tenants/{id}/change-plan', [SuperAdminTenantController::class, 'changePlan'])->name('tenants.change-plan');
+    Route::post('tenants/{id}/resend-welcome', [SuperAdminTenantController::class, 'resendWelcome'])->name('tenants.resend-welcome');
     Route::resource('plans', PlanController::class)->only(['index', 'create', 'store', 'edit', 'update']);
     Route::resource('commissioners', CommissionerManagementController::class)->only(['index', 'create', 'store', 'destroy']);
     Route::get('settings', [SettingController::class, 'index'])->name('settings.index');

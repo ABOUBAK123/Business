@@ -5,6 +5,7 @@ namespace App\Http\Controllers\SuperAdmin;
 use App\Http\Controllers\Controller;
 use App\Models\Setting;
 use App\Models\Tenant;
+use App\Support\AppliesMailSettings;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
@@ -13,6 +14,8 @@ use Illuminate\View\View;
 
 class SettingController extends Controller
 {
+    use AppliesMailSettings;
+
     private const GROUPS = ['sms', 'whatsapp', 'email', 'mobile_money', 'code_article'];
 
     private const MOBILE_MONEY_PROVIDERS = ['orange_money', 'mtn_momo', 'wave', 'moov_money'];
@@ -107,7 +110,7 @@ class SettingController extends Controller
         ]);
 
         $settings = Setting::group('email');
-        $this->applyMailSettings($settings);
+        $this->applyMailSettings();
 
         $fromName = $settings['mail_from_name'] ?? config('app.name');
 
@@ -129,32 +132,6 @@ class SettingController extends Controller
         return redirect()
             ->route('super-admin.settings.index', ['tab' => 'email'])
             ->with('success', 'Email de test envoyé à ' . $request->input('test_email') . '.');
-    }
-
-    private function applyMailSettings(array $settings): void
-    {
-        $driver = $settings['mail_driver'] ?? 'smtp';
-
-        config(['mail.default' => $driver]);
-
-        if ($driver === 'smtp') {
-            config([
-                'mail.mailers.smtp.host' => $settings['mail_host'] ?? null,
-                'mail.mailers.smtp.port' => $settings['mail_port'] ?? 587,
-                'mail.mailers.smtp.username' => $settings['mail_username'] ?? null,
-                'mail.mailers.smtp.password' => $settings['mail_password'] ?? null,
-                'mail.mailers.smtp.encryption' => ($settings['mail_encryption'] ?? '') ?: null,
-            ]);
-        }
-
-        config([
-            'mail.from.address' => ($settings['mail_from_address'] ?? '') ?: config('mail.from.address'),
-            'mail.from.name' => ($settings['mail_from_name'] ?? '') ?: config('mail.from.name'),
-        ]);
-
-        // Force the mailer to rebuild using the config just applied above.
-        app()->forgetInstance('mail.manager');
-        app()->forgetInstance('mailer');
     }
 
     private function handleProviderLogoUploads(Request $request): void

@@ -2,18 +2,24 @@
 
 namespace App\Http\Controllers;
 
+use App\Mail\WelcomeShopMail;
 use App\Models\Branch;
 use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
 use App\Models\Tenant;
 use App\Models\User;
+use App\Support\AppliesMailSettings;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
 class TenantRegistrationController extends Controller
 {
+    use AppliesMailSettings;
+
     public function showPlans()
     {
         $plans = SubscriptionPlan::where('is_active', true)->orderBy('sort_order')->get();
@@ -39,7 +45,9 @@ class TenantRegistrationController extends Controller
             'plan_id' => 'required|exists:subscription_plans,id',
         ]);
 
-        DB::transaction(function () use ($request) {
+        $tenant = null;
+
+        DB::transaction(function () use ($request, &$tenant) {
             $plan = SubscriptionPlan::findOrFail($request->plan_id);
 
             $tenant = Tenant::create([
@@ -92,6 +100,31 @@ class TenantRegistrationController extends Controller
             auth()->login($owner);
         });
 
+        $this->sendWelcomeEmail($tenant);
+
         return redirect()->route('dashboard')->with('success', 'Bienvenue ! Votre boutique est prête.');
+    }
+
+    private function sendWelcomeEmail(?Tenant $tenant): void
+    {
+        if (! $tenant || ! $this->mailSendingEnabled()) {
+            return;
+        }
+
+        $tenant->load('owner');
+
+        if (! $tenant->owner?->email) {
+            return;
+        }
+
+        try {
+            $this->applyMailSettings();
+            Mail::to($tenant->owner->email)->send(new WelcomeShopMail($tenant));
+        } catch (\Throwable $e) {
+            Log::warning('welcome_email.send_failed', [
+                'tenant_id' => $tenant->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 }
