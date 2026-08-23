@@ -60,4 +60,24 @@ return [
         ],
     ],
 
+    'wave' => [
+        'api_key' => env('WAVE_API_KEY'),
+        'webhook_secret' => env('WAVE_WEBHOOK_SECRET'),
+        'aggregated_merchant_id' => env('WAVE_AGGREGATED_MERCHANT_ID'),
+        'base_url' => env('WAVE_BASE_URL', 'https://api.wave.com'),
+        'webhook' => [
+            'ip_filter_enabled' => env('WAVE_WEBHOOK_IP_FILTER_ENABLED', false),
+            // Official Wave webhook source IPs, per https://docs.wave.com/webhook
+            'allowed_ips' => env('WAVE_WEBHOOK_ALLOWED_IPS', implode(',', [
+                '104.155.43.220/32', '34.140.23.175/32', '34.22.138.147/32',
+                '34.76.157.22/32', '34.78.253.137/32', '34.79.119.200/32',
+                '35.189.207.30/32', '35.195.255.192/32', '35.205.122.113/32',
+                '35.205.190.121/32', '35.233.61.130/32', '35.240.61.196/32',
+                '35.240.75.65/32', '35.241.190.127/32', '35.241.219.1/32',
+            ])),
+            'trusted_proxies' => env('WAVE_WEBHOOK_TRUSTED_PROXIES', ''),
+            'audit_log_channel' => env('WAVE_WEBHOOK_AUDIT_LOG_CHANNEL', 'wave_audit'),
+        ],
+    ],
+
 ];

@@ -7,7 +7,7 @@ use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
-class VerifyMtnCallbackIp
+class VerifyWaveWebhookIp
 {
     use VerifiesCallbackIp;
 
@@ -17,32 +17,16 @@ class VerifyMtnCallbackIp
             return $next($request);
         }
 
-        $allowedRanges = $this->parseRanges(config('services.mtn_momo.callback.allowed_ips', ''));
+        $allowedRanges = $this->parseRanges(config('services.wave.webhook.allowed_ips', ''));
         [$clientIp, $remoteIp, $usesForwardedFor] = $this->resolveClientIp($request);
 
-        if ($allowedRanges === []) {
+        if ($allowedRanges === [] || ! $this->ipMatchesAny($clientIp, $allowedRanges)) {
             $this->auditWarning('blocked', [
-                'reason' => 'allowlist_empty',
+                'reason' => $allowedRanges === [] ? 'allowlist_empty' : 'ip_not_allowed',
                 'client_ip' => $clientIp,
                 'remote_ip' => $remoteIp,
                 'xff' => (string) $request->header('X-Forwarded-For', ''),
                 'uses_forwarded_for' => $usesForwardedFor,
-                'reference' => $request->header('X-Reference-Id') ?? $request->input('referenceId'),
-                'path' => $request->path(),
-                'user_agent' => (string) $request->userAgent(),
-            ]);
-
-            return response('Forbidden', 403);
-        }
-
-        if (! $this->ipMatchesAny($clientIp, $allowedRanges)) {
-            $this->auditWarning('blocked', [
-                'reason' => 'ip_not_allowed',
-                'client_ip' => $clientIp,
-                'remote_ip' => $remoteIp,
-                'xff' => (string) $request->header('X-Forwarded-For', ''),
-                'uses_forwarded_for' => $usesForwardedFor,
-                'reference' => $request->header('X-Reference-Id') ?? $request->input('referenceId'),
                 'path' => $request->path(),
                 'user_agent' => (string) $request->userAgent(),
             ]);
@@ -55,7 +39,6 @@ class VerifyMtnCallbackIp
             'remote_ip' => $remoteIp,
             'xff' => (string) $request->header('X-Forwarded-For', ''),
             'uses_forwarded_for' => $usesForwardedFor,
-            'reference' => $request->header('X-Reference-Id') ?? $request->input('referenceId'),
             'path' => $request->path(),
             'user_agent' => (string) $request->userAgent(),
         ]);
@@ -65,11 +48,11 @@ class VerifyMtnCallbackIp
 
     protected function configPrefix(): string
     {
-        return 'services.mtn_momo.callback';
+        return 'services.wave.webhook';
     }
 
     protected function auditMessagePrefix(): string
     {
-        return 'mtn.callback';
+        return 'wave.webhook';
     }
 }

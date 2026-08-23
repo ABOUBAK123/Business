@@ -9,6 +9,7 @@ use App\Models\Setting;
 use App\Models\Tenant;
 use App\Services\Payments\CinetPayGateway;
 use App\Services\Payments\MtnMomoCollectionGateway;
+use App\Services\Payments\WaveCheckoutGateway;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -38,7 +39,7 @@ class AccountActivationController extends Controller
         ]);
     }
 
-    public function store(Request $request, CinetPayGateway $gateway, MtnMomoCollectionGateway $mtnGateway)
+    public function store(Request $request, CinetPayGateway $gateway, MtnMomoCollectionGateway $mtnGateway, WaveCheckoutGateway $waveGateway)
     {
         $tenant = $this->resolveTenant($request);
 
@@ -84,7 +85,11 @@ class AccountActivationController extends Controller
                 'amount' => $price,
                 'currency' => 'XOF',
                 'method' => 'mobile_money',
-                'provider' => $data['payment_method'] === 'mtn_momo' ? 'mtn_momo' : 'cinetpay',
+                'provider' => match ($data['payment_method']) {
+                    'mtn_momo' => 'mtn_momo',
+                    'wave' => 'wave',
+                    default => 'cinetpay',
+                },
                 'reference' => (string) Str::uuid(),
                 'status' => 'pending',
                 'metadata' => [
@@ -120,6 +125,30 @@ class AccountActivationController extends Controller
             return redirect()
                 ->route('account.activation.index')
                 ->with('success', 'Demande de paiement envoyée via MTN MoMo. Validez sur votre téléphone puis rechargez cette page.');
+        }
+
+        if ($data['payment_method'] === 'wave') {
+            $initiation = $waveGateway->initiate($payment);
+
+            if (! ($initiation['success'] ?? false)) {
+                $payment->update([
+                    'status' => 'failed',
+                    'metadata' => array_merge($payment->metadata ?? [], [
+                        'initiation_error' => $initiation['message'] ?? 'unknown',
+                    ]),
+                ]);
+
+                $subscription->update([
+                    'status' => 'cancelled',
+                ]);
+
+                return back()->withInput()->withErrors([
+                    'payment' => $initiation['message'] ?? 'Le paiement Wave a échoué.',
+                ]);
+            }
+
+            return redirect()->away($initiation['payment_url'])
+                ->with('success', 'Redirection vers Wave...');
         }
 
         $initiation = $gateway->initiate($payment);
@@ -203,6 +232,88 @@ class AccountActivationController extends Controller
     public function mtnNotifyInfo()
     {
         return response()->view('payments.mtn-notify-info');
+    }
+
+    public function waveReturn(Request $request, WaveCheckoutGateway $gateway)
+    {
+        $paymentId = $request->integer('payment');
+        $payment = $paymentId ? SubscriptionPayment::where('provider', 'wave')->find($paymentId) : null;
+
+        if (! $payment) {
+            return redirect()->route('account.activation.index')->withErrors(['payment' => 'Paiement Wave introuvable.']);
+        }
+
+        $verification = $gateway->verify($payment);
+        $status = strtoupper((string) ($verification['status'] ?? ''));
+
+        $payment->update([
+            'metadata' => array_merge($payment->metadata ?? [], [
+                'verification_response' => $verification['raw'] ?? [],
+            ]),
+        ]);
+
+        if (! ($verification['success'] ?? false) || $status !== 'SUCCESSFUL') {
+            if ($status === 'FAILED') {
+                $payment->update(['status' => 'failed']);
+                $payment->subscription?->update(['status' => 'cancelled']);
+            }
+
+            return redirect()->route('account.activation.index')
+                ->withErrors(['payment' => 'Le paiement Wave n’a pas été confirmé.']);
+        }
+
+        $this->markSubscriptionSuccess($payment);
+
+        return redirect()->route('account.activation.index')->with('success', 'Paiement Wave confirmé et compte activé.');
+    }
+
+    public function waveNotify(Request $request, WaveCheckoutGateway $gateway)
+    {
+        $rawBody = $request->getContent();
+
+        if (! $gateway->verifyWebhookSignature($rawBody, $request->header('Wave-Signature'))) {
+            return response('Signature invalide', 401);
+        }
+
+        $event = json_decode($rawBody, true) ?? [];
+        $sessionId = data_get($event, 'data.id');
+
+        if (! $sessionId) {
+            return response('Session introuvable', 422);
+        }
+
+        $payment = SubscriptionPayment::where('provider', 'wave')
+            ->where('reference', $sessionId)
+            ->first();
+
+        if (! $payment) {
+            return response('Paiement introuvable', 404);
+        }
+
+        $verification = $gateway->verify($payment);
+        $status = strtoupper((string) ($verification['status'] ?? ''));
+
+        $payment->update([
+            'metadata' => array_merge($payment->metadata ?? [], [
+                'verification_response' => $verification['raw'] ?? [],
+            ]),
+        ]);
+
+        if (! ($verification['success'] ?? false)) {
+            return response('Verification impossible', 200);
+        }
+
+        if ($status === 'SUCCESSFUL') {
+            $this->markSubscriptionSuccess($payment);
+            return response('OK', 200);
+        }
+
+        if ($status === 'FAILED') {
+            $payment->update(['status' => 'failed']);
+            $payment->subscription?->update(['status' => 'cancelled']);
+        }
+
+        return response('PENDING', 200);
     }
 
     private function syncGatewayPayment(Request $request, CinetPayGateway $gateway, bool $redirectToActivation)

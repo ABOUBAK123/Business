@@ -98,6 +98,21 @@ location = /payment/mtn/notify {
 RequestHeader append X-Forwarded-For %{REMOTE_ADDR}s
 ```
 
+## Wave Webhook Hardening (Production)
+
+The endpoint `POST /payment/wave/notify` verifies the `Wave-Signature` header (HMAC-SHA256, 5-minute replay window) on every request. IP filtering is an optional extra layer.
+
+1. Set `WAVE_WEBHOOK_SECRET` from the Wave Business Portal (shown once at API key creation).
+2. Optionally enable `WAVE_WEBHOOK_IP_FILTER_ENABLED=true` — the allowlist defaults to Wave's [published IP list](https://docs.wave.com/webhook) if `WAVE_WEBHOOK_ALLOWED_IPS` is left empty.
+3. Audit every accepted/blocked callback in the `wave_audit` log channel.
+
+```dotenv
+WAVE_API_KEY=wave_sn_prod_...
+WAVE_WEBHOOK_SECRET=...
+WAVE_WEBHOOK_IP_FILTER_ENABLED=true
+WAVE_WEBHOOK_AUDIT_LOG_CHANNEL=wave_audit
+```
+
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).

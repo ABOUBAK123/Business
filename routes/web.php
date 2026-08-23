@@ -46,6 +46,10 @@ Route::get('/payment/mtn/notify', [AccountActivationController::class, 'mtnNotif
 Route::match(['post', 'put'], '/payment/mtn/notify', [AccountActivationController::class, 'mtnNotify'])
     ->middleware('mtn.callback.ip')
     ->name('payment.mtn.notify');
+Route::get('/payment/wave/return', [AccountActivationController::class, 'waveReturn'])->name('payment.wave.return');
+Route::post('/payment/wave/notify', [AccountActivationController::class, 'waveNotify'])
+    ->middleware('wave.webhook.ip')
+    ->name('payment.wave.notify');
 
 // Account activation / renewal
 Route::middleware(['auth'])->group(function () {

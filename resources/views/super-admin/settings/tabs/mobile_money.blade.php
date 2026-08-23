@@ -25,6 +25,7 @@
             <input type="hidden" name="wave_enabled"         value="{{ $settings['wave_enabled']         ?? '0' }}">
             <input type="hidden" name="wave_api_key"         value="{{ $settings['wave_api_key']         ?? '' }}">
             <input type="hidden" name="wave_business_id"     value="{{ $settings['wave_business_id']     ?? '' }}">
+            <input type="hidden" name="wave_webhook_secret"  value="{{ $settings['wave_webhook_secret']  ?? '' }}">
             <input type="hidden" name="moov_money_enabled"   value="{{ $settings['moov_money_enabled']   ?? '0' }}">
             <input type="hidden" name="moov_money_api_key"   value="{{ $settings['moov_money_api_key']   ?? '' }}">
             <input type="hidden" name="moov_money_merchant_code" value="{{ $settings['moov_money_merchant_code'] ?? '' }}">
@@ -100,6 +101,7 @@
             <input type="hidden" name="wave_enabled"             value="{{ $settings['wave_enabled']             ?? '0' }}">
             <input type="hidden" name="wave_api_key"             value="{{ $settings['wave_api_key']             ?? '' }}">
             <input type="hidden" name="wave_business_id"         value="{{ $settings['wave_business_id']         ?? '' }}">
+            <input type="hidden" name="wave_webhook_secret"      value="{{ $settings['wave_webhook_secret']      ?? '' }}">
             <input type="hidden" name="moov_money_enabled"       value="{{ $settings['moov_money_enabled']       ?? '0' }}">
             <input type="hidden" name="moov_money_api_key"       value="{{ $settings['moov_money_api_key']       ?? '' }}">
             <input type="hidden" name="moov_money_merchant_code" value="{{ $settings['moov_money_merchant_code'] ?? '' }}">
@@ -231,10 +233,23 @@
                     </div>
                 </div>
                 <div>
-                    <label class="block text-xs font-medium text-gray-600 mb-1">Business ID</label>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Business ID (agrégateur, optionnel)</label>
                     <input type="text" name="wave_business_id"
                            value="{{ $settings['wave_business_id'] ?? '' }}"
                            class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div class="col-span-2">
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Secret webhook</label>
+                    <div class="relative">
+                        <input type="password" id="wave_webhook_secret" name="wave_webhook_secret"
+                               value="{{ $settings['wave_webhook_secret'] ?? '' }}"
+                               class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 pr-9">
+                        <button type="button" onclick="toggleSecret(this, 'wave_webhook_secret')"
+                                class="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-eye text-sm"></i>
+                        </button>
+                    </div>
+                    <p class="text-[11px] text-gray-400 mt-1">Webhook à configurer côté Wave : {{ route('payment.wave.notify') }}</p>
                 </div>
             </div>
 
@@ -273,6 +288,7 @@
             <input type="hidden" name="wave_enabled"              value="{{ $settings['wave_enabled']              ?? '0' }}">
             <input type="hidden" name="wave_api_key"              value="{{ $settings['wave_api_key']              ?? '' }}">
             <input type="hidden" name="wave_business_id"          value="{{ $settings['wave_business_id']          ?? '' }}">
+            <input type="hidden" name="wave_webhook_secret"       value="{{ $settings['wave_webhook_secret']       ?? '' }}">
 
             <div class="flex items-center justify-between p-3 bg-red-50 rounded-lg">
                 <p class="text-sm font-medium text-gray-700">Activer Moov Money</p>

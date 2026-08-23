@@ -100,7 +100,7 @@ class SettingController extends Controller
             'email'        => ['mail_password'],
             'mobile_money' => [
                 'orange_money_api_secret', 'mtn_momo_api_secret',
-                'wave_api_key', 'moov_money_api_key',
+                'wave_api_key', 'wave_webhook_secret', 'moov_money_api_key',
             ],
             'code_article' => [],
             default        => [],
