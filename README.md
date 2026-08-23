@@ -54,6 +54,50 @@ In order to ensure that the Laravel community is welcoming to all, please review
 
 If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
 
+## MTN Callback Hardening (Production)
+
+Use both infrastructure filtering and application filtering for the endpoint `POST /payment/mtn/notify`.
+
+1. Infrastructure (reverse proxy) should allow only MTN callback source ranges.
+2. Application layer should keep `MTN_CALLBACK_IP_FILTER_ENABLED=true` with an allowlist.
+3. Audit every accepted/blocked callback in the `mtn_audit` log channel.
+
+### Environment Variables
+
+Set these variables in production:
+
+```dotenv
+MTN_CALLBACK_IP_FILTER_ENABLED=true
+MTN_CALLBACK_ALLOWED_IPS=203.0.113.10,203.0.113.11/32
+MTN_CALLBACK_TRUSTED_PROXIES=10.0.0.0/8,192.168.0.0/16
+MTN_CALLBACK_AUDIT_LOG_CHANNEL=mtn_audit
+```
+
+### Nginx Example
+
+```nginx
+location = /payment/mtn/notify {
+	allow 203.0.113.10;
+	allow 203.0.113.11;
+	deny all;
+
+	proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+	proxy_set_header X-Forwarded-Proto $scheme;
+	proxy_pass http://php-upstream;
+}
+```
+
+### Apache Example
+
+```apache
+<Location "/payment/mtn/notify">
+	Require ip 203.0.113.10
+	Require ip 203.0.113.11
+</Location>
+
+RequestHeader append X-Forwarded-For %{REMOTE_ADDR}s
+```
+
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).

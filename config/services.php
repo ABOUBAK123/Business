@@ -45,4 +45,19 @@ return [
         'notify_url' => env('CINETPAY_NOTIFY_URL'),
     ],
 
+    'mtn_momo' => [
+        'api_user' => env('MTN_MOMO_API_USER_ID'),
+        'api_key' => env('MTN_MOMO_API_KEY'),
+        'subscription_key' => env('MTN_MOMO_SUBSCRIPTION_KEY'),
+        'target_environment' => env('MTN_MOMO_TARGET_ENVIRONMENT', 'sandbox'),
+        'base_url' => env('MTN_MOMO_BASE_URL', 'https://sandbox.momodeveloper.mtn.com'),
+        'country_code' => env('MTN_MOMO_COUNTRY_CODE', '225'),
+        'callback' => [
+            'ip_filter_enabled' => env('MTN_CALLBACK_IP_FILTER_ENABLED', false),
+            'allowed_ips' => env('MTN_CALLBACK_ALLOWED_IPS', ''),
+            'trusted_proxies' => env('MTN_CALLBACK_TRUSTED_PROXIES', ''),
+            'audit_log_channel' => env('MTN_CALLBACK_AUDIT_LOG_CHANNEL', 'mtn_audit'),
+        ],
+    ],
+
 ];

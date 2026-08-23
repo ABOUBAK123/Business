@@ -8,6 +8,7 @@ use App\Models\SubscriptionPlan;
 use App\Models\Setting;
 use App\Models\Tenant;
 use App\Services\Payments\CinetPayGateway;
+use App\Services\Payments\MtnMomoCollectionGateway;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -15,11 +16,16 @@ use Illuminate\Validation\Rule;
 
 class AccountActivationController extends Controller
 {
-    public function index(Request $request)
+    public function index(Request $request, MtnMomoCollectionGateway $mtnGateway)
     {
         $tenant = $this->resolveTenant($request);
 
         abort_unless($tenant && $request->user()?->hasRole('proprietaire'), 403);
+
+        $syncMessage = $this->syncPendingMtnPayment($tenant, $mtnGateway);
+        if ($syncMessage) {
+            $request->session()->flash('success', $syncMessage);
+        }
 
         $plans = SubscriptionPlan::where('is_active', true)->orderBy('sort_order')->get();
         $paymentMethods = $this->availablePaymentMethods();
@@ -32,7 +38,7 @@ class AccountActivationController extends Controller
         ]);
     }
 
-    public function store(Request $request, CinetPayGateway $gateway)
+    public function store(Request $request, CinetPayGateway $gateway, MtnMomoCollectionGateway $mtnGateway)
     {
         $tenant = $this->resolveTenant($request);
 
@@ -42,6 +48,7 @@ class AccountActivationController extends Controller
             'plan_id' => 'required|exists:subscription_plans,id',
             'billing_cycle' => 'required|in:monthly,annual',
             'payment_method' => ['required', Rule::in(array_keys($this->availablePaymentMethods()))],
+            'payer_phone' => ['nullable', 'string', 'max:20', 'required_if:payment_method,mtn_momo'],
         ]);
 
         $plan = SubscriptionPlan::findOrFail($data['plan_id']);
@@ -76,18 +83,44 @@ class AccountActivationController extends Controller
                 'subscription_id' => $subscription->id,
                 'amount' => $price,
                 'currency' => 'XOF',
-                'method' => $data['payment_method'],
-                'provider' => 'cinetpay',
+                'method' => 'mobile_money',
+                'provider' => $data['payment_method'] === 'mtn_momo' ? 'mtn_momo' : 'cinetpay',
                 'reference' => (string) Str::uuid(),
                 'status' => 'pending',
                 'metadata' => [
                     'plan_id' => $plan->id,
                     'billing_cycle' => $data['billing_cycle'],
                     'payment_method' => $data['payment_method'],
+                    'payer_phone' => $data['payer_phone'] ?? null,
                 ],
                 'paid_at' => null,
             ]);
         });
+
+        if ($data['payment_method'] === 'mtn_momo') {
+            $initiation = $mtnGateway->initiate($payment, (string) ($data['payer_phone'] ?? ''));
+
+            if (! ($initiation['success'] ?? false)) {
+                $payment->update([
+                    'status' => 'failed',
+                    'metadata' => array_merge($payment->metadata ?? [], [
+                        'initiation_error' => $initiation['message'] ?? 'unknown',
+                    ]),
+                ]);
+
+                $subscription->update([
+                    'status' => 'cancelled',
+                ]);
+
+                return back()->withInput()->withErrors([
+                    'payment' => $initiation['message'] ?? 'Le paiement MTN MoMo a échoué.',
+                ]);
+            }
+
+            return redirect()
+                ->route('account.activation.index')
+                ->with('success', 'Demande de paiement envoyée via MTN MoMo. Validez sur votre téléphone puis rechargez cette page.');
+        }
 
         $initiation = $gateway->initiate($payment);
 
@@ -120,6 +153,56 @@ class AccountActivationController extends Controller
     public function cinetpayNotify(Request $request, CinetPayGateway $gateway)
     {
         return $this->syncGatewayPayment($request, $gateway, false);
+    }
+
+    public function mtnNotify(Request $request, MtnMomoCollectionGateway $gateway)
+    {
+        $reference = $request->header('X-Reference-Id')
+            ?? $request->input('referenceId')
+            ?? $request->input('financialTransactionId')
+            ?? $request->input('reference');
+
+        if (! $reference) {
+            return response('Reference introuvable', 422);
+        }
+
+        $payment = SubscriptionPayment::where('provider', 'mtn_momo')
+            ->where('reference', $reference)
+            ->first();
+
+        if (! $payment) {
+            return response('Paiement introuvable', 404);
+        }
+
+        $verification = $gateway->verify($payment);
+        $status = strtoupper((string) ($verification['status'] ?? ''));
+
+        $payment->update([
+            'metadata' => array_merge($payment->metadata ?? [], [
+                'verification_response' => $verification['raw'] ?? [],
+            ]),
+        ]);
+
+        if (! ($verification['success'] ?? false)) {
+            return response('Verification impossible', 200);
+        }
+
+        if (in_array($status, ['SUCCESSFUL', 'SUCCESSFUL_PAYMENT', 'SUCCESS'], true)) {
+            $this->markSubscriptionSuccess($payment);
+            return response('OK', 200);
+        }
+
+        if (in_array($status, ['FAILED', 'REJECTED'], true)) {
+            $payment->update(['status' => 'failed']);
+            $payment->subscription?->update(['status' => 'cancelled']);
+        }
+
+        return response('PENDING', 200);
+    }
+
+    public function mtnNotifyInfo()
+    {
+        return response()->view('payments.mtn-notify-info');
     }
 
     private function syncGatewayPayment(Request $request, CinetPayGateway $gateway, bool $redirectToActivation)
@@ -161,8 +244,62 @@ class AccountActivationController extends Controller
                 : response('Payment not confirmed', 200);
         }
 
+        $this->markSubscriptionSuccess($payment);
+
+        if (! $redirectToActivation) {
+            return response('OK', 200);
+        }
+
+        return redirect()->route('account.activation.index')->with('success', 'Paiement confirmé et compte activé.');
+    }
+
+    private function syncPendingMtnPayment(Tenant $tenant, MtnMomoCollectionGateway $gateway): ?string
+    {
+        $payment = SubscriptionPayment::where('tenant_id', $tenant->id)
+            ->where('provider', 'mtn_momo')
+            ->where('status', 'pending')
+            ->latest('id')
+            ->first();
+
+        if (! $payment) {
+            return null;
+        }
+
+        $verification = $gateway->verify($payment);
+        $status = strtoupper((string) ($verification['status'] ?? ''));
+
+        $payment->update([
+            'metadata' => array_merge($payment->metadata ?? [], [
+                'verification_response' => $verification['raw'] ?? [],
+            ]),
+        ]);
+
+        if (! ($verification['success'] ?? false)) {
+            return null;
+        }
+
+        if (in_array($status, ['SUCCESSFUL', 'SUCCESSFUL_PAYMENT', 'SUCCESS'], true)) {
+            $this->markSubscriptionSuccess($payment);
+            return 'Paiement MTN confirmé et compte activé.';
+        }
+
+        if (in_array($status, ['FAILED', 'REJECTED'], true)) {
+            $payment->update(['status' => 'failed']);
+            $payment->subscription?->update(['status' => 'cancelled']);
+            return 'Le paiement MTN a été refusé. Veuillez réessayer.';
+        }
+
+        return null;
+    }
+
+    private function markSubscriptionSuccess(SubscriptionPayment $payment): void
+    {
         $subscription = $payment->subscription;
         $tenant = $payment->tenant;
+
+        if (! $subscription || ! $tenant) {
+            return;
+        }
 
         DB::transaction(function () use ($payment, $subscription, $tenant) {
             $payment->update([
@@ -183,12 +320,6 @@ class AccountActivationController extends Controller
                 'trial_ends_at' => null,
             ]);
         });
-
-        if (! $redirectToActivation) {
-            return response('OK', 200);
-        }
-
-        return redirect()->route('account.activation.index')->with('success', 'Paiement confirmé et compte activé.');
     }
 
     private function resolveTenant(Request $request): ?Tenant

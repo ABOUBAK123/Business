@@ -143,6 +143,32 @@
                        class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
             </div>
 
+            <div class="grid grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Target environment</label>
+                    <select name="mtn_momo_target_environment" class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                        <option value="sandbox" {{ ($settings['mtn_momo_target_environment'] ?? 'sandbox') === 'sandbox' ? 'selected' : '' }}>sandbox</option>
+                        <option value="production" {{ ($settings['mtn_momo_target_environment'] ?? 'sandbox') === 'production' ? 'selected' : '' }}>production</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Code pays MSISDN</label>
+                    <input type="text" name="mtn_momo_country_code"
+                           value="{{ $settings['mtn_momo_country_code'] ?? '225' }}"
+                           class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                           placeholder="225">
+                </div>
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Base URL API</label>
+                <input type="text" name="mtn_momo_base_url"
+                       value="{{ $settings['mtn_momo_base_url'] ?? 'https://sandbox.momodeveloper.mtn.com' }}"
+                       class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                       placeholder="https://sandbox.momodeveloper.mtn.com">
+                <p class="text-[11px] text-gray-400 mt-1">Callback a configurer coté MTN: {{ route('payment.mtn.notify') }}</p>
+            </div>
+
             <div class="pt-3 border-t border-gray-100 flex justify-end">
                 <button type="submit"
                         class="bg-yellow-400 text-gray-900 px-5 py-2 rounded-lg text-sm font-semibold hover:bg-yellow-500 transition">

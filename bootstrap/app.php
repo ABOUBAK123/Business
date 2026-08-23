@@ -4,6 +4,7 @@ use App\Http\Middleware\CheckTenantActive;
 use App\Http\Middleware\CommissionerOnly;
 use App\Http\Middleware\SetTenantContext;
 use App\Http\Middleware\SuperAdminOnly;
+use App\Http\Middleware\VerifyMtnCallbackIp;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -22,12 +23,14 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->validateCsrfTokens(except: [
             'payment/cinetpay/notify',
+            'payment/mtn/notify',
         ]);
 
         $middleware->alias([
             'tenant.active' => CheckTenantActive::class,
             'super.admin' => SuperAdminOnly::class,
             'commissionnaire' => CommissionerOnly::class,
+            'mtn.callback.ip' => VerifyMtnCallbackIp::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

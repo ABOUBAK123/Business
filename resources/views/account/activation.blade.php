@@ -135,7 +135,7 @@
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     @foreach($paymentMethods as $key => $method)
                         <label class="cursor-pointer rounded-xl border border-gray-200 p-3 transition hover:border-blue-400 hover:bg-blue-50/40">
-                            <input type="radio" name="payment_method" value="{{ $key }}" class="sr-only peer" {{ $loop->first ? 'checked' : '' }}>
+                            <input type="radio" name="payment_method" value="{{ $key }}" class="sr-only peer payment-method-radio" {{ $loop->first ? 'checked' : '' }}>
                             <div class="flex items-center justify-between gap-3">
                                 <div>
                                     <div class="text-sm font-semibold text-gray-800">{{ $method['label'] }}</div>
@@ -146,6 +146,15 @@
                         </label>
                     @endforeach
                 </div>
+            </div>
+
+            <div id="mtnPhoneField" class="hidden">
+                <label class="block text-xs font-medium text-gray-600 mb-1">Numero MTN du payeur</label>
+                <input type="text" name="payer_phone" id="payerPhoneInput"
+                       class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"
+                       placeholder="Ex: 0700000000 ou 225700000000"
+                       value="{{ old('payer_phone', $tenant->phone) }}">
+                <p class="text-[11px] text-gray-400 mt-1">Ce numero recevra la demande Request To Pay MTN MoMo.</p>
             </div>
 
             <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
@@ -173,6 +182,8 @@ const modalBillingCycle = document.getElementById('modalBillingCycle');
 const modalMonthlyPrice = document.getElementById('modalMonthlyPrice');
 const modalAnnualPrice = document.getElementById('modalAnnualPrice');
 const modalNextDate = document.getElementById('modalNextDate');
+const mtnPhoneField = document.getElementById('mtnPhoneField');
+const payerPhoneInput = document.getElementById('payerPhoneInput');
 let activeButtonData = null;
 
 function formatCurrency(amount) {
@@ -187,6 +198,13 @@ function refreshModalPricing() {
     modalNextDate.textContent = modalBillingCycle.value === 'annual'
         ? activeButtonData.annualDate
         : activeButtonData.monthlyDate;
+}
+
+function refreshPaymentMethodUI() {
+    const selected = document.querySelector('input[name="payment_method"]:checked')?.value;
+    const isMtn = selected === 'mtn_momo';
+    mtnPhoneField.classList.toggle('hidden', !isMtn);
+    payerPhoneInput.required = isMtn;
 }
 
 document.querySelectorAll('.open-payment-modal').forEach(button => {
@@ -204,12 +222,17 @@ document.querySelectorAll('.open-payment-modal').forEach(button => {
         modalPlanName.value = activeButtonData.planName;
         modalBillingCycle.value = 'monthly';
         refreshModalPricing();
+        refreshPaymentMethodUI();
         paymentModal.classList.remove('hidden');
         paymentModal.classList.add('flex');
     });
 });
 
 modalBillingCycle.addEventListener('change', refreshModalPricing);
+document.querySelectorAll('.payment-method-radio').forEach((input) => {
+    input.addEventListener('change', refreshPaymentMethodUI);
+});
+refreshPaymentMethodUI();
 
 document.getElementById('closePaymentModal').addEventListener('click', () => {
     paymentModal.classList.add('hidden');

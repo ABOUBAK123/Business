@@ -42,6 +42,10 @@ Route::get('/subscription/expired', fn() => view('subscription.expired'))->name(
 // Payment provider callbacks
 Route::get('/payment/cinetpay/return', [AccountActivationController::class, 'cinetpayReturn'])->name('payment.cinetpay.return');
 Route::post('/payment/cinetpay/notify', [AccountActivationController::class, 'cinetpayNotify'])->name('payment.cinetpay.notify');
+Route::get('/payment/mtn/notify', [AccountActivationController::class, 'mtnNotifyInfo']);
+Route::match(['post', 'put'], '/payment/mtn/notify', [AccountActivationController::class, 'mtnNotify'])
+    ->middleware('mtn.callback.ip')
+    ->name('payment.mtn.notify');
 
 // Account activation / renewal
 Route::middleware(['auth'])->group(function () {
