@@ -74,8 +74,17 @@
             </div>
             <div>
                 <label class="block text-xs font-medium text-gray-600 mb-1">Logo</label>
-                <input type="file" name="orange_money_logo" accept="image/png,image/jpeg,image/svg+xml,image/webp"
-                       class="w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100">
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-lg border border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden flex-shrink-0">
+                        <img id="preview_orange_money_logo" alt="Aperçu"
+                             src="{{ ($settings['orange_money_logo_path'] ?? null) ? asset('storage/'.$settings['orange_money_logo_path']) : '' }}"
+                             class="w-full h-full object-cover {{ ($settings['orange_money_logo_path'] ?? null) ? '' : 'hidden' }}">
+                        <i id="preview_orange_money_logo_placeholder" class="fas fa-image text-gray-300 {{ ($settings['orange_money_logo_path'] ?? null) ? 'hidden' : '' }}"></i>
+                    </div>
+                    <input type="file" name="orange_money_logo" accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                           onchange="previewLogo(this, 'preview_orange_money_logo')"
+                           class="w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100">
+                </div>
                 <p class="text-[11px] text-gray-400 mt-1">PNG, JPG, SVG ou WebP — 1 Mo max. Remplace l'icône par défaut.</p>
             </div>
 
@@ -186,8 +195,17 @@
             </div>
             <div>
                 <label class="block text-xs font-medium text-gray-600 mb-1">Logo</label>
-                <input type="file" name="mtn_momo_logo" accept="image/png,image/jpeg,image/svg+xml,image/webp"
-                       class="w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-yellow-50 file:text-yellow-800 hover:file:bg-yellow-100">
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-lg border border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden flex-shrink-0">
+                        <img id="preview_mtn_momo_logo" alt="Aperçu"
+                             src="{{ ($settings['mtn_momo_logo_path'] ?? null) ? asset('storage/'.$settings['mtn_momo_logo_path']) : '' }}"
+                             class="w-full h-full object-cover {{ ($settings['mtn_momo_logo_path'] ?? null) ? '' : 'hidden' }}">
+                        <i id="preview_mtn_momo_logo_placeholder" class="fas fa-image text-gray-300 {{ ($settings['mtn_momo_logo_path'] ?? null) ? 'hidden' : '' }}"></i>
+                    </div>
+                    <input type="file" name="mtn_momo_logo" accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                           onchange="previewLogo(this, 'preview_mtn_momo_logo')"
+                           class="w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-yellow-50 file:text-yellow-800 hover:file:bg-yellow-100">
+                </div>
                 <p class="text-[11px] text-gray-400 mt-1">PNG, JPG, SVG ou WebP — 1 Mo max. Remplace l'icône par défaut.</p>
             </div>
 
@@ -277,8 +295,17 @@
                 </div>
                 <div class="col-span-2">
                     <label class="block text-xs font-medium text-gray-600 mb-1">Logo</label>
-                    <input type="file" name="wave_logo" accept="image/png,image/jpeg,image/svg+xml,image/webp"
-                           class="w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 rounded-lg border border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden flex-shrink-0">
+                            <img id="preview_wave_logo" alt="Aperçu"
+                                 src="{{ ($settings['wave_logo_path'] ?? null) ? asset('storage/'.$settings['wave_logo_path']) : '' }}"
+                                 class="w-full h-full object-cover {{ ($settings['wave_logo_path'] ?? null) ? '' : 'hidden' }}">
+                            <i id="preview_wave_logo_placeholder" class="fas fa-image text-gray-300 {{ ($settings['wave_logo_path'] ?? null) ? 'hidden' : '' }}"></i>
+                        </div>
+                        <input type="file" name="wave_logo" accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                               onchange="previewLogo(this, 'preview_wave_logo')"
+                               class="w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                    </div>
                     <p class="text-[11px] text-gray-400 mt-1">PNG, JPG, SVG ou WebP — 1 Mo max. Remplace l'icône par défaut.</p>
                 </div>
             </div>
@@ -358,8 +385,17 @@
             </div>
             <div>
                 <label class="block text-xs font-medium text-gray-600 mb-1">Logo</label>
-                <input type="file" name="moov_money_logo" accept="image/png,image/jpeg,image/svg+xml,image/webp"
-                       class="w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100">
+                <div class="flex items-center gap-3">
+                    <div class="w-12 h-12 rounded-lg border border-gray-200 bg-gray-50 flex items-center justify-center overflow-hidden flex-shrink-0">
+                        <img id="preview_moov_money_logo" alt="Aperçu"
+                             src="{{ ($settings['moov_money_logo_path'] ?? null) ? asset('storage/'.$settings['moov_money_logo_path']) : '' }}"
+                             class="w-full h-full object-cover {{ ($settings['moov_money_logo_path'] ?? null) ? '' : 'hidden' }}">
+                        <i id="preview_moov_money_logo_placeholder" class="fas fa-image text-gray-300 {{ ($settings['moov_money_logo_path'] ?? null) ? 'hidden' : '' }}"></i>
+                    </div>
+                    <input type="file" name="moov_money_logo" accept="image/png,image/jpeg,image/svg+xml,image/webp"
+                           onchange="previewLogo(this, 'preview_moov_money_logo')"
+                           class="w-full text-sm text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-red-50 file:text-red-700 hover:file:bg-red-100">
+                </div>
                 <p class="text-[11px] text-gray-400 mt-1">PNG, JPG, SVG ou WebP — 1 Mo max. Remplace l'icône par défaut.</p>
             </div>
 

@@ -49,5 +49,20 @@ function toggleSecret(btn, inputId) {
         icon.classList.replace('fa-eye-slash', 'fa-eye');
     }
 }
+
+function previewLogo(input, previewId) {
+    const preview = document.getElementById(previewId);
+    const placeholder = document.getElementById(previewId + '_placeholder');
+    const file = input.files && input.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        preview.src = e.target.result;
+        preview.classList.remove('hidden');
+        if (placeholder) placeholder.classList.add('hidden');
+    };
+    reader.readAsDataURL(file);
+}
 </script>
 @endpush
