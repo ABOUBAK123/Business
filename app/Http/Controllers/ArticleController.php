@@ -133,7 +133,7 @@ class ArticleController extends Controller
         $categories = Category::where('is_active', true)->get();
         $suppliers = Supplier::where('is_active', true)->get();
         $branches = Branch::where('is_active', true)->get();
-        $article->load('branchStocks');
+        $article->load('branchStocks.branch');
         return view('articles.form', compact('article', 'categories', 'suppliers', 'branches'));
     }
 

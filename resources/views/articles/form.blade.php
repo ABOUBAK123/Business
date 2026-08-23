@@ -129,10 +129,13 @@
                     @else
                     <div>
                         <label class="block text-xs font-medium text-gray-600 mb-1">Stock total actuel</label>
-                        <div class="w-full border border-gray-100 bg-gray-50 rounded-lg px-3 py-2 text-sm font-semibold text-gray-700">
-                            {{ $article->branchStocks->sum('quantity') }} {{ $article->unit }}
+                        <div class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold text-gray-700 flex items-center justify-between">
+                            <span>{{ $article->branchStocks->sum('quantity') }} {{ $article->unit }}</span>
+                            <button type="button" onclick="openStockModal()" class="text-blue-600 hover:text-blue-800 text-xs font-medium flex items-center gap-1">
+                                <i class="fas fa-pen"></i> Modifier
+                            </button>
                         </div>
-                        <p class="text-xs text-gray-400 mt-0.5">Gérez le stock par succursale depuis la fiche article</p>
+                        <p class="text-xs text-gray-400 mt-0.5">Le stock est réparti par succursale ; ajustez-le succursale par succursale.</p>
                     </div>
                     @endif
                 </div>
@@ -168,6 +171,35 @@
         </div>
     </div>
 </form>
+
+@if(isset($article->id))
+<div id="stockModal" class="hidden fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-lg w-full max-w-md p-5">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-sm font-semibold text-gray-700">Ajuster le stock par succursale</h3>
+            <button type="button" onclick="closeStockModal()" class="text-gray-400 hover:text-gray-600">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="space-y-3 max-h-80 overflow-y-auto">
+            @forelse($article->branchStocks as $bs)
+                <form method="POST" action="{{ route('articles.stock', $article) }}" class="flex items-center gap-2">
+                    @csrf
+                    <input type="hidden" name="branch_id" value="{{ $bs->branch_id }}">
+                    <span class="flex-1 text-sm text-gray-600 truncate">{{ $bs->branch->name ?? '—' }}</span>
+                    <input type="number" name="quantity" value="{{ $bs->quantity }}" min="0"
+                           class="w-24 border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <button type="submit" class="bg-blue-600 text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-blue-700">
+                        Enregistrer
+                    </button>
+                </form>
+            @empty
+                <p class="text-sm text-gray-400">Aucune succursale active.</p>
+            @endforelse
+        </div>
+    </div>
+</div>
+@endif
 @endsection
 
 @push('scripts')
@@ -193,5 +225,12 @@ function updateTtc() {
 }
 document.getElementById('saleHt').addEventListener('input', updateTtc);
 document.getElementById('taxRate').addEventListener('change', updateTtc);
+
+function openStockModal() {
+    document.getElementById('stockModal')?.classList.remove('hidden');
+}
+function closeStockModal() {
+    document.getElementById('stockModal')?.classList.add('hidden');
+}
 </script>
 @endpush
