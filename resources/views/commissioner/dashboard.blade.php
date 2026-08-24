@@ -14,8 +14,18 @@
         <p class="text-2xl font-bold text-green-600">{{ $activeShops }}</p>
     </div>
     <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
-        <p class="text-xs text-gray-500 mb-1">Commissions en attente</p>
-        <p class="text-2xl font-bold text-yellow-600">{{ number_format($pendingEarned, 0, ',', ' ') }} XOF</p>
+        <div class="flex items-start justify-between gap-2">
+            <div>
+                <p class="text-xs text-gray-500 mb-1">Commissions en attente</p>
+                <p class="text-2xl font-bold text-yellow-600">{{ number_format($pendingEarned, 0, ',', ' ') }} XOF</p>
+            </div>
+            @if($availableBalance > 0)
+            <a href="{{ route('commissioner.payouts.create') }}"
+               class="flex-shrink-0 bg-blue-50 text-blue-700 text-xs font-semibold px-2.5 py-1.5 rounded-lg hover:bg-blue-100 transition whitespace-nowrap">
+                Retirer
+            </a>
+            @endif
+        </div>
     </div>
     <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
         <p class="text-xs text-gray-500 mb-1">Commissions perçues</p>

@@ -14,7 +14,7 @@ class User extends Authenticatable
 
     protected $fillable = [
         'tenant_id', 'branch_id', 'name', 'email', 'password',
-        'phone', 'avatar', 'pin', 'is_super_admin', 'is_active', 'last_login_at',
+        'phone', 'avatar', 'pin', 'is_super_admin', 'is_active', 'last_login_at', 'email_verified_at',
     ];
 
     protected $hidden = ['password', 'remember_token', 'pin'];
@@ -68,6 +68,29 @@ class User extends Authenticatable
     public function commissions(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
         return $this->hasMany(Commission::class, 'commissioner_id');
+    }
+
+    public function commissionPayouts(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(CommissionPayout::class, 'commissioner_id');
+    }
+
+    /**
+     * Pending commission balance not yet claimed by an unresolved payout
+     * request. Once a payout is marked "paid", its linked commissions flip
+     * to status=paid and drop out of the pending sum on their own — only
+     * still-unresolved payouts (pending/approved) need to be subtracted
+     * here to avoid double-counting. Rejected payouts release their
+     * commissions back to pending, so they're excluded too.
+     */
+    public function availableCommissionBalance(): float
+    {
+        $pendingCommissions = (float) $this->commissions()->where('status', 'pending')->sum('amount');
+        $claimedByPayouts = (float) $this->commissionPayouts()
+            ->whereIn('status', ['pending', 'approved'])
+            ->sum('amount');
+
+        return max(0, $pendingCommissions - $claimedByPayouts);
     }
 
     public function canAccessBranch(int $branchId): bool

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Commission;
+use App\Models\CommissionPayout;
 use App\Models\SubscriptionPlan;
 use App\Models\Tenant;
 use App\Models\User;
@@ -26,6 +27,7 @@ class CommissionerController extends Controller
         $totalEarned  = $user->commissions()->sum('amount');
         $pendingEarned = $user->commissions()->where('status', 'pending')->sum('amount');
         $paidEarned   = $user->commissions()->where('status', 'paid')->sum('amount');
+        $availableBalance = $user->availableCommissionBalance();
 
         $recentShops = $user->commissionedTenants()
             ->withoutTrashed()
@@ -35,7 +37,7 @@ class CommissionerController extends Controller
             ->get();
 
         return view('commissioner.dashboard', compact(
-            'totalShops', 'activeShops', 'totalEarned', 'pendingEarned', 'paidEarned', 'recentShops'
+            'totalShops', 'activeShops', 'totalEarned', 'pendingEarned', 'paidEarned', 'recentShops', 'availableBalance'
         ));
     }
 
@@ -121,5 +123,70 @@ class CommissionerController extends Controller
         $totalPaid    = $user->commissions()->where('status', 'paid')->sum('amount');
 
         return view('commissioner.commissions.index', compact('commissions', 'totalPending', 'totalPaid'));
+    }
+
+    public function payouts(): View
+    {
+        $user = auth()->user();
+
+        $payouts = $user->commissionPayouts()->latest()->paginate(20);
+        $availableBalance = $user->availableCommissionBalance();
+
+        return view('commissioner.payouts.index', compact('payouts', 'availableBalance'));
+    }
+
+    public function createPayout(): View|RedirectResponse
+    {
+        $user = auth()->user();
+        $availableBalance = $user->availableCommissionBalance();
+
+        if ($availableBalance <= 0) {
+            return redirect()->route('commissioner.payouts')
+                ->with('error', 'Aucun solde disponible pour un retrait pour le moment.');
+        }
+
+        return view('commissioner.payouts.create', compact('availableBalance'));
+    }
+
+    public function storePayout(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'method' => 'required|in:orange_money,mtn_momo,wave,moov_money',
+            'phone_number' => 'required|string|max:30',
+            'commissioner_notes' => 'nullable|string|max:255',
+        ]);
+
+        $user = auth()->user();
+
+        $payout = DB::transaction(function () use ($validated, $user) {
+            $commissions = $user->commissions()
+                ->where('status', 'pending')
+                ->whereNull('commission_payout_id')
+                ->lockForUpdate()
+                ->get();
+
+            $amount = (float) $commissions->sum('amount');
+
+            if ($amount <= 0) {
+                abort(422, 'Aucun solde disponible pour un retrait.');
+            }
+
+            $payout = CommissionPayout::create([
+                'commissioner_id' => $user->id,
+                'amount' => $amount,
+                'method' => $validated['method'],
+                'phone_number' => $validated['phone_number'],
+                'status' => 'pending',
+                'commissioner_notes' => $validated['commissioner_notes'] ?? null,
+            ]);
+
+            Commission::whereIn('id', $commissions->pluck('id'))
+                ->update(['commission_payout_id' => $payout->id]);
+
+            return $payout;
+        });
+
+        return redirect()->route('commissioner.payouts')
+            ->with('success', 'Demande de retrait de ' . number_format($payout->amount, 0, ',', ' ') . ' XOF envoyée.');
     }
 }

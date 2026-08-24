@@ -20,6 +20,7 @@ use App\Http\Controllers\InventoryController;
 use App\Http\Controllers\SaleReturnController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\SuperAdmin\CommissionerManagementController;
+use App\Http\Controllers\SuperAdmin\CommissionPayoutController;
 use App\Http\Controllers\SuperAdmin\SettingController;
 use App\Http\Controllers\SuperAdmin\TenantController as SuperAdminTenantController;
 use App\Http\Controllers\SuperAdmin\PlanController;
@@ -66,6 +67,9 @@ Route::middleware(['auth', 'super.admin'])->prefix('super-admin')->name('super-a
     Route::post('tenants/{id}/resend-welcome', [SuperAdminTenantController::class, 'resendWelcome'])->name('tenants.resend-welcome');
     Route::resource('plans', PlanController::class)->only(['index', 'create', 'store', 'edit', 'update']);
     Route::resource('commissioners', CommissionerManagementController::class)->only(['index', 'create', 'store', 'destroy']);
+    Route::get('commission-payouts', [CommissionPayoutController::class, 'index'])->name('commission-payouts.index');
+    Route::post('commission-payouts/{commissionPayout}/mark-paid', [CommissionPayoutController::class, 'markPaid'])->name('commission-payouts.mark-paid');
+    Route::post('commission-payouts/{commissionPayout}/reject', [CommissionPayoutController::class, 'reject'])->name('commission-payouts.reject');
     Route::get('settings', [SettingController::class, 'index'])->name('settings.index');
     Route::post('settings/{group}', [SettingController::class, 'update'])->name('settings.update');
     Route::post('settings/email/test', [SettingController::class, 'testEmail'])->name('settings.email.test');
@@ -78,6 +82,9 @@ Route::middleware(['auth', 'commissionnaire'])->prefix('commissioner')->name('co
     Route::get('/shops/create', [CommissionerController::class, 'createShop'])->name('shops.create');
     Route::post('/shops', [CommissionerController::class, 'storeShop'])->name('shops.store');
     Route::get('/commissions', [CommissionerController::class, 'commissions'])->name('commissions');
+    Route::get('/payouts', [CommissionerController::class, 'payouts'])->name('payouts');
+    Route::get('/payouts/create', [CommissionerController::class, 'createPayout'])->name('payouts.create');
+    Route::post('/payouts', [CommissionerController::class, 'storePayout'])->name('payouts.store');
 });
 
 // ─── Tenant (boutique) routes ─────────────────────────────────────────────────

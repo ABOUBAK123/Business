@@ -10,3 +10,7 @@
    class="flex items-center gap-3 px-3 py-2 rounded-lg text-blue-100 hover:bg-white/10 {{ request()->routeIs('commissioner.commissions') ? 'bg-white/20 font-semibold' : '' }}">
     <i class="fas fa-hand-holding-usd w-4"></i> Commissions
 </a>
+<a href="{{ route('commissioner.payouts') }}"
+   class="flex items-center gap-3 px-3 py-2 rounded-lg text-blue-100 hover:bg-white/10 {{ request()->routeIs('commissioner.payouts*') ? 'bg-white/20 font-semibold' : '' }}">
+    <i class="fas fa-money-bill-wave w-4"></i> Mes retraits
+</a>
