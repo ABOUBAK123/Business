@@ -21,6 +21,7 @@ use App\Http\Controllers\SaleReturnController;
 use App\Http\Controllers\UserManagementController;
 use App\Http\Controllers\SuperAdmin\CommissionerManagementController;
 use App\Http\Controllers\SuperAdmin\CommissionPayoutController;
+use App\Http\Controllers\SuperAdmin\PaymentController;
 use App\Http\Controllers\SuperAdmin\SettingController;
 use App\Http\Controllers\SuperAdmin\TenantController as SuperAdminTenantController;
 use App\Http\Controllers\SuperAdmin\PlanController;
@@ -70,6 +71,7 @@ Route::middleware(['auth', 'super.admin'])->prefix('super-admin')->name('super-a
     Route::get('commission-payouts', [CommissionPayoutController::class, 'index'])->name('commission-payouts.index');
     Route::post('commission-payouts/{commissionPayout}/mark-paid', [CommissionPayoutController::class, 'markPaid'])->name('commission-payouts.mark-paid');
     Route::post('commission-payouts/{commissionPayout}/reject', [CommissionPayoutController::class, 'reject'])->name('commission-payouts.reject');
+    Route::get('payments', [PaymentController::class, 'index'])->name('payments.index');
     Route::get('settings', [SettingController::class, 'index'])->name('settings.index');
     Route::post('settings/{group}', [SettingController::class, 'update'])->name('settings.update');
     Route::post('settings/email/test', [SettingController::class, 'testEmail'])->name('settings.email.test');

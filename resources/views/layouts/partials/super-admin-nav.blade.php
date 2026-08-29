@@ -18,6 +18,10 @@
    class="flex items-center gap-3 px-3 py-2 rounded-lg text-blue-100 hover:bg-white/10 {{ request()->routeIs('super-admin.commission-payouts.*') ? 'bg-white/20 font-semibold' : '' }}">
     <i class="fas fa-money-bill-wave w-4"></i> Retraits commissions
 </a>
+<a href="{{ route('super-admin.payments.index') }}"
+   class="flex items-center gap-3 px-3 py-2 rounded-lg text-blue-100 hover:bg-white/10 {{ request()->routeIs('super-admin.payments.*') ? 'bg-white/20 font-semibold' : '' }}">
+    <i class="fas fa-credit-card w-4"></i> Paiements
+</a>
 <a href="{{ route('super-admin.settings.index') }}"
    class="flex items-center gap-3 px-3 py-2 rounded-lg text-blue-100 hover:bg-white/10 {{ request()->routeIs('super-admin.settings.*') ? 'bg-white/20 font-semibold' : '' }}">
     <i class="fas fa-cog w-4"></i> Configuration
