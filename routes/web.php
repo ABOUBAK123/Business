@@ -68,6 +68,8 @@ Route::middleware(['auth', 'super.admin'])->prefix('super-admin')->name('super-a
     Route::post('tenants/{id}/resend-welcome', [SuperAdminTenantController::class, 'resendWelcome'])->name('tenants.resend-welcome');
     Route::resource('plans', PlanController::class)->only(['index', 'create', 'store', 'edit', 'update']);
     Route::resource('commissioners', CommissionerManagementController::class)->only(['index', 'create', 'store', 'destroy']);
+    Route::patch('commissioners/{id}/toggle-status', [CommissionerManagementController::class, 'toggleStatus'])->name('commissioners.toggle-status');
+    Route::get('commissioners/{id}/document', [CommissionerManagementController::class, 'showDocument'])->name('commissioners.document');
     Route::get('commission-payouts', [CommissionPayoutController::class, 'index'])->name('commission-payouts.index');
     Route::post('commission-payouts/{commissionPayout}/mark-paid', [CommissionPayoutController::class, 'markPaid'])->name('commission-payouts.mark-paid');
     Route::post('commission-payouts/{commissionPayout}/reject', [CommissionPayoutController::class, 'reject'])->name('commission-payouts.reject');

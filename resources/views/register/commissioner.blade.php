@@ -9,7 +9,7 @@
         Rejoignez le réseau — créez des boutiques et percevez 3% sur chaque abonnement.
     </p>
 
-    <form method="POST" action="{{ route('register.commissioner.store') }}" class="space-y-4">
+    <form method="POST" action="{{ route('register.commissioner.store') }}" enctype="multipart/form-data" class="space-y-4">
         @csrf
 
         <div>
@@ -59,6 +59,34 @@
                         class="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600">
                     <i class="fas fa-eye text-sm"></i>
                 </button>
+            </div>
+        </div>
+
+        <div class="border-t border-gray-100 pt-4">
+            <p class="text-xs font-medium text-gray-600 mb-2">
+                <i class="fas fa-id-card text-gray-400 mr-1"></i> Pièce d'identité
+            </p>
+            <p class="text-[11px] text-gray-400 mb-3">
+                Requise pour la validation de votre compte par notre équipe.
+            </p>
+
+            <div class="mb-3">
+                <label class="block text-xs font-medium text-gray-600 mb-1">Type de pièce <span class="text-red-500">*</span></label>
+                <select name="id_document_type" required
+                        class="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 @error('id_document_type') border-red-400 @enderror">
+                    <option value="">Sélectionner...</option>
+                    <option value="cni" {{ old('id_document_type') === 'cni' ? 'selected' : '' }}>Carte Nationale d'Identité (CNI)</option>
+                    <option value="passeport" {{ old('id_document_type') === 'passeport' ? 'selected' : '' }}>Passeport</option>
+                </select>
+                @error('id_document_type')<p class="text-xs text-red-500 mt-1">{{ $message }}</p>@enderror
+            </div>
+
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Scan / photo de la pièce <span class="text-red-500">*</span></label>
+                <input type="file" name="id_document" required accept="image/png,image/jpeg,application/pdf"
+                       class="w-full text-sm text-gray-500 file:mr-3 file:py-2 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 @error('id_document') border-red-400 @enderror">
+                <p class="text-[11px] text-gray-400 mt-1">PDF, JPG ou PNG — 4 Mo max.</p>
+                @error('id_document')<p class="text-xs text-red-500 mt-1">{{ $message }}</p>@enderror
             </div>
         </div>
 
