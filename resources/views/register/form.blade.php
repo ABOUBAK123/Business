@@ -94,6 +94,14 @@
                     </div>
                 </div>
 
+                <div class="border-t border-gray-100 pt-5 mt-5">
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Code commissionnaire (facultatif)</label>
+                    <input type="text" name="commissioner_code" value="{{ old('commissioner_code') }}"
+                           class="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 uppercase"
+                           placeholder="Ex: A3F9K2" maxlength="12" style="text-transform: uppercase;">
+                    <p class="text-xs text-gray-400 mt-1">Si un commissionnaire vous a orienté vers nous, renseignez son code ici.</p>
+                </div>
+
                 <button type="submit"
                         class="w-full mt-6 bg-blue-600 text-white py-3 rounded-xl text-sm font-bold hover:bg-blue-700 flex items-center justify-center gap-2">
                     <i class="fas fa-rocket"></i>

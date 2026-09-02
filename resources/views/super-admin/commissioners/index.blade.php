@@ -24,6 +24,7 @@
             <tr>
                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Nom</th>
                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Email</th>
+                <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Code</th>
                 <th class="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase">Boutiques</th>
                 <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase">Total commissions</th>
                 <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase">Depuis</th>
@@ -37,6 +38,7 @@
             <tr class="hover:bg-gray-50">
                 <td class="px-4 py-3 font-medium text-gray-800">{{ $commissioner->name }}</td>
                 <td class="px-4 py-3 text-gray-600">{{ $commissioner->email }}</td>
+                <td class="px-4 py-3 text-gray-500 font-mono text-xs">{{ $commissioner->referral_code ?? '—' }}</td>
                 <td class="px-4 py-3 text-center text-gray-700">{{ $commissioner->shops_count ?? 0 }}</td>
                 <td class="px-4 py-3 text-right font-semibold text-gray-800">
                     {{ number_format($commissioner->total_commissions ?? 0, 0, ',', ' ') }} XOF
@@ -81,7 +83,7 @@
             </tr>
             @empty
             <tr>
-                <td colspan="8" class="px-4 py-8 text-center text-gray-400">Aucun commissionnaire enregistré.</td>
+                <td colspan="9" class="px-4 py-8 text-center text-gray-400">Aucun commissionnaire enregistré.</td>
             </tr>
             @endforelse
         </tbody>

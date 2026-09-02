@@ -15,7 +15,7 @@ class User extends Authenticatable
     protected $fillable = [
         'tenant_id', 'branch_id', 'name', 'email', 'password',
         'phone', 'avatar', 'pin', 'is_super_admin', 'is_active', 'last_login_at', 'email_verified_at',
-        'id_document_type', 'id_document_path',
+        'id_document_type', 'id_document_path', 'referral_code',
     ];
 
     protected $hidden = ['password', 'remember_token', 'pin'];
@@ -59,6 +59,15 @@ class User extends Authenticatable
     public function isCommissioner(): bool
     {
         return $this->hasRole('commissionnaire');
+    }
+
+    public static function generateReferralCode(): string
+    {
+        do {
+            $code = strtoupper(\Illuminate\Support\Str::random(6));
+        } while (self::where('referral_code', $code)->exists());
+
+        return $code;
     }
 
     public function commissionedTenants(): \Illuminate\Database\Eloquent\Relations\HasMany

@@ -47,14 +47,19 @@ class CommissionerManagementController extends Controller
             ? $request->file('id_document')->store('commissioner-documents', 'local')
             : null;
 
+        $isActive = $request->boolean('is_active', true);
+
         $user = User::create([
             'name'             => $validated['name'],
             'email'            => $validated['email'],
             'phone'            => $validated['phone'] ?? null,
             'password'         => Hash::make($validated['password']),
-            'is_active'        => $request->boolean('is_active', true),
+            'is_active'        => $isActive,
             'id_document_type' => $documentPath ? ($validated['id_document_type'] ?? null) : null,
             'id_document_path' => $documentPath,
+            // Le code n'est généré qu'à l'activation du compte (ici, ou via
+            // toggleStatus si l'admin laisse le compte inactif pour l'instant).
+            'referral_code'    => $isActive ? User::generateReferralCode() : null,
         ]);
 
         $user->assignRole('commissionnaire');
@@ -66,9 +71,18 @@ class CommissionerManagementController extends Controller
     public function toggleStatus(int $id): RedirectResponse
     {
         $user = User::role('commissionnaire')->findOrFail($id);
-        $user->update(['is_active' => ! $user->is_active]);
+        $activating = ! $user->is_active;
 
-        $msg = $user->is_active ? 'activé' : 'désactivé';
+        $user->update([
+            'is_active' => $activating,
+            // Généré une seule fois, à la première activation — après que
+            // l'admin a vérifié la pièce d'identité jointe.
+            'referral_code' => $activating && ! $user->referral_code
+                ? User::generateReferralCode()
+                : $user->referral_code,
+        ]);
+
+        $msg = $activating ? 'activé' : 'désactivé';
         return back()->with('success', "Commissionnaire {$msg} avec succès.");
     }
 

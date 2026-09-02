@@ -4,6 +4,21 @@
 @section('page-title', 'Tableau de bord')
 
 @section('content')
+
+<div class="bg-blue-50 border border-blue-100 rounded-xl p-4 mb-6 flex items-center justify-between flex-wrap gap-3">
+    <div>
+        <p class="text-xs font-medium text-blue-700">Votre code commissionnaire</p>
+        <p class="text-xl font-bold text-blue-900 tracking-widest font-mono">{{ auth()->user()->referral_code ?? '—' }}</p>
+        <p class="text-xs text-blue-600 mt-1">Communiquez ce code à vos prospects — ils le renseignent lors de leur inscription pour que vous perceviez 3% de leur abonnement.</p>
+    </div>
+    @if(auth()->user()->referral_code)
+    <button type="button" onclick="navigator.clipboard.writeText('{{ auth()->user()->referral_code }}'); this.innerText='Copié !'; setTimeout(() => this.innerText='Copier', 1500)"
+            class="bg-blue-600 text-white text-xs font-semibold px-3 py-2 rounded-lg hover:bg-blue-700 transition flex-shrink-0">
+        Copier
+    </button>
+    @endif
+</div>
+
 <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
     <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
         <p class="text-xs text-gray-500 mb-1">Boutiques créées</p>

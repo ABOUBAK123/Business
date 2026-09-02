@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Mail\WelcomeShopMail;
 use App\Models\Branch;
+use App\Models\Commission;
 use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
 use App\Models\Tenant;
@@ -43,15 +44,25 @@ class TenantRegistrationController extends Controller
             'city' => 'nullable|string|max:100',
             'country' => 'nullable|string|max:10',
             'plan_id' => 'required|exists:subscription_plans,id',
+            'commissioner_code' => 'nullable|string|max:12',
         ]);
+
+        $commissionerId = null;
+        if ($request->filled('commissioner_code')) {
+            $commissioner = User::role('commissionnaire')
+                ->where('referral_code', strtoupper($request->commissioner_code))
+                ->first();
+            $commissionerId = $commissioner?->id;
+        }
 
         $tenant = null;
 
-        DB::transaction(function () use ($request, &$tenant) {
+        DB::transaction(function () use ($request, $commissionerId, &$tenant) {
             $plan = SubscriptionPlan::findOrFail($request->plan_id);
 
             $tenant = Tenant::create([
                 'subscription_plan_id' => $plan->id,
+                'commissioner_id' => $commissionerId,
                 'shop_name' => $request->shop_name,
                 'slug' => Str::slug($request->shop_name) . '-' . Str::random(4),
                 'city' => $request->city,
@@ -95,6 +106,10 @@ class TenantRegistrationController extends Controller
                     'starts_at' => now(),
                     'ends_at' => now()->addMonth(),
                 ]);
+
+                if ($commissionerId) {
+                    Commission::generate($tenant, now()->format('Y-m'));
+                }
             }
 
             auth()->login($owner);

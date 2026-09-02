@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Commission;
 use App\Models\Subscription;
 use App\Models\SubscriptionPayment;
 use App\Models\SubscriptionPlan;
@@ -430,6 +431,10 @@ class AccountActivationController extends Controller
                 'subscription_ends_at' => $subscription->ends_at,
                 'trial_ends_at' => null,
             ]);
+
+            if ($tenant->commissioner_id) {
+                Commission::generate($tenant, now()->format('Y-m'));
+            }
         });
     }
 
