@@ -281,7 +281,7 @@ async function searchArticles(q) {
 }
 
 function addToCart(article) {
-    const availableStock = parseInt(article.stock ?? 0, 10);
+    const availableStock = parseFloat(article.stock ?? 0);
     if (availableStock <= 0) {
         alert('Stock indisponible pour cet article dans cette succursale.');
         return null;
@@ -380,9 +380,9 @@ function renderCart() {
             <div class="flex items-center gap-1">
                 <button type="button" onclick="changeQty(${i}, -1)"
                         class="w-7 h-7 rounded bg-gray-100 text-gray-600 hover:bg-red-100 hover:text-red-600 text-sm font-bold">−</button>
-                <input type="number" id="qty-${i}" value="${item.quantity}" min="1"
+                <input type="number" id="qty-${i}" value="${item.quantity}" min="0.001" step="0.001"
                        oninput="setQty(${i}, this.value)"
-                       class="w-12 text-center border border-gray-200 rounded text-sm py-0.5 font-semibold">
+                       class="w-16 text-center border border-gray-200 rounded text-sm py-0.5 font-semibold">
                 <button type="button" onclick="changeQty(${i}, 1)"
                         class="w-7 h-7 rounded bg-gray-100 text-gray-600 hover:bg-green-100 hover:text-green-600 text-sm font-bold">+</button>
             </div>
@@ -403,8 +403,9 @@ function renderCart() {
 }
 
 function changeQty(i, delta) {
-    const maxQty = Math.max(1, parseInt(cart[i].stock ?? 0, 10));
-    cart[i].quantity = Math.min(maxQty, Math.max(1, cart[i].quantity + delta));
+    const maxQty = Math.max(0.001, parseFloat(cart[i].stock ?? 0));
+    const next = Math.round((cart[i].quantity + delta) * 1000) / 1000;
+    cart[i].quantity = Math.min(maxQty, Math.max(0.001, next));
     const input = document.getElementById(`qty-${i}`);
     if (input) input.value = cart[i].quantity;
     updateRowTotal(i);
@@ -413,8 +414,8 @@ function changeQty(i, delta) {
 }
 
 function setQty(i, val) {
-    const maxQty = Math.max(1, parseInt(cart[i].stock ?? 0, 10));
-    const parsed = Math.min(maxQty, Math.max(1, parseInt(val) || 1));
+    const maxQty = Math.max(0.001, parseFloat(cart[i].stock ?? 0));
+    const parsed = Math.min(maxQty, Math.max(0.001, parseFloat(val) || 0.001));
     cart[i].quantity = parsed;
     const input = document.getElementById(`qty-${i}`);
     if (input) input.value = parsed;

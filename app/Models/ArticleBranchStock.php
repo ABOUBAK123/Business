@@ -10,6 +10,10 @@ class ArticleBranchStock extends Model
 
     protected $fillable = ['article_id', 'branch_id', 'quantity', 'sale_price_ttc'];
 
+    protected $casts = [
+        'quantity' => 'float',
+    ];
+
     public function article(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(Article::class);

@@ -61,7 +61,7 @@ class SaleController extends Controller
             'branch_id' => 'required|exists:branches,id',
             'items' => 'required|array|min:1',
             'items.*.article_id' => 'required|exists:articles,id',
-            'items.*.quantity' => 'required|integer|min:1',
+            'items.*.quantity' => 'required|numeric|min:0.001',
             'items.*.unit_price_ttc' => 'required|numeric|min:0',
             'items.*.discount_amount' => 'nullable|numeric|min:0',
             'payment_methods' => 'required|array|min:1',
@@ -84,7 +84,7 @@ class SaleController extends Controller
             $items = collect($request->items)
                 ->map(fn ($item) => [
                     'article_id' => (int) $item['article_id'],
-                    'quantity' => (int) $item['quantity'],
+                    'quantity' => (float) $item['quantity'],
                     'unit_price_ttc' => (float) $item['unit_price_ttc'],
                     'discount_amount' => (float) ($item['discount_amount'] ?? 0),
                 ])
@@ -93,7 +93,7 @@ class SaleController extends Controller
             $itemsByArticle = $items->groupBy('article_id')->map(function ($group) {
                 return [
                     'article_id' => (int) $group->first()['article_id'],
-                    'quantity' => (int) $group->sum('quantity'),
+                    'quantity' => (float) $group->sum('quantity'),
                     'unit_price_ttc' => (float) $group->first()['unit_price_ttc'],
                     'discount_amount' => (float) $group->sum('discount_amount'),
                 ];
@@ -107,8 +107,8 @@ class SaleController extends Controller
                 ->keyBy('article_id');
 
             foreach ($itemsByArticle as $index => $item) {
-                $requiredQty = (int) $item['quantity'];
-                $availableQty = (int) optional($branchStocks->get((int) $item['article_id']))->quantity;
+                $requiredQty = (float) $item['quantity'];
+                $availableQty = (float) optional($branchStocks->get((int) $item['article_id']))->quantity;
 
                 if ($requiredQty > $availableQty) {
                     throw ValidationException::withMessages([

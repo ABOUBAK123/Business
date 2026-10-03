@@ -15,6 +15,12 @@ class StockMovement extends Model
         'reference', 'reference_type', 'notes',
     ];
 
+    protected $casts = [
+        'quantity' => 'float',
+        'stock_before' => 'float',
+        'stock_after' => 'float',
+    ];
+
     public function article(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(Article::class);

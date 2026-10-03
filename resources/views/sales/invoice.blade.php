@@ -195,7 +195,7 @@
                     <div class="ref">Réf. {{ $item->article->reference }}</div>
                     @endif
                 </td>
-                <td style="text-align:right">{{ number_format($item->quantity, 0) }}</td>
+                <td style="text-align:right">{{ rtrim(rtrim(number_format($item->quantity, 3, '.', ''), '0'), '.') }}</td>
                 <td style="text-align:right">{{ $item->unit ?? $item->article?->unit }}</td>
                 <td style="text-align:right">
                     {{ number_format($item->unit_price_ttc / (1 + ($item->article?->tax_rate ?? 0) / 100), 0, ',', ' ') }}
